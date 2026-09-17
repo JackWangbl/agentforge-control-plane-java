@@ -1,0 +1,69 @@
+server:
+  port: 8080
+  address: 127.0.0.1
+
+spring:
+  application:
+    name: agentforge-control-plane
+  # 复用 Python 版同一份 .env（当成 properties 读），文件缺失时不影响启动
+  config:
+    import: "optional:file:./.env[.properties]"
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/agentforge?characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=PREFERRED
+    username: ${DATABASE_USER:agentforge_app}
+    password: ${DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 16
+      pool-name: agentforge-pool
+      keepalive-time: 30000
+      max-lifetime: 600000
+      idle-timeout: 120000
+      connection-timeout: 15000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        jdbc:
+          time_zone: UTC
+  jackson:
+    default-property-inclusion: always
+    serialization:
+      write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      max-file-size: 6MB
+      max-request-size: 6MB
+  web:
+    resources:
+      static-locations: classpath:/static/
+
+agentforge:
+  # AgentScope Studio 链路导出地址，留空表示不导出
+  agentscope-studio-url: ${AGENTSCOPE_STUDIO_URL:}
+  otel-endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:}
+  langfuse:
+    public-key: ${LANGFUSE_PUBLIC_KEY:}
+    secret-key: ${LANGFUSE_SECRET_KEY:}
+    host: ${LANGFUSE_HOST:https://cloud.langfuse.com}
+    base-url: ${LANGFUSE_BASE_URL:}
+    project-id: ${LANGFUSE_PROJECT_ID:}
+  # 开发期免登录：设成某个用户名即可以该身份访问
+  auth-dev-user: ${AUTH_DEV_USER:}
+  workspaces-dir: ${WORKSPACES_DIR:}
+  sandboxes-dir: ${SANDBOXES_DIR:}
+
+  allow-unsafe-local-sandbox: ${ALLOW_UNSAFE_LOCAL_SANDBOX:false}
+  sandbox-default-image: ${SANDBOX_DEFAULT_IMAGE:python:3.11-slim}
+  sandbox-allowed-images: ${SANDBOX_ALLOWED_IMAGES:}
+  sandbox-egress-network: ${SANDBOX_EGRESS_NETWORK:}
+  browser-allow-private-network: ${BROWSER_ALLOW_PRIVATE_NETWORK:false}
+  eval-worker: ${EVAL_WORKER:true}
+
+logging:
+  level:
+    root: INFO
+    com.agentforge: INFO
+    io.agentscope: INFO

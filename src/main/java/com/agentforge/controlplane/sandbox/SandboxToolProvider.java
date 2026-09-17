@@ -1,0 +1,420 @@
+package com.agentforge.controlplane.sandbox;
+
+import com.agentforge.controlplane.agent.ToolContext;
+import com.agentforge.controlplane.agent.ToolProvider;
+import com.agentforge.controlplane.agent.ToolSpec;
+import com.agentforge.controlplane.config.AppSettings;
+import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.domain.SandboxPolicy;
+import com.agentforge.controlplane.repo.SandboxPolicyRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * 沙箱工具：sandbox_run_python / sandbox_run_shell，
+ * 对应 Python 版 app/services/sandbox_runtime.py。优先走 Docker，宿主机本地执行只在显式放开时才允许。
+ */
+@Component
+public class SandboxToolProvider implements ToolProvider {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** 本地兜底执行时塞在用户代码前面的断网垫片，与 Python 版逐字一致。 */
+    private static final String NET_BLOCK = """
+
+            import socket
+            class _Denied(socket.socket):
+                def __init__(self, *args, **kwargs):
+                    raise OSError("sandbox network is denied")
+            socket.socket = _Denied
+            socket.create_connection = lambda *a, **k: (_ for _ in ()).throw(OSError("sandbox network is denied"))
+            """;
+
+    private static final Pattern MEMORY = Pattern.compile("^(\\d+(?:\\.\\d+)?)(gi?b?|mi?b?|ki?b?|b)?$");
+    private static final Set<String> DENY_MODES = Set.of("deny", "denied", "none", "off");
+    private static final List<String> LOCAL_ENV_KEYS =
+            List.of("PATH", "LANG", "LC_ALL", "TZ", "SSL_CERT_FILE", "SSL_CERT_DIR");
+
+    private final AppSettings settings;
+    private final DockerSandboxRunner docker;
+    private final SandboxPolicyRepository sandboxes;
+
+    public SandboxToolProvider(AppSettings settings,
+                               DockerSandboxRunner docker,
+                               SandboxPolicyRepository sandboxes) {
+        this.settings = settings;
+        this.docker = docker;
+        this.sandboxes = sandboxes;
+    }
+
+    // --- ToolProvider ---
+
+    @Override
+    public List<ToolSpec> specsFor(Agent agent, ToolContext context) {
+        if (selectedSandbox(agent) == null) {
+            return List.of();
+        }
+        return sandboxToolSpecs();
+    }
+
+    @Override
+    public boolean handles(String toolName, Agent agent) {
+        return toolName != null && toolName.startsWith("sandbox_") && selectedSandbox(agent) != null;
+    }
+
+    @Override
+    public String execute(String toolName, Map<String, Object> arguments, ToolContext context) {
+        Agent agent = context == null ? null : context.agent();
+        SandboxPolicy box = selectedSandbox(agent);
+        if (box == null) {
+            return json(Map.of("error", "当前 Agent 未绑定可用沙箱"));
+        }
+        long tenantId = context.tenantId() == null ? 0L : context.tenantId();
+        return runSandboxTool(box, toolName, arguments, tenantId, context.scopeKey());
+    }
+
+    @Override
+    public String promptHint(Agent agent, ToolContext context) {
+        if (selectedSandbox(agent) == null) {
+            return "";
+        }
+        return "需要计算、写文件或验证网络隔离时，先调用 sandbox_run_python / sandbox_run_shell，不要凭空猜结果。";
+    }
+
+    public static List<ToolSpec> sandboxToolSpecs() {
+        return List.of(
+                new ToolSpec(
+                        "sandbox_run_python",
+                        "在 Agent 绑定的沙箱里执行 Python 代码。需要计算、写文件或验证网络隔离时调用。",
+                        ToolSpec.objectSchema(
+                                Map.of("code", ToolSpec.stringParam("要执行的 Python 代码")),
+                                "code")),
+                new ToolSpec(
+                        "sandbox_run_shell",
+                        "在 Agent 绑定的沙箱里执行 shell 命令，受策略的超时和网络限制约束。",
+                        ToolSpec.objectSchema(
+                                Map.of("command", ToolSpec.stringParam("例如 ls 或 echo hello")),
+                                "command")));
+    }
+
+    /** 成功返回纯文本输出，失败返回 JSON 错误体，与 Python 版 run_sandbox_tool 一致。 */
+    public String runSandboxTool(SandboxPolicy row,
+                                 String name,
+                                 Map<String, Object> arguments,
+                                 long tenantId,
+                                 String executionId) {
+        Map<String, Object> args = arguments == null ? Map.of() : arguments;
+        Map<String, Object> result;
+        if ("sandbox_run_python".equals(name)) {
+            result = executeInSandbox(row, "python", text(args.get("code")), tenantId, executionId);
+        } else if ("sandbox_run_shell".equals(name)) {
+            result = executeInSandbox(row, "shell", text(args.get("command")), tenantId, executionId);
+        } else {
+            return json(Map.of("error", "未知沙箱工具 " + name));
+        }
+        if (Boolean.TRUE.equals(result.get("ok"))) {
+            String output = text(result.get("output"));
+            return output.isEmpty() ? "(无输出)" : output;
+        }
+        Map<String, Object> error = new LinkedHashMap<>();
+        String detail = text(result.get("error"));
+        error.put("error", detail.isEmpty() ? "沙箱执行失败" : detail);
+        error.put("output", text(result.get("output")));
+        error.put("backend", result.get("backend"));
+        return json(error);
+    }
+
+    // --- 策略解析 ---
+
+    public static int parseTimeout(SandboxPolicy row) {
+        int raw = row == null ? 60 : row.getTimeoutSeconds();
+        if (raw <= 0) {
+            raw = 60;
+        }
+        return Math.max(1, Math.min(raw, 3600));
+    }
+
+    public static long parseMemoryBytes(SandboxPolicy row) {
+        String raw = row == null || row.getMemoryLimit() == null || row.getMemoryLimit().isBlank()
+                ? "1 GiB" : row.getMemoryLimit();
+        String text = raw.strip().toLowerCase(Locale.ROOT).replace(" ", "");
+        Matcher match = MEMORY.matcher(text);
+        if (!match.matches()) {
+            return 1024L * 1024L * 1024L;
+        }
+        double value = Double.parseDouble(match.group(1));
+        String unit = match.group(2) == null ? "gib" : match.group(2);
+        if (unit.startsWith("g")) {
+            return (long) (value * 1024 * 1024 * 1024);
+        }
+        if (unit.startsWith("m")) {
+            return (long) (value * 1024 * 1024);
+        }
+        if (unit.startsWith("k")) {
+            return (long) (value * 1024);
+        }
+        return (long) value;
+    }
+
+    public static boolean networkDenied(SandboxPolicy row) {
+        String mode = row == null || row.getNetworkMode() == null || row.getNetworkMode().isBlank()
+                ? "deny" : row.getNetworkMode();
+        return DENY_MODES.contains(mode.toLowerCase(Locale.ROOT));
+    }
+
+    public Path sandboxRoot() {
+        String configured = settings.getSandboxesDir() == null ? "" : settings.getSandboxesDir().strip();
+        if (!configured.isEmpty()) {
+            return Path.of(configured);
+        }
+        return Path.of(System.getProperty("user.dir", ".")).resolve("workspaces").resolve("_sandboxes");
+    }
+
+    public Path sandboxWorkdir(SandboxPolicy row, long tenantId, String executionId) {
+        String safeExecution = (executionId == null ? "" : executionId).replaceAll("[^a-zA-Z0-9._-]+", "-");
+        if (safeExecution.length() > 96) {
+            safeExecution = safeExecution.substring(0, 96);
+        }
+        String name = row == null || row.getName() == null || row.getName().isEmpty() ? "box" : row.getName();
+        String boxName = name.replaceAll("[^a-zA-Z0-9._-]+", "-");
+        long policyId = row == null || row.getId() == null ? 0L : row.getId();
+        Path path = sandboxRoot()
+                .resolve("tenant-" + tenantId)
+                .resolve("policy-" + policyId + "-" + boxName)
+                .resolve(safeExecution);
+        try {
+            Files.createDirectories(path);
+        } catch (IOException ignored) {
+            // 建不出来时后面执行自然会报错，这里不打断
+        }
+        return path;
+    }
+
+    /** Java 侧没有 agentscope_runtime / agentscope.workspace 这两个 Python 包，只剩 local 和 docker。 */
+    public List<String> detectBackends() {
+        List<String> found = new ArrayList<>();
+        found.add("local");
+        if (docker.dockerAvailable()) {
+            found.add("docker");
+        }
+        return found;
+    }
+
+    public String preferredBackend(SandboxPolicy row) {
+        String runtime = row == null || row.getRuntime() == null ? "" : row.getRuntime().toLowerCase(Locale.ROOT);
+        if (docker.dockerImage(row == null ? null : row.getRuntime()) != null) {
+            return "docker";
+        }
+        for (String token : List.of("docker", "agentscope", "runtime-sandbox", "e2b", "k8s")) {
+            if (runtime.contains(token)) {
+                List<String> backends = detectBackends();
+                if (backends.contains("agentscope_runtime")) {
+                    return "agentscope_runtime";
+                }
+                if (backends.contains("agentscope_workspace")) {
+                    return "agentscope_workspace";
+                }
+                break;
+            }
+        }
+        return "local";
+    }
+
+    public boolean backendReady(SandboxPolicy row) {
+        String backend = preferredBackend(row);
+        if (backend.equals("docker")) {
+            String image = docker.dockerImage(row == null ? null : row.getRuntime());
+            return docker.dockerAvailable() && image != null && !image.isEmpty()
+                    && docker.allowedImages().contains(image);
+        }
+        if (backend.equals("local")) {
+            return localBackendAllowed();
+        }
+        return detectBackends().contains(backend);
+    }
+
+    public boolean localBackendAllowed() {
+        return settings.isAllowUnsafeLocalSandbox();
+    }
+
+    /** Agent 绑定的沙箱，停用或跨租户都当没绑。 */
+    public SandboxPolicy selectedSandbox(Agent agent) {
+        if (agent == null || agent.getSandboxId() == null) {
+            return null;
+        }
+        Optional<SandboxPolicy> found = sandboxes.findById(agent.getSandboxId());
+        if (found.isEmpty()) {
+            return null;
+        }
+        SandboxPolicy row = found.get();
+        boolean sameTenant = row.getTenantId() != null && row.getTenantId().equals(agent.getTenantId());
+        if (!sameTenant || !row.isEnabled()) {
+            return null;
+        }
+        return row;
+    }
+
+    // --- 执行 ---
+
+    public Map<String, Object> executeInSandbox(SandboxPolicy row,
+                                                String kind,
+                                                String payload,
+                                                long tenantId,
+                                                String executionId) {
+        if (row == null || !row.isEnabled()) {
+            return failure("none", "沙箱已停用");
+        }
+        String body = payload == null ? "" : payload.strip();
+        if (body.isEmpty()) {
+            return failure("none", "没有可执行内容");
+        }
+        if (preferredBackend(row).equals("docker")) {
+            return docker.runInDocker(
+                    row.getRuntime(),
+                    kind,
+                    body,
+                    sandboxWorkdir(row, tenantId, executionId),
+                    tenantId,
+                    executionId,
+                    parseTimeout(row),
+                    parseMemoryBytes(row),
+                    row.getCpuLimit(),
+                    networkDenied(row));
+        }
+        return runLocal(kind, body, row, tenantId, executionId);
+    }
+
+    private Map<String, Object> runLocal(String kind,
+                                         String payload,
+                                         SandboxPolicy row,
+                                         long tenantId,
+                                         String executionId) {
+        if (!localBackendAllowed()) {
+            return failure("local", "宿主机本地沙箱默认禁用，请配置独立沙箱运行时");
+        }
+        int timeout = parseTimeout(row);
+        Path workdir = sandboxWorkdir(row, tenantId, executionId);
+        boolean deny = networkDenied(row);
+        Map<String, String> env = safeSubprocessEnv(workdir);
+        List<String> prefix = deny ? sandboxExecPrefix(workdir) : List.of();
+
+        List<String> inner = new ArrayList<>();
+        if ("python".equals(kind)) {
+            inner.add(pythonExecutable());
+            inner.add("-I");
+            inner.add("-c");
+            inner.add((deny ? NET_BLOCK : "") + "\n" + payload);
+        } else {
+            inner.add("/bin/sh");
+            inner.add("-c");
+            inner.add(payload);
+        }
+
+        DockerSandboxRunner.ProcResult completed;
+        String text;
+        try {
+            List<String> command = new ArrayList<>(prefix);
+            command.addAll(inner);
+            completed = DockerSandboxRunner.runProcess(command, workdir, env, timeout);
+            text = combine(completed);
+            // 沙箱壳子本身被系统拦下来时退回裸执行，与 Python 版同样的兜底
+            if (!prefix.isEmpty() && completed.exitCode() != 0 && text.contains("Operation not permitted")) {
+                completed = DockerSandboxRunner.runProcess(inner, workdir, env, timeout);
+                text = combine(completed);
+            }
+        } catch (DockerSandboxRunner.ProcTimeoutException e) {
+            return failure("local", "执行超时（" + timeout + "s）");
+        } catch (Exception e) {
+            return failure("local", String.valueOf(e.getMessage()));
+        }
+        if (completed.exitCode() != 0) {
+            String detail = text.strip();
+            Map<String, Object> result = failure("local", detail.isEmpty() ? "exit " + completed.exitCode() : detail);
+            result.put("output", detail);
+            return result;
+        }
+        Map<String, Object> ok = new LinkedHashMap<>();
+        ok.put("ok", true);
+        ok.put("backend", "local");
+        ok.put("output", text.strip());
+        return ok;
+    }
+
+    private static String combine(DockerSandboxRunner.ProcResult completed) {
+        String stdout = completed.stdout() == null ? "" : completed.stdout();
+        String stderr = completed.stderr() == null ? "" : completed.stderr();
+        return stdout + (stderr.isEmpty() ? "" : "\n" + stderr);
+    }
+
+    /** Python 用 sys.executable，Java 侧只能去 PATH 里找解释器。 */
+    private static String pythonExecutable() {
+        Path found = DockerSandboxRunner.which("python3");
+        if (found == null) {
+            found = DockerSandboxRunner.which("python");
+        }
+        return found == null ? "python3" : found.toString();
+    }
+
+    private static List<String> sandboxExecPrefix(Path workdir) {
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        if (os.contains("mac") && DockerSandboxRunner.which("sandbox-exec") != null) {
+            String profile = "(version 1)\n"
+                    + "(allow default)\n"
+                    + "(deny network*)\n"
+                    + "(allow file-write* (subpath \"" + workdir + "\"))\n";
+            return List.of("sandbox-exec", "-p", profile);
+        }
+        if (DockerSandboxRunner.which("unshare") != null) {
+            return List.of("unshare", "--net", "--map-root-user");
+        }
+        return List.of();
+    }
+
+    private static Map<String, String> safeSubprocessEnv(Path workdir) {
+        Map<String, String> env = new LinkedHashMap<>();
+        for (String key : LOCAL_ENV_KEYS) {
+            String value = System.getenv(key);
+            if (value != null && !value.isEmpty()) {
+                env.put(key, value);
+            }
+        }
+        env.put("HOME", workdir.toString());
+        env.put("TMPDIR", workdir.toString());
+        env.put("PYTHONDONTWRITEBYTECODE", "1");
+        return env;
+    }
+
+    static Map<String, Object> failure(String backend, String error) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("ok", false);
+        result.put("backend", backend);
+        result.put("output", "");
+        result.put("error", error);
+        return result;
+    }
+
+    static String text(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    static String json(Object value) {
+        try {
+            return MAPPER.writeValueAsString(value);
+        } catch (Exception e) {
+            return String.valueOf(value);
+        }
+    }
+}

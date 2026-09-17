@@ -1,0 +1,9 @@
+.env
+.env.*
+.idea/
+.m2/
+target/
+workspaces/
+.compile-stamp
+.DS_Store
+*.log
