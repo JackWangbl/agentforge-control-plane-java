@@ -1,6 +1,7 @@
 package com.agentforge.controlplane.agent;
 
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.SandboxPolicy;
 import com.agentforge.controlplane.domain.Skill;
@@ -52,10 +53,11 @@ public class ToolRuntime {
     private final OpenCliRuntime opencli;
     private final SandboxRuntime sandbox;
     private final McpStreamClient mcpStream;
+    private final HttpAgentRuntime httpAgents;
 
     public ToolRuntime(SkillRepository skills, McpServerRepository mcps, AgentRepository agents,
                        BrowserRuntime browser, OpenCliRuntime opencli, SandboxRuntime sandbox,
-                       McpStreamClient mcpStream) {
+                       McpStreamClient mcpStream, HttpAgentRuntime httpAgents) {
         this.skills = skills;
         this.mcps = mcps;
         this.agents = agents;
@@ -63,6 +65,7 @@ public class ToolRuntime {
         this.opencli = opencli;
         this.sandbox = sandbox;
         this.mcpStream = mcpStream;
+        this.httpAgents = httpAgents;
     }
 
     public static List<ToolSpec> builtinToolSpecs() {
@@ -159,11 +162,18 @@ public class ToolRuntime {
         return sandbox.selectedSandbox(agent);
     }
 
+    public List<HttpAgent> selectedHttpAgents(Agent agent) {
+        return httpAgents.selectedAgents(agent);
+    }
+
     public boolean agentAllowsTool(Agent agent, String toolName) {
         if (FlowRuntime.isFlowTool(toolName)) {
             return FlowRuntime.findAgentFlow(agent, toolName) != null;
         }
         if (toolName != null && toolName.startsWith("sandbox_") && selectedSandbox(agent) != null) {
+            return true;
+        }
+        if (HttpAgentRuntime.isHttpAgentTool(toolName) && httpAgents.allowsTool(agent, toolName)) {
             return true;
         }
         for (McpServer row : selectedMcps(agent)) {
@@ -176,8 +186,11 @@ public class ToolRuntime {
         return false;
     }
 
-    /** 这一轮模型能看到的全部工具：MCP + 沙箱 + 链路。 */
+    /** 这一轮模型能看到的全部工具：MCP + 沙箱 + 链路。HTTP 接入的 Agent 不走本平台工具。 */
     public List<ToolSpec> agentTools(Agent agent) {
+        if (httpAgents.isHttpBacked(agent)) {
+            return List.of();
+        }
         List<ToolSpec> tools = new ArrayList<>();
         List<String> seen = new ArrayList<>();
         for (McpServer row : selectedMcps(agent)) {
@@ -276,6 +289,9 @@ public class ToolRuntime {
     }
 
     public String mcpToolHint(Agent agent) {
+        if (httpAgents.isHttpBacked(agent)) {
+            return "";
+        }
         List<String> names = new ArrayList<>();
         for (McpServer row : selectedMcps(agent)) {
             for (Map<String, Object> tool : listMcpTools(row)) {
@@ -293,6 +309,9 @@ public class ToolRuntime {
     }
 
     public String buildSystemPrompt(Agent agent) {
+        if (httpAgents.isHttpBacked(agent)) {
+            return agent.getSystemPrompt() == null ? "" : agent.getSystemPrompt().strip();
+        }
         String base = agent.getSystemPrompt().strip();
         if (base.isEmpty()) {
             String duty = agent.getDescription() == null || agent.getDescription().isBlank()
@@ -325,6 +344,12 @@ public class ToolRuntime {
         }
         Long tenantId = context == null ? (agent == null ? null : agent.getTenantId()) : context.getTenantId();
 
+        if (HttpAgentRuntime.isHttpAgentTool(name)) {
+            if (agent == null) {
+                return Jsons.json(Map.of("error", "缺少 Agent 上下文，无法调用绑定的 HTTP 接口"));
+            }
+            return httpAgents.executeTool(agent, name, args);
+        }
         if (FlowRuntime.isFlowTool(name)) {
             if (agent == null) {
                 return Jsons.json(Map.of("error", "缺少 Agent 上下文，无法执行链路"));

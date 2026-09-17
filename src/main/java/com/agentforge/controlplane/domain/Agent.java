@@ -45,6 +45,11 @@ public class Agent extends TenantOwnedEntity {
     @Column(name = "opencli_ids", columnDefinition = "json")
     private List<Long> opencliIds = new ArrayList<>();
 
+    /** 绑定的外部 HTTP Agent 接口：运行时直接 POST 到对方平台。 */
+    @Convert(converter = JsonConverters.LongListConverter.class)
+    @Column(name = "http_agent_ids", columnDefinition = "json")
+    private List<Long> httpAgentIds = new ArrayList<>();
+
     /** 工具链路定义：按顺序串起多个工具，对模型只暴露一个 flow_xxx 工具。 */
     @Convert(converter = JsonConverters.MapListConverter.class)
     @Column(name = "tool_flows", columnDefinition = "json")
@@ -77,6 +82,10 @@ public class Agent extends TenantOwnedEntity {
     public void setMcpIds(List<Long> mcpIds) { this.mcpIds = mcpIds == null ? new ArrayList<>() : mcpIds; }
     public List<Long> getOpencliIds() { return opencliIds; }
     public void setOpencliIds(List<Long> v) { this.opencliIds = v == null ? new ArrayList<>() : v; }
+    public List<Long> getHttpAgentIds() { return httpAgentIds; }
+    public void setHttpAgentIds(List<Long> httpAgentIds) {
+        this.httpAgentIds = httpAgentIds == null ? new ArrayList<>() : httpAgentIds;
+    }
     public List<Map<String, Object>> getToolFlows() { return toolFlows; }
     public void setToolFlows(List<Map<String, Object>> v) { this.toolFlows = v == null ? new ArrayList<>() : v; }
     public Long getSandboxId() { return sandboxId; }

@@ -7,8 +7,12 @@ import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.access.ResourceKind;
 import com.agentforge.controlplane.agent.AgentScopeRuntime;
 import com.agentforge.controlplane.agent.BindingValidator;
+import com.agentforge.controlplane.agent.BoundAgentRuntime;
+import com.agentforge.controlplane.agent.ChatReply;
+import com.agentforge.controlplane.agent.HttpAgentRuntime;
 import com.agentforge.controlplane.agent.ToolRuntime;
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.Role;
@@ -17,6 +21,7 @@ import com.agentforge.controlplane.domain.Skill;
 import com.agentforge.controlplane.domain.Workflow;
 import com.agentforge.controlplane.dto.ApiDtos;
 import com.agentforge.controlplane.repo.AgentRepository;
+import com.agentforge.controlplane.repo.HttpAgentRepository;
 import com.agentforge.controlplane.repo.McpServerRepository;
 import com.agentforge.controlplane.repo.ModelConfigRepository;
 import com.agentforge.controlplane.repo.RoleRepository;
@@ -50,14 +55,15 @@ import java.util.Set;
 public class ResourceController {
 
     private static final Set<String> LISTABLE = Set.of(
-            "agents", "mcp", "skills", "models", "workflows", "sandboxes", "roles", "traces");
+            "agents", "http-agents", "mcp", "skills", "models", "workflows", "sandboxes", "roles", "traces");
     private static final Set<String> UPDATABLE = Set.of(
-            "agents", "mcp", "skills", "models", "workflows", "sandboxes", "roles");
-    private static final Set<String> STATUSABLE = Set.of("mcp", "skills", "models", "sandboxes");
+            "agents", "http-agents", "mcp", "skills", "models", "workflows", "sandboxes", "roles");
+    private static final Set<String> STATUSABLE = Set.of("mcp", "skills", "models", "sandboxes", "http-agents");
 
     private final ResourceAccessService access;
     private final ResourceDumper dumper;
     private final AgentRepository agents;
+    private final HttpAgentRepository httpAgents;
     private final McpServerRepository mcps;
     private final SkillRepository skills;
     private final ModelConfigRepository models;
@@ -66,19 +72,25 @@ public class ResourceController {
     private final RoleRepository roles;
     private final ToolRuntime tools;
     private final BindingValidator bindings;
+    private final BoundAgentRuntime boundAgents;
+    private final HttpAgentRuntime httpAgentRuntime;
     private final WorkspaceStore workspaces;
     private final SandboxRuntime sandbox;
     private final OpenCliRuntime opencli;
     private final McpStreamClient mcpStream;
 
     public ResourceController(ResourceAccessService access, ResourceDumper dumper, AgentRepository agents,
-                              McpServerRepository mcps, SkillRepository skills, ModelConfigRepository models,
+                              HttpAgentRepository httpAgents, McpServerRepository mcps, SkillRepository skills,
+                              ModelConfigRepository models,
                               WorkflowRepository workflows, SandboxPolicyRepository sandboxes, RoleRepository roles,
-                              ToolRuntime tools, BindingValidator bindings, WorkspaceStore workspaces,
+                              ToolRuntime tools, BindingValidator bindings, BoundAgentRuntime boundAgents,
+                              HttpAgentRuntime httpAgentRuntime,
+                              WorkspaceStore workspaces,
                               SandboxRuntime sandbox, OpenCliRuntime opencli, McpStreamClient mcpStream) {
         this.access = access;
         this.dumper = dumper;
         this.agents = agents;
+        this.httpAgents = httpAgents;
         this.mcps = mcps;
         this.skills = skills;
         this.models = models;
@@ -87,6 +99,8 @@ public class ResourceController {
         this.roles = roles;
         this.tools = tools;
         this.bindings = bindings;
+        this.boundAgents = boundAgents;
+        this.httpAgentRuntime = httpAgentRuntime;
         this.workspaces = workspaces;
         this.sandbox = sandbox;
         this.opencli = opencli;
@@ -192,9 +206,9 @@ public class ResourceController {
     public Map<String, Object> createAgent(CurrentUser user, @Valid @RequestBody ApiDtos.AgentCreate payload) {
         requireUniqueAgentName(payload.name(), null);
         bindings.validateBindings(user.getTenantId(), payload.skill_ids(), payload.mcp_ids(),
-                payload.opencli_ids(), payload.sandbox_id());
+                payload.opencli_ids(), payload.sandbox_id(), payload.http_agent_ids());
         bindings.validateFlowTools(user.getTenantId(), payload.mcp_ids(), payload.sandbox_id(),
-                payload.tool_flows(), null);
+                payload.http_agent_ids(), payload.tool_flows(), null);
         Agent row = new Agent();
         row.setName(payload.name().strip());
         row.setDescription(payload.description());
@@ -205,12 +219,38 @@ public class ResourceController {
         row.setSkillIds(payload.skill_ids());
         row.setMcpIds(payload.mcp_ids());
         row.setOpencliIds(payload.opencli_ids());
+        row.setHttpAgentIds(payload.http_agent_ids());
         row.setToolFlows(payload.tool_flows());
         row.setSandboxId(payload.sandbox_id());
+        applyHttpProxyMode(row);
         access.stampOwner(row, user);
         agents.save(row);
         workspaces.ensureWorkspace(row);
         agents.save(row);
+        return dumper.dump(row, user);
+    }
+
+    @RequirePermission("agent:write")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/api/http-agents")
+    public Map<String, Object> createHttpAgent(CurrentUser user, @Valid @RequestBody ApiDtos.HttpAgentCreate payload) {
+        HttpAgentRuntime.validateEndpoint(payload.endpoint());
+        if (httpAgents.existsByName(payload.name().strip())) {
+            throw ApiException.conflict("HTTP 接口名称已存在");
+        }
+        HttpAgent row = new HttpAgent();
+        row.setName(payload.name().strip());
+        row.setDescription(payload.description());
+        row.setProtocol(HttpAgentRuntime.normalizeProtocol(payload.protocol()));
+        row.setEndpoint(payload.endpoint().strip());
+        row.setHeaders(HttpAgentRuntime.mergeHeaders(Map.of(), payload.headers()));
+        row.setInputField(payload.input_field().strip());
+        row.setOutputPath(payload.output_path().strip());
+        row.setTimeoutSeconds(HttpAgentRuntime.clampTimeout(payload.timeout_seconds()));
+        row.setEnabled(payload.enabled());
+        row.setConfig(payload.config() == null ? Map.of() : new LinkedHashMap<>(payload.config()));
+        access.stampOwner(row, user);
+        httpAgents.save(row);
         return dumper.dump(row, user);
     }
 
@@ -231,10 +271,12 @@ public class ResourceController {
         row.setSkillIds(new ArrayList<>(source.getSkillIds()));
         row.setMcpIds(new ArrayList<>(source.getMcpIds()));
         row.setOpencliIds(new ArrayList<>(source.getOpencliIds()));
+        row.setHttpAgentIds(new ArrayList<>(source.getHttpAgentIds()));
         row.setToolFlows(new ArrayList<>(source.getToolFlows()));
         row.setSandboxId(source.getSandboxId());
         row.setWorkspace("");
         row.setSuccessRate(0);
+        applyHttpProxyMode(row);
         access.stampOwner(row, user);
         agents.save(row);
         workspaces.ensureWorkspace(row);
@@ -251,6 +293,29 @@ public class ResourceController {
         workspaces.ensureWorkspace(row);
         agents.save(row);
         return dumper.dump(row, user);
+    }
+
+    @RequirePermission("agent:read")
+    @GetMapping("/api/agents/{itemId}/interface")
+    public Map<String, Object> agentInterface(CurrentUser user, @PathVariable Long itemId) {
+        Agent agent = access.getRow(user, ResourceKind.AGENT, itemId);
+        return boundAgents.interfaceCard(agent);
+    }
+
+    @RequirePermission({"session:write", "agent:write"})
+    @PostMapping("/api/agents/{itemId}/invoke")
+    public Map<String, Object> invokeAgent(CurrentUser user, @PathVariable Long itemId,
+                                           @Valid @RequestBody ApiDtos.AgentInvoke payload) {
+        Agent agent = access.getRow(user, ResourceKind.AGENT, itemId);
+        ChatReply reply = boundAgents.invoke(agent, payload.message(), payload.session_id());
+        return Jsons.ordered(
+                "agent", agent.getName(),
+                "agent_id", agent.getId(),
+                "reply", reply.reply(),
+                "mode", reply.mode(),
+                "trace_id", reply.traceId(),
+                "session_id", payload.session_id().isBlank() ? "" : payload.session_id(),
+                "usage", reply.usage());
     }
 
     @RequirePermission("agent:read")
@@ -317,6 +382,7 @@ public class ResourceController {
         }
         switch (resource) {
             case "agents" -> agents.deleteById(itemId);
+            case "http-agents" -> httpAgents.deleteById(itemId);
             case "mcp" -> mcps.deleteById(itemId);
             case "skills" -> skills.deleteById(itemId);
             case "models" -> models.deleteById(itemId);
@@ -367,6 +433,9 @@ public class ResourceController {
         } else if (row instanceof SandboxPolicy box) {
             box.setEnabled(payload.enabled());
             sandboxes.save(box);
+        } else if (row instanceof HttpAgent httpAgent) {
+            httpAgent.setEnabled(payload.enabled());
+            httpAgents.save(httpAgent);
         }
         return dumper.dump(row, user);
     }
@@ -384,6 +453,13 @@ public class ResourceController {
         data.put("name", row.getName());
         data.putAll(probed);
         return data;
+    }
+
+    @RequirePermission("agent:read")
+    @PostMapping("/api/http-agents/{itemId}/test")
+    public Map<String, Object> testHttpAgent(CurrentUser user, @PathVariable Long itemId) {
+        HttpAgent row = access.getRow(user, ResourceKind.HTTP_AGENT, itemId);
+        return httpAgentRuntime.probe(row);
     }
 
     @RequirePermission("mcp:read")
@@ -511,6 +587,7 @@ public class ResourceController {
     private void applyUpdate(CurrentUser user, String resource, Object row, Map<String, Object> payload) {
         switch (resource) {
             case "agents" -> applyAgent(user, (Agent) row, payload);
+            case "http-agents" -> applyHttpAgent((HttpAgent) row, payload);
             case "mcp" -> applyMcp((McpServer) row, payload);
             case "skills" -> applySkill((Skill) row, payload);
             case "models" -> applyModel((ModelConfig) row, payload);
@@ -550,6 +627,9 @@ public class ResourceController {
         if (payload.containsKey("opencli_ids")) {
             row.setOpencliIds(Jsons.longList(payload.get("opencli_ids")));
         }
+        if (payload.containsKey("http_agent_ids")) {
+            row.setHttpAgentIds(Jsons.longList(payload.get("http_agent_ids")));
+        }
         if (payload.containsKey("tool_flows") && payload.get("tool_flows") instanceof List<?>) {
             row.setToolFlows(Jsons.mapList(payload.get("tool_flows")));
         }
@@ -560,11 +640,76 @@ public class ResourceController {
                 payload.containsKey("skill_ids") ? row.getSkillIds() : null,
                 payload.containsKey("mcp_ids") ? row.getMcpIds() : null,
                 payload.containsKey("opencli_ids") ? row.getOpencliIds() : null,
-                payload.containsKey("sandbox_id") ? row.getSandboxId() : null);
+                payload.containsKey("sandbox_id") ? row.getSandboxId() : null,
+                payload.containsKey("http_agent_ids") ? row.getHttpAgentIds() : null);
         bindings.validateFlowTools(user.getTenantId(),
                 payload.containsKey("mcp_ids") ? row.getMcpIds() : null,
                 payload.containsKey("sandbox_id") ? row.getSandboxId() : null,
+                payload.containsKey("http_agent_ids") ? row.getHttpAgentIds() : null,
                 payload.containsKey("tool_flows") ? row.getToolFlows() : null, row);
+        applyHttpProxyMode(row);
+    }
+
+    private static void applyHttpProxyMode(Agent row) {
+        List<Long> ids = row.getHttpAgentIds();
+        if (ids == null || ids.isEmpty()) {
+            if (row.getModelName() == null) {
+                row.setModelName("");
+            }
+            return;
+        }
+        row.setHttpAgentIds(List.of(ids.get(0)));
+        row.setSkillIds(List.of());
+        row.setMcpIds(List.of());
+        row.setOpencliIds(List.of());
+        row.setToolFlows(List.of());
+        row.setSandboxId(null);
+        if (row.getModelName() == null) {
+            row.setModelName("");
+        }
+    }
+
+    private void applyHttpAgent(HttpAgent row, Map<String, Object> payload) {
+        if (payload.containsKey("name") && payload.get("name") != null) {
+            String name = Jsons.text(payload.get("name")).strip();
+            if (httpAgents.existsByNameAndIdNot(name, row.getId())) {
+                throw ApiException.conflict("HTTP 接口名称已存在");
+            }
+            row.setName(name);
+        }
+        if (payload.containsKey("description")) {
+            row.setDescription(Jsons.text(payload.get("description")));
+        }
+        if (payload.containsKey("protocol") && payload.get("protocol") != null) {
+            row.setProtocol(HttpAgentRuntime.normalizeProtocol(Jsons.text(payload.get("protocol"))));
+        }
+        if (payload.containsKey("endpoint") && payload.get("endpoint") != null) {
+            String endpoint = Jsons.text(payload.get("endpoint")).strip();
+            HttpAgentRuntime.validateEndpoint(endpoint);
+            row.setEndpoint(endpoint);
+        }
+        if (payload.containsKey("headers") && payload.get("headers") instanceof Map<?, ?> map) {
+            Map<String, Object> incoming = new LinkedHashMap<>();
+            map.forEach((key, value) -> incoming.put(String.valueOf(key), value));
+            row.setHeaders(HttpAgentRuntime.mergeHeaders(row.getHeaders(), incoming));
+        }
+        if (payload.containsKey("input_field")) {
+            row.setInputField(Jsons.text(payload.get("input_field")).strip());
+        }
+        if (payload.containsKey("output_path")) {
+            row.setOutputPath(Jsons.text(payload.get("output_path")).strip());
+        }
+        if (payload.containsKey("timeout_seconds") && payload.get("timeout_seconds") instanceof Number number) {
+            row.setTimeoutSeconds(HttpAgentRuntime.clampTimeout(number.intValue()));
+        }
+        if (payload.containsKey("enabled") && payload.get("enabled") instanceof Boolean enabled) {
+            row.setEnabled(enabled);
+        }
+        if (payload.containsKey("config") && payload.get("config") instanceof Map<?, ?> map) {
+            Map<String, Object> config = new LinkedHashMap<>(row.getConfig() == null ? Map.of() : row.getConfig());
+            map.forEach((key, value) -> config.put(String.valueOf(key), value));
+            row.setConfig(config);
+        }
     }
 
     private void applyMcp(McpServer row, Map<String, Object> payload) {
@@ -704,6 +849,7 @@ public class ResourceController {
     private void persist(String resource, Object row) {
         switch (resource) {
             case "agents" -> agents.save((Agent) row);
+            case "http-agents" -> httpAgents.save((HttpAgent) row);
             case "mcp" -> mcps.save((McpServer) row);
             case "skills" -> skills.save((Skill) row);
             case "models" -> models.save((ModelConfig) row);

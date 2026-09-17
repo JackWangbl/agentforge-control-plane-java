@@ -11,6 +11,7 @@ public final class Permissions {
 
     public static final Map<ResourceKind, String> READ = Map.ofEntries(
             Map.entry(ResourceKind.AGENT, "agent:read"),
+            Map.entry(ResourceKind.HTTP_AGENT, "agent:read"),
             Map.entry(ResourceKind.CREDENTIAL, "model:read"),
             Map.entry(ResourceKind.MCP, "mcp:read"),
             Map.entry(ResourceKind.OPENCLI, "opencli:read"),
@@ -27,6 +28,7 @@ public final class Permissions {
 
     public static final Map<ResourceKind, String> WRITE = Map.ofEntries(
             Map.entry(ResourceKind.AGENT, "agent:write"),
+            Map.entry(ResourceKind.HTTP_AGENT, "agent:write"),
             Map.entry(ResourceKind.CREDENTIAL, "model:write"),
             Map.entry(ResourceKind.MCP, "mcp:write"),
             Map.entry(ResourceKind.OPENCLI, "opencli:write"),
@@ -46,6 +48,7 @@ public final class Permissions {
     /** URL 里的资源段 -> 资源种类。 */
     public static final Map<String, ResourceKind> ROUTE_KIND = Map.ofEntries(
             Map.entry("agents", ResourceKind.AGENT),
+            Map.entry("http-agents", ResourceKind.HTTP_AGENT),
             Map.entry("models", ResourceKind.CREDENTIAL),
             Map.entry("mcp", ResourceKind.MCP),
             Map.entry("skills", ResourceKind.SKILL),

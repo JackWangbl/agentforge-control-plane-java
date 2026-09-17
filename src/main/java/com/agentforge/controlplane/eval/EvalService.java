@@ -4,8 +4,10 @@ import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.access.ResourceKind;
 import com.agentforge.controlplane.agent.AgentScopeRuntime;
+import com.agentforge.controlplane.agent.ChatReply;
 import com.agentforge.controlplane.agent.ChatTurnResult;
 import com.agentforge.controlplane.agent.ChatTurnRunner;
+import com.agentforge.controlplane.agent.HttpAgentRuntime;
 import com.agentforge.controlplane.config.AppSettings;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.Dataset;
@@ -60,13 +62,14 @@ public class EvalService {
     private final ModelConfigRepository models;
     private final TraceRepository traces;
     private final ChatTurnRunner chat;
+    private final HttpAgentRuntime httpAgents;
     private final ResourceAccessService access;
     private final AppSettings settings;
 
     public EvalService(EvaluationRunRepository runs, EvaluationResultRepository results,
                        DatasetCaseRepository cases, AgentRepository agents, ModelConfigRepository models,
-                       TraceRepository traces, ChatTurnRunner chat, ResourceAccessService access,
-                       AppSettings settings) {
+                       TraceRepository traces, ChatTurnRunner chat, HttpAgentRuntime httpAgents,
+                       ResourceAccessService access, AppSettings settings) {
         this.runs = runs;
         this.results = results;
         this.cases = cases;
@@ -74,6 +77,7 @@ public class EvalService {
         this.models = models;
         this.traces = traces;
         this.chat = chat;
+        this.httpAgents = httpAgents;
         this.access = access;
         this.settings = settings;
     }
@@ -389,13 +393,34 @@ public class EvalService {
         row.setExpected(item.getExpected());
         row.setTenantId(run.getTenantId());
         row.setOwnerId(run.getOwnerId());
-        if (agent == null || model == null) {
+        if (agent == null || (model == null && (httpAgents == null || !httpAgents.isHttpBacked(agent)))) {
             row.setStatus("error");
             row.setError("找不到 Agent 或模型");
             return row;
         }
         String sessionId = "eval_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         long started = System.nanoTime();
+        if (httpAgents.isHttpBacked(agent)) {
+            try {
+                ChatReply reply = httpAgents.chat(agent, item.getInput(), sessionId);
+                row.setLatencyMs(Math.max(1, (int) ((System.nanoTime() - started) / 1_000_000)));
+                row.setActual(reply.reply());
+                row.setTraceId(reply.traceId() == null ? "" : reply.traceId());
+                row.setSessionId(sessionId);
+                row.setTokens(reply.totalTokens());
+                if ("error".equals(reply.mode())) {
+                    row.setStatus("error");
+                    row.setError(reply.reply());
+                    return row;
+                }
+                return scoreReply(run, item, row, reply.reply(), model);
+            } catch (Exception e) {
+                row.setStatus("error");
+                row.setError(e.getMessage());
+                row.setLatencyMs(Math.max(1, (int) ((System.nanoTime() - started) / 1_000_000)));
+                return row;
+            }
+        }
         ChatTurnResult turn;
         try {
             ExecutionContext.set(ExecutionContext.forAgent(agent, sessionId));
@@ -418,6 +443,11 @@ public class EvalService {
             row.setError(turn.error());
             return row;
         }
+        return scoreReply(run, item, row, turn.reply(), model);
+    }
+
+    private EvaluationResult scoreReply(EvaluationRun run, DatasetCase item, EvaluationResult row,
+                                        String actual, ModelConfig model) {
         if ("perf".equals(run.getScorer())) {
             row.setStatus("passed");
             row.setScore(1);
@@ -427,10 +457,15 @@ public class EvalService {
         EvalScorers.Judgement judgement;
         if ("llm".equals(run.getScorer())) {
             ModelConfig judge = run.getJudgeModelId() == null ? model : models.findById(run.getJudgeModelId()).orElse(model);
-            judgement = EvalScorers.scoreWithLlm(item.getExpected(), turn.reply(), item.getInput(),
+            if (judge == null) {
+                row.setStatus("error");
+                row.setError("LLM 判分需要可用的裁判模型");
+                return row;
+            }
+            judgement = EvalScorers.scoreWithLlm(item.getExpected(), actual, item.getInput(),
                     judge.getModelId(), AgentScopeRuntime.modelEndpoint(judge), AgentScopeRuntime.resolveCredential(judge));
         } else {
-            judgement = EvalScorers.scoreCase(run.getScorer(), item.getExpected(), turn.reply());
+            judgement = EvalScorers.scoreCase(run.getScorer(), item.getExpected(), actual);
         }
         row.setStatus(judgement.status());
         row.setScore(judgement.score());

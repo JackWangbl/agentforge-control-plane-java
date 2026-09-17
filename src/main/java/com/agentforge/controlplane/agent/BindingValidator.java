@@ -5,6 +5,7 @@ import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.OpenCliEndpoint;
 import com.agentforge.controlplane.domain.SandboxPolicy;
 import com.agentforge.controlplane.domain.Skill;
+import com.agentforge.controlplane.repo.HttpAgentRepository;
 import com.agentforge.controlplane.repo.McpServerRepository;
 import com.agentforge.controlplane.repo.OpenCliEndpointRepository;
 import com.agentforge.controlplane.repo.SandboxPolicyRepository;
@@ -26,22 +27,30 @@ public class BindingValidator {
     private final McpServerRepository mcps;
     private final OpenCliEndpointRepository openclis;
     private final SandboxPolicyRepository sandboxes;
+    private final HttpAgentRepository httpAgents;
     private final ToolRuntime tools;
 
     public BindingValidator(SkillRepository skills, McpServerRepository mcps, OpenCliEndpointRepository openclis,
-                            SandboxPolicyRepository sandboxes, ToolRuntime tools) {
+                            SandboxPolicyRepository sandboxes, HttpAgentRepository httpAgents, ToolRuntime tools) {
         this.skills = skills;
         this.mcps = mcps;
         this.openclis = openclis;
         this.sandboxes = sandboxes;
+        this.httpAgents = httpAgents;
         this.tools = tools;
     }
 
     public void validateBindings(Long tenantId, List<Long> skillIds, List<Long> mcpIds,
                                  List<Long> opencliIds, Long sandboxId) {
+        validateBindings(tenantId, skillIds, mcpIds, opencliIds, sandboxId, null);
+    }
+
+    public void validateBindings(Long tenantId, List<Long> skillIds, List<Long> mcpIds,
+                                 List<Long> opencliIds, Long sandboxId, List<Long> httpAgentIds) {
         validateIds(skills.findAllById(orEmpty(skillIds)), skillIds, tenantId, "Skill");
         validateIds(mcps.findAllById(orEmpty(mcpIds)), mcpIds, tenantId, "MCP");
         validateIds(openclis.findAllById(orEmpty(opencliIds)), opencliIds, tenantId, "OpenCLI");
+        validateHttpAgentBindings(tenantId, httpAgentIds);
         if (sandboxId != null) {
             SandboxPolicy box = sandboxes.findById(sandboxId).orElse(null);
             if (box == null || box.getTenantId() == null || !box.getTenantId().equals(tenantId)) {
@@ -50,9 +59,29 @@ public class BindingValidator {
         }
     }
 
+    public void validateHttpAgentBindings(Long tenantId, List<Long> httpAgentIds) {
+        if (httpAgentIds == null) {
+            return;
+        }
+        if (httpAgentIds.size() > HttpAgentRuntime.MAX_BOUND) {
+            throw ApiException.unprocessable("接入外部 Agent 时只能勾选 1 个 HTTP 接口");
+        }
+        validateIds(httpAgents.findAllById(orEmpty(httpAgentIds)), httpAgentIds, tenantId, "HTTP 接口");
+    }
+
     public void validateFlowTools(Long tenantId, List<Long> mcpIds, Long sandboxId,
                                   List<Map<String, Object>> flows, Agent existing) {
+        validateFlowTools(tenantId, mcpIds, sandboxId, null, flows, existing);
+    }
+
+    public void validateFlowTools(Long tenantId, List<Long> mcpIds, Long sandboxId, List<Long> httpAgentIds,
+                                  List<Map<String, Object>> flows, Agent existing) {
         if (flows == null || flows.isEmpty()) {
+            return;
+        }
+        List<Long> resolvedAgents = httpAgentIds != null ? httpAgentIds
+                : existing == null ? List.of() : existing.getHttpAgentIds();
+        if (resolvedAgents != null && !resolvedAgents.isEmpty()) {
             return;
         }
         List<Long> resolvedMcpIds = mcpIds != null ? mcpIds

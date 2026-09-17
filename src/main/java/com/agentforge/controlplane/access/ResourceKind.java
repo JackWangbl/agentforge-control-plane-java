@@ -2,6 +2,7 @@ package com.agentforge.controlplane.access;
 
 public enum ResourceKind {
     AGENT,
+    HTTP_AGENT,
     CREDENTIAL,
     MCP,
     OPENCLI,

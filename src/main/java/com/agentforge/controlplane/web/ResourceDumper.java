@@ -5,11 +5,13 @@ import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.access.ResourceKind;
 import com.agentforge.controlplane.agent.AgentScopeRuntime;
+import com.agentforge.controlplane.agent.HttpAgentRuntime;
 import com.agentforge.controlplane.agent.ToolRuntime;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.Dataset;
 import com.agentforge.controlplane.domain.EvaluationRun;
 import com.agentforge.controlplane.domain.Experiment;
+import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.SandboxPolicy;
@@ -35,6 +37,7 @@ public class ResourceDumper {
 
     private static final Map<Class<?>, ResourceKind> KINDS = Map.ofEntries(
             Map.entry(Agent.class, ResourceKind.AGENT),
+            Map.entry(HttpAgent.class, ResourceKind.HTTP_AGENT),
             Map.entry(ModelConfig.class, ResourceKind.CREDENTIAL),
             Map.entry(McpServer.class, ResourceKind.MCP),
             Map.entry(Skill.class, ResourceKind.SKILL),
@@ -99,11 +102,27 @@ public class ResourceDumper {
             data.put("instruction", instruction);
             data.put("has_instruction", !instruction.isBlank());
         }
+        if (row instanceof HttpAgent httpAgent) {
+            data.put("protocol", HttpAgentRuntime.normalizeProtocol(httpAgent.getProtocol()));
+            data.put("protocol_label", HttpAgentRuntime.protocolLabel(httpAgent.getProtocol()));
+            data.put("headers", HttpAgentRuntime.publicHeaders(httpAgent.getHeaders()));
+            data.put("has_auth", HttpAgentRuntime.hasAuth(httpAgent.getHeaders()));
+            data.put("input_field", httpAgent.getInputField() == null || httpAgent.getInputField().isBlank()
+                    ? HttpAgentRuntime.defaultInputField(httpAgent.getProtocol()) : httpAgent.getInputField());
+            data.put("output_path", httpAgent.getOutputPath() == null || httpAgent.getOutputPath().isBlank()
+                    ? HttpAgentRuntime.defaultOutputPath(httpAgent.getProtocol()) : httpAgent.getOutputPath());
+            data.put("runnable", httpAgent.isEnabled() && httpAgent.getEndpoint() != null
+                    && httpAgent.getEndpoint().startsWith("http"));
+        }
         if (row instanceof Agent agent) {
             data.put("skill_ids", agent.getSkillIds());
             data.put("mcp_ids", agent.getMcpIds());
             data.put("opencli_ids", agent.getOpencliIds());
+            data.put("http_agent_ids", agent.getHttpAgentIds());
+            data.put("http_backed", !tools.selectedHttpAgents(agent).isEmpty());
+            data.put("runtime", tools.selectedHttpAgents(agent).isEmpty() ? "local" : "http");
             data.put("system_prompt", agent.getSystemPrompt());
+            data.put("invoke_path", "/api/agents/" + agent.getId() + "/invoke");
             List<Map<String, Object>> boundSkills = new ArrayList<>();
             for (Skill skill : tools.selectedSkills(agent)) {
                 boundSkills.add(Map.of("id", skill.getId(), "name", skill.getName()));
@@ -112,8 +131,20 @@ public class ResourceDumper {
             for (McpServer mcp : tools.selectedMcps(agent)) {
                 boundMcps.add(Map.of("id", mcp.getId(), "name", mcp.getName(), "tools", tools.listMcpTools(mcp)));
             }
+            List<Map<String, Object>> boundHttpAgents = new ArrayList<>();
+            for (HttpAgent target : tools.selectedHttpAgents(agent)) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", target.getId());
+                item.put("name", target.getName());
+                item.put("description", target.getDescription() == null ? "" : target.getDescription());
+                item.put("protocol", HttpAgentRuntime.normalizeProtocol(target.getProtocol()));
+                item.put("endpoint", target.getEndpoint());
+                item.put("tool", HttpAgentRuntime.toolName(target.getId()));
+                boundHttpAgents.add(item);
+            }
             data.put("bound_skills", boundSkills);
             data.put("bound_mcps", boundMcps);
+            data.put("bound_http_agents", boundHttpAgents);
             data.put("workspace", agent.getWorkspace() == null ? "" : agent.getWorkspace());
             SandboxPolicy box = tools.selectedSandbox(agent);
             data.put("sandbox_name", box == null ? "" : box.getName());

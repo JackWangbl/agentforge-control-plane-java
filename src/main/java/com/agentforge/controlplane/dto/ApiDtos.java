@@ -103,24 +103,57 @@ public final class ApiDtos {
     public record AgentCreate(
             @NotBlank @Size(min = 2, max = 80) String name,
             String description,
-            @NotBlank String model_name,
+            String model_name,
             String status,
             String version,
             String system_prompt,
             List<Long> skill_ids,
             List<Long> mcp_ids,
             List<Long> opencli_ids,
+            List<Long> http_agent_ids,
             List<Map<String, Object>> tool_flows,
             Long sandbox_id) {
         public AgentCreate {
             description = description == null ? "" : description;
+            model_name = model_name == null ? "" : model_name;
             status = status == null ? "draft" : status;
             version = version == null ? "v1.0.0" : version;
             system_prompt = system_prompt == null ? "" : system_prompt;
             skill_ids = skill_ids == null ? List.of() : skill_ids;
             mcp_ids = mcp_ids == null ? List.of() : mcp_ids;
             opencli_ids = opencli_ids == null ? List.of() : opencli_ids;
+            http_agent_ids = http_agent_ids == null ? List.of() : http_agent_ids;
             tool_flows = tool_flows == null ? List.of() : tool_flows;
+        }
+    }
+
+    public record HttpAgentCreate(
+            @NotBlank @Size(min = 2, max = 100) String name,
+            String description,
+            @NotBlank String protocol,
+            @NotBlank String endpoint,
+            Map<String, Object> headers,
+            String input_field,
+            String output_path,
+            @Min(5) @Max(120) Integer timeout_seconds,
+            Boolean enabled,
+            Map<String, Object> config) {
+        public HttpAgentCreate {
+            description = description == null ? "" : description;
+            headers = headers == null ? Map.of() : headers;
+            input_field = input_field == null ? "" : input_field;
+            output_path = output_path == null ? "" : output_path;
+            timeout_seconds = timeout_seconds == null ? 30 : timeout_seconds;
+            enabled = enabled == null || enabled;
+            config = config == null ? Map.of() : config;
+        }
+    }
+
+    public record AgentInvoke(
+            @NotBlank @Size(max = 20000) String message,
+            @Size(max = 120) String session_id) {
+        public AgentInvoke {
+            session_id = session_id == null ? "" : session_id;
         }
     }
 
@@ -172,7 +205,7 @@ public final class ApiDtos {
 
     public record PlaygroundRun(
             @NotNull Long agent_id,
-            @NotNull Long model_config_id,
+            Long model_config_id,
             @NotBlank @Size(max = 20000) String message,
             String session_id,
             Long experiment_id,
@@ -180,7 +213,7 @@ public final class ApiDtos {
 
     public record PlaygroundResume(
             @NotNull Long agent_id,
-            @NotNull Long model_config_id,
+            Long model_config_id,
             @NotBlank @Size(max = 120) String session_id,
             Long experiment_id,
             @Size(max = 120) String user_key,

@@ -20,7 +20,7 @@ function apiError(err){
   return raw.slice(0,180);
 }
 const authState = {token: localStorage.getItem('af_token')||'', me:null};
-const pagePerm = {dashboard:'',sessions:'session:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',models:'model:read',sandboxes:'sandbox:read',roles:'role:read'};
+const pagePerm = {dashboard:'',sessions:'session:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',models:'model:read',sandboxes:'sandbox:read',roles:'role:read'};
 function can(perm){
   if(!perm) return !!authState.me;
   const granted=authState.me?.permissions||[];
@@ -93,9 +93,9 @@ const api = async (path, options={}) => {
 const fmt = n => n >= 1000000 ? (n/1000000).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : n;
 const dt = value => new Date(value+'Z').toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 const statusText = {completed:'已完成',running:'运行中',failed:'失败',ok:'正常',error:'异常',published:'已发布',draft:'草稿',queued:'排队中',passed:'通过',skipped:'跳过',cancelled:'已取消',paused:'已暂停'};
-const titles = {dashboard:'运行概览',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理',workflows:'Agent 编排',mcp:'MCP 工具',skills:'Skill 管理',models:'模型配置',sandboxes:'沙箱管理',roles:'权限管理'};
+const titles = {dashboard:'运行概览',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'Agent 编排',mcp:'MCP 工具',skills:'Skill 管理',models:'模型配置',sandboxes:'沙箱管理',roles:'权限管理'};
 const pageMeta = {
-  sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], models:['MODEL GATEWAY','模型配置','填写模型供应商、API 密钥与推理参数'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
+  sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], models:['MODEL GATEWAY','模型配置','填写模型供应商、API 密钥与推理参数'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
 };
 let currentPage='dashboard', currentParam='';
 function pageTools(extra=''){
@@ -141,7 +141,7 @@ async function openSessionDetail(sessionId){
   }catch(e){target.innerHTML='<div class="empty">会话详情加载失败。</div>'}
 }
 
-const resourceInfo={agents:{icon:'◇',name:'Agent',desc:x=>x.description,meta:x=>[x.model_name+' · '+(x.version||''), x.workspace?('空间 '+x.workspace):agentBindSummary(x)],action:'新建 Agent'},mcp:{icon:'⚙',name:'MCP 服务',desc:x=>x.command||x.endpoint,meta:x=>[mcpTransportLabel(x.transport),(x.command?x.command:(x.target?('过滤 '+x.target+' · '):'')+(x.runnable?'可调用 ':'')+(x.tools_count||0)+' 个工具')],action:'添加 MCP'},skills:{icon:'✦',name:'Skill',desc:x=>x.description,meta:x=>[x.version,x.has_instruction?'指令已就绪':'待填写指令'],action:'添加 Skill'},models:{icon:'◉',name:'模型',desc:x=>x.model_id,meta:x=>[x.provider,x.has_credential?'密钥已就绪':'待填写密钥'],action:'添加模型'},sandboxes:{icon:'▣',name:'沙箱策略',desc:x=>x.runtime+' · '+(x.backend||'local'),meta:x=>[x.cpu_limit+' / '+x.memory_limit,(x.network_mode==='deny'?'断网隔离':x.network_mode)+' · '+(x.timeout_seconds||60)+'s'],action:'新建策略'},roles:{icon:'♙',name:'角色',desc:x=>x.description,meta:x=>[x.user_count+' 位用户',(x.permissions||[]).length+' 项权限'],action:'新建角色'}};
+const resourceInfo={agents:{icon:'◇',name:'Agent',desc:x=>x.description,meta:x=>[agentRuntimeLabel(x)+' · '+(x.version||''), x.workspace?('空间 '+x.workspace):agentBindSummary(x)],action:'新建 Agent'},'http-agents':{icon:'↗',name:'HTTP 接口',desc:x=>x.description||x.endpoint,meta:x=>[httpProtocolLabel(x.protocol),(x.has_auth?'已配置鉴权':'无鉴权')+' · '+(x.timeout_seconds||30)+'s'],action:'登记 HTTP 接口'},mcp:{icon:'⚙',name:'MCP 服务',desc:x=>x.command||x.endpoint,meta:x=>[mcpTransportLabel(x.transport),(x.command?x.command:(x.target?('过滤 '+x.target+' · '):'')+(x.runnable?'可调用 ':'')+(x.tools_count||0)+' 个工具')],action:'添加 MCP'},skills:{icon:'✦',name:'Skill',desc:x=>x.description,meta:x=>[x.version,x.has_instruction?'指令已就绪':'待填写指令'],action:'添加 Skill'},models:{icon:'◉',name:'模型',desc:x=>x.model_id,meta:x=>[x.provider,x.has_credential?'密钥已就绪':'待填写密钥'],action:'添加模型'},sandboxes:{icon:'▣',name:'沙箱策略',desc:x=>x.runtime+' · '+(x.backend||'local'),meta:x=>[x.cpu_limit+' / '+x.memory_limit,(x.network_mode==='deny'?'断网隔离':x.network_mode)+' · '+(x.timeout_seconds||60)+'s'],action:'新建策略'},roles:{icon:'♙',name:'角色',desc:x=>x.description,meta:x=>[x.user_count+' 位用户',(x.permissions||[]).length+' 项权限'],action:'新建角色'}};
 const resourceStore = {};
 function resourceMenuItem(label,onclick,extra=''){return `<button type="button" class="card-menu-item${extra}" role="menuitem" onclick="${onclick}">${label}</button>`}
 function resourceActions(page,x){
@@ -156,7 +156,7 @@ function resourceActions(page,x){
     }
     return `<div class="card-menu"><button type="button" class="card-menu-btn" aria-label="更多操作" aria-haspopup="menu" aria-expanded="false" onclick="toggleCardMenu(event,this)">⋮</button><div class="card-menu-list" role="menu">${items.join('')}</div></div>`;
   }
-  const primary=page==='models'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用模型'"} onclick="testModel(${x.id})">连通测试</button>`:page==='mcp'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用 MCP'"} onclick="testMcp(${x.id})">${x.transport==='opencli'?'探测浏览器':'探测工具'}</button>`:page==='skills'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用 Skill'"} onclick="testSkill(${x.id})">预览指令</button>`:page==='sandboxes'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用沙箱'"} onclick="testSandbox(${x.id})">试跑代码</button>`:'';
+  const primary=page==='models'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用模型'"} onclick="testModel(${x.id})">连通测试</button>`:page==='mcp'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用 MCP'"} onclick="testMcp(${x.id})">${x.transport==='opencli'?'探测浏览器':'探测工具'}</button>`:page==='http-agents'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用接口'"} onclick="testHttpAgent(${x.id})">试连</button>`:page==='skills'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用 Skill'"} onclick="testSkill(${x.id})">预览指令</button>`:page==='sandboxes'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用沙箱'"} onclick="testSandbox(${x.id})">试跑代码</button>`:'';
   return `${primary}${writable?`<button type="button" class="btn ghost resource-edit" onclick="openEdit('${page}',${x.id})">编辑</button><button type="button" class="btn ghost resource-edit danger" onclick="removeResource('${page}',${x.id})">删除</button>`:'<span class="muted">只读</span>'}`
 }
 function toggleCardMenu(event,btn){
@@ -177,7 +177,21 @@ function closeCardMenus(){
   });
 }
 function statusControl(page,x){if(x.enabled===undefined)return '';return `<button type="button" class="switch ${x.enabled?'on':''}" role="switch" aria-checked="${x.enabled}" aria-label="${x.enabled?'停用':'启用'}${x.name}" title="点击${x.enabled?'停用':'启用'}" onclick="toggleEnabled('${page}',${x.id},${!x.enabled})"><i></i></button>`}
+function isHttpBackedAgent(x){
+  return !!(x && (x.http_backed || (x.runtime==='http') || (x.http_agent_ids||[]).length || (x.bound_http_agents||[]).length));
+}
+function agentRuntimeLabel(x){
+  if(isHttpBackedAgent(x)){
+    const http=(x.bound_http_agents||[])[0];
+    return http?('外部接入 · '+http.name):'外部接入';
+  }
+  return x.model_name||'本平台模型';
+}
 function agentBindSummary(x){
+  if(isHttpBackedAgent(x)){
+    const https=(x.bound_http_agents||[]).map(item=>item.name);
+    return https.length?('直连 '+https.join('、')):'已接入外部 Agent';
+  }
   const skills=(x.bound_skills||[]).map(item=>item.name);
   const tools=(x.bound_mcps||[]).flatMap(item=>(item.tools||[]).map(tool=>tool.name));
   if(!skills.length && !tools.length){
@@ -187,6 +201,11 @@ function agentBindSummary(x){
   return [skills.length?skills.join('、'):null, tools.length?tools.length+' 个工具':null].filter(Boolean).join(' · ');
 }
 function agentTags(x){
+  if(isHttpBackedAgent(x)){
+    const https=x.bound_http_agents||[];
+    const names=https.length?https.map(item=>item.name||item):['外部 Agent'];
+    return `<div class="agent-tags"><i class="tag http">外部接入</i>${names.map(name=>`<i class="tag tool">${escapeHtml(name)}</i>`).join('')}</div>`;
+  }
   const skills=x.bound_skills||(x.skill_ids||[]).map(id=>resourceStore.skills&&resourceStore.skills[id]).filter(Boolean);
   const mcps=x.bound_mcps||(x.mcp_ids||[]).map(id=>resourceStore.mcp&&resourceStore.mcp[id]).filter(Boolean);
   const tools=mcps.flatMap(item=>(item.tools||[]).map(tool=>tool.name||tool));
@@ -344,7 +363,7 @@ function evalEmptyAgentHtml(){
 function evalChromeHtml(){
   const agents=evalAgents();
   const agent=evalCurrentAgent();
-  const agentBar=`<div class="eval-agent-bar${agents.length?'':' eval-agent-bar-empty'}"><div class="eval-agent-pick"><span>评测对象</span><select class="select" id="evalAgentFilter" ${agents.length?'':'disabled'}><option value="">${agents.length?'请选择 Agent':'暂无 Agent'}</option>${agents.map(x=>`<option value="${x.id}" ${agent&&Number(x.id)===Number(agent.id)?'selected':''}>${escapeHtml(x.name)}</option>`).join('')}</select></div><div class="eval-agent-meta">${agent?escapeHtml(agent.model_name||'')+' · '+(agent.version||''):(agents.length?'选定后显示模型与版本':'')}</div></div>`;
+  const agentBar=`<div class="eval-agent-bar${agents.length?'':' eval-agent-bar-empty'}"><div class="eval-agent-pick"><span>评测对象</span><select class="select" id="evalAgentFilter" ${agents.length?'':'disabled'}><option value="">${agents.length?'请选择 Agent':'暂无 Agent'}</option>${agents.map(x=>`<option value="${x.id}" ${agent&&Number(x.id)===Number(agent.id)?'selected':''}>${escapeHtml(x.name)}</option>`).join('')}</select></div><div class="eval-agent-meta">${agent?escapeHtml(agentRuntimeLabel(agent))+' · '+(agent.version||''):(agents.length?'选定后显示运行方式':'')}</div></div>`;
   if(!agent) return `${agentBar}<div id="evalBody">${evalEmptyAgentHtml()}</div>`;
   const tabs=[['datasets','数据集'],['runs','测试任务'],['perf','性能测试'],['report','报告'],['trace','追踪']].map(([id,label])=>`<button type="button" class="eval-tab ${evalState.tab===id?'active':''}" data-eval-tab="${id}">${label}</button>`).join('');
   return `${agentBar}<div class="eval-tabs">${tabs}</div><div id="evalBody">${evalBodyHtml()}</div>`;
@@ -1096,12 +1115,13 @@ async function studio(){
 }
 let pgCatalog={agents:[],models:[],mcps:[],skills:[]};
 async function playground(selectedAgent=''){
-  const [agents,allModels,mcps,skills,expRows]=await Promise.all([api('/api/agents'),api('/api/models'),api('/api/mcp'),api('/api/skills'),api('/api/experiments').catch(()=>[])]);
+  const [agents,allModels,mcps,skills,httpAgents,expRows]=await Promise.all([api('/api/agents'),api('/api/models'),api('/api/mcp'),api('/api/skills'),api('/api/http-agents').catch(()=>[]),api('/api/experiments').catch(()=>[])]);
   const models=allModels.filter(x=>x.enabled);
   const liveMcps=(mcps||[]).filter(x=>x.enabled!==false);
   const liveSkills=(skills||[]).filter(x=>x.enabled!==false);
+  const liveHttp=(httpAgents||[]).filter(x=>x.enabled!==false);
   const experiments=expRows||[];
-  pgCatalog={agents,models,mcps:liveMcps,skills:liveSkills,experiments};
+  pgCatalog={agents,models,mcps:liveMcps,skills:liveSkills,httpAgents:liveHttp,experiments};
   if(selectedAgent) chatState.agentId=String(selectedAgent);
   if(!chatState.agentId && agents[0]) chatState.agentId=String(agents[0].id);
   if(!chatState.modelId && models[0]) chatState.modelId=String(models[0].id);
@@ -1114,27 +1134,30 @@ async function playground(selectedAgent=''){
     const mark=live?'进行中':(statusText[x.status]||x.status);
     return `<option value="${x.id}" ${String(x.id)===String(chatState.experimentId)?'selected':''}>${escapeHtml(x.name)}（${mark}）</option>`;
   }).join('');
+  const http=isHttpBackedAgent(agent);
+  const canSend=http||models.length>0;
+  const peerMeta=http?agentRuntimeLabel(agent):(model?model.name+' · '+model.model_id:'请选择模型');
   return `<div class="pg-page">${head('playground', pageTools('<button class="btn ghost" type="button" id="resumeChat" hidden>从失败处继续</button><button class="btn ghost" type="button" id="clearChat">新开会话</button>'))}
 <div class="pg-controls">
   <label class="pg-field">智能体<select id="runAgent" class="select">${agents.map(x=>`<option value="${x.id}" ${String(x.id)===String(agent&&agent.id)?'selected':''}>${x.name}</option>`).join('')||'<option value="">暂无智能体</option>'}</select></label>
-  <label class="pg-field">模型<select id="runModel" class="select">${models.map(x=>`<option value="${x.id}" ${String(x.id)===String(model&&model.id)?'selected':''}>${x.name}</option>`).join('')||'<option value="">暂无可用模型</option>'}</select></label>
+  <label class="pg-field" id="runModelField" ${http?'hidden':''}>模型<select id="runModel" class="select">${models.map(x=>`<option value="${x.id}" ${String(x.id)===String(model&&model.id)?'selected':''}>${x.name}</option>`).join('')||'<option value="">暂无可用模型</option>'}</select></label>
   <label class="pg-field">是否分流<select id="runExperiment" class="select"><option value="">不分流，使用所选智能体</option>${expOptions}</select></label>
   <label class="pg-field" id="runUserWrap" hidden>用户 ID<input id="runUserKey" value="${escapeHtml(chatState.experimentUserKey||'')}" placeholder="例如 u_1001"></label>
   <div class="pg-bind" id="pgBindHint"></div>
   <div class="exp-hint" id="expHint"></div>
-  ${models.length?'':`<div class="inline-warning">没有已启用的模型，请先到模型配置中启用。</div>`}
+  ${models.length||http?'':`<div class="inline-warning" id="pgModelWarning">没有已启用的模型，请先到模型配置中启用。</div>`}
 </div>
 <div class="pg-shell">
   <div class="pg-split">
     <section class="wechat-stage">
       <header class="wechat-head">
-        <div class="wechat-peer"><i class="wechat-avatar agent" id="chatAvatar">${(agent&&agent.name||'A')[0]}</i><div><b id="chatPeerName">${agent?agent.name:'未选择 Agent'}</b><small id="chatPeerMeta">${model?model.name+' · '+model.model_id:'请选择模型'}</small></div></div>
+        <div class="wechat-peer"><i class="wechat-avatar agent" id="chatAvatar">${(agent&&agent.name||'A')[0]}</i><div><b id="chatPeerName">${agent?agent.name:'未选择 Agent'}</b><small id="chatPeerMeta">${escapeHtml(peerMeta)}</small></div></div>
         <span id="runState" class="pill draft">待发送</span>
       </header>
       <div class="wechat-log" id="chatLog"></div>
       <form class="wechat-composer" id="chatForm">
-        <textarea id="runMessage" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行" ${models.length?'':'disabled'}></textarea>
-        <button type="submit" id="runButton" class="wechat-send" ${models.length?'':'disabled'}>发送</button>
+        <textarea id="runMessage" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行" ${canSend?'':'disabled'}></textarea>
+        <button type="submit" id="runButton" class="wechat-send" ${canSend?'':'disabled'}>发送</button>
       </form>
     </section>
     <aside class="pg-trace">
@@ -1396,6 +1419,7 @@ async function workflows(){
 }
 const forms={
   agents:[['name','Agent 名称','合同审核助手'],['description','功能说明','说明 Agent 的业务职责'],['model_name','使用模型','Qwen-Max'],['version','初始版本','v1.0.0'],['system_prompt','系统提示词','你是一名专业的企业助手']],
+  'http-agents':[['name','接口名称','Dify 客服'],['protocol','协议','generic'],['endpoint','HTTP 地址','https://other-platform/v1/chat']],
   mcp:[['name','服务名称','高德地图'],['transport','传输协议','streamable_http'],['endpoint','服务地址','https://mcp.amap.com/mcp']],
   skills:[['name','Skill 名称','客服回复规范'],['description','能力说明','这段指令会注入到调试台的 Agent'],['version','版本','1.0.0'],['instruction','SKILL.md 正文','# 技能名称\n\n直接在这里写 Markdown。调试台会按这份正文执行。']],
   models:[['name','配置名称','生产模型'],['provider','供应商','OpenAI / DeepSeek'],['model_id','模型 ID','deepseek-v4-flash'],['base_url','Base URL','https://api.deepseek.com'],['api_key','API 密钥','sk-...'],['temperature','Temperature','0.2']],
@@ -1416,6 +1440,72 @@ function mcpTransportValue(value){
   if(kind==='sse') return 'sse';
   if(kind==='opencli') return 'opencli';
   return 'stdio';
+}
+function httpProtocolLabel(value){
+  const kind=String(value||'generic').toLowerCase().replace(/-/g,'_');
+  if(kind==='openai'||kind==='chat'||kind==='chat_completions') return 'OpenAI Chat';
+  if(kind==='agentforge'||kind==='invoke') return 'AgentForge invoke';
+  if(kind==='dify') return 'Dify 对话';
+  return '通用 JSON';
+}
+function httpAgentFormHtml(row){
+  const protocol=String(row&&row.protocol||'generic');
+  const cfg=row&&row.config||{};
+  return `<div class="field"><label>接口名称</label><input name="name" placeholder="Dify 客服" value="${row?escapeHtml(row.name):''}" required></div>
+    <div class="field"><label>说明</label><input name="description" placeholder="其他平台上的哪个 Agent" value="${row?escapeHtml(row.description||''):''}"></div>
+    <div class="field"><label>协议</label>
+      <select class="select" style="width:100%" name="protocol" id="httpProtocol">
+        <option value="generic" ${protocol==='generic'?'selected':''}>通用 JSON · POST {message}</option>
+        <option value="openai" ${protocol==='openai'?'selected':''}>OpenAI Chat Completions</option>
+        <option value="agentforge" ${protocol==='agentforge'?'selected':''}>AgentForge /api/agents/{id}/invoke</option>
+        <option value="dify" ${protocol==='dify'?'selected':''}>Dify 对话</option>
+      </select>
+    </div>
+    <div class="field"><label>HTTP 地址</label>
+      <input name="endpoint" id="httpEndpoint" placeholder="https://other-platform/v1/chat" value="${row?escapeHtml(row.endpoint||''):''}" required>
+    </div>
+    <div class="field"><label>请求头 / Token（可选）</label>
+      <input name="auth" placeholder="${row&&row.has_auth?'已保存鉴权，留空则不修改':'Authorization: Bearer xxx 或直接填 Token'}">
+    </div>
+    <div class="field" id="httpModelField" ${protocol==='openai'?'':'hidden'}><label>模型名（可选）</label>
+      <input name="openai_model" placeholder="gpt-4o-mini" value="${escapeHtml(cfg.model||'')}">
+    </div>
+    <div class="field" id="httpUserField" ${protocol==='dify'?'':'hidden'}><label>Dify user（可选）</label>
+      <input name="dify_user" placeholder="agentforge" value="${escapeHtml(cfg.user||'')}">
+    </div>
+    <div class="field"><label>请求里放问题的字段</label>
+      <input name="input_field" id="httpInputField" placeholder="message" value="${row?escapeHtml(row.input_field||''):''}">
+    </div>
+    <div class="field"><label>从响应里取回复的路径</label>
+      <input name="output_path" id="httpOutputPath" placeholder="reply" value="${row?escapeHtml(row.output_path||''):''}">
+    </div>
+    <div class="field"><label>超时（秒）</label>
+      <input name="timeout_seconds" type="number" min="5" max="120" value="${row&&row.timeout_seconds?row.timeout_seconds:30}">
+    </div>`;
+}
+function bindHttpAgentForm(){
+  const sel=$('#httpProtocol');
+  if(!sel) return;
+  const hints={
+    generic:{endpoint:'https://other-platform/v1/chat', input:'message', output:'reply'},
+    openai:{endpoint:'https://api.openai.com/v1/chat/completions', input:'', output:'choices.0.message.content'},
+    agentforge:{endpoint:'http://other-host:8080/api/agents/1/invoke', input:'message', output:'reply'},
+    dify:{endpoint:'https://api.dify.ai/v1/chat-messages', input:'query', output:'answer'}
+  };
+  const apply=()=>{
+    const kind=sel.value;
+    const hint=hints[kind]||hints.generic;
+    const endpoint=$('#httpEndpoint');
+    const input=$('#httpInputField');
+    const output=$('#httpOutputPath');
+    if(endpoint && !endpoint.value) endpoint.placeholder=hint.endpoint;
+    if(input){ input.placeholder=hint.input||'message'; if(kind==='openai') input.value=input.value||''; }
+    if(output && !output.value) output.placeholder=hint.output;
+    const model=$('#httpModelField'); if(model) model.hidden=kind!=='openai';
+    const user=$('#httpUserField'); if(user) user.hidden=kind!=='dify';
+  };
+  sel.onchange=apply;
+  apply();
 }
 function sandboxFormHtml(row){
   const mode=String(row&&row.network_mode||'deny');
@@ -1490,20 +1580,26 @@ function bindMcpForm(){
 function bindEmpty(page, label){
   return `<div class="bind-empty-card">还没有可关联的${label}。<button type="button" class="bind-link" data-jump="${page}">去添加</button></div>`;
 }
-function bindPicker(kind, name, rows, selected, emptyPage, emptyLabel){
+function bindPicker(kind, name, rows, selected, emptyPage, emptyLabel, single){
   const ids=(selected||[]).map(Number);
   const live=rows.filter(x=>x.enabled!==false);
   if(!live.length) return bindEmpty(emptyPage, emptyLabel);
+  const type=single?'radio':'checkbox';
+  const none=single?`<label class="bind-option" data-search="不接入 本平台">
+      <input type="radio" name="${name}" value="" ${ids.length?'':'checked'}>
+      <span class="bind-icon">◇</span>
+      <span class="bind-copy"><b>不接入</b><small>继续用本平台模型和 MCP</small></span>
+    </label>`:'';
   const options=live.map(x=>{
     const tools=x.tools||[];
     const meta=kind==='mcp'
       ? `${mcpTransportLabel(x.transport)} · ${x.endpoint||'MCP'} · ${tools.length||x.tools_count||0} 个工具`
-      : kind==='agent'
-      ? `${x.model_name||'Agent'} · ${x.status||''}`
+      : kind==='http'
+      ? `${httpProtocolLabel(x.protocol)} · ${x.endpoint||''}`
       : `${x.description||'Skill'} · ${x.version||''}`;
     return `<label class="bind-option" data-search="${escapeHtml(`${x.name} ${meta}`.toLowerCase())}">
-      <input type="checkbox" name="${name}" value="${x.id}" ${ids.includes(x.id)?'checked':''}>
-      <span class="bind-icon${kind==='skill'?' skill':''}">${kind==='skill'?'✦':'⚙'}</span>
+      <input type="${type}" name="${name}" value="${x.id}" ${ids.includes(x.id)?'checked':''}>
+      <span class="bind-icon${kind==='skill'?' skill':''}">${kind==='skill'?'✦':kind==='http'?'↗':'⚙'}</span>
       <span class="bind-copy"><b>${escapeHtml(x.name)}</b><small>${escapeHtml(meta)}</small></span>
     </label>`;
   }).join('');
@@ -1514,22 +1610,29 @@ function bindPicker(kind, name, rows, selected, emptyPage, emptyLabel){
     </button>
     <div class="bind-picker-panel">
       ${live.length>=6?`<input type="search" class="bind-picker-search" placeholder="搜索${emptyLabel}" autocomplete="off">`:''}
-      <div class="bind-picker-list">${options}</div>
+      <div class="bind-picker-list">${none}${options}</div>
     </div>
   </div>`;
 }
-function agentFormHtml(row, models, mcpRows, skillRows, sandboxRows){
-  const modelOptions=models.map(m=>`<option value="${escapeHtml(m.name)}" ${row&&row.model_name===m.name?'selected':''}>${escapeHtml(m.name)} · ${escapeHtml(m.model_id)}</option>`).join('');
+function agentFormHtml(row, models, mcpRows, skillRows, sandboxRows, httpRows){
+  const httpOn=isHttpBackedAgent(row);
+  const modelOptions=`<option value="">不使用本平台模型</option>`+models.map(m=>`<option value="${escapeHtml(m.name)}" ${row&&row.model_name===m.name?'selected':''}>${escapeHtml(m.name)} · ${escapeHtml(m.model_id)}</option>`).join('');
   const sandboxOptions=`<option value="">不使用沙箱</option>`+(sandboxRows||[]).filter(x=>x.enabled!==false||Number(x.id)===Number(row&&row.sandbox_id)).map(x=>`<option value="${x.id}" ${Number(row&&row.sandbox_id)===Number(x.id)?'selected':''}>${escapeHtml(x.name)} · ${escapeHtml(x.runtime||'')} · ${x.network_mode==='deny'?'断网':'可联网'}</option>`).join('');
-  return `<div class="agent-form">
+  return `<div class="agent-form${httpOn?' http-mode':''}">
     <div class="agent-form-grid">
       <div class="field"><label>Agent 名称</label><input name="name" placeholder="合同审核助手" value="${row?escapeHtml(row.name):''}" required></div>
-      <div class="field"><label>使用模型</label><select class="select" style="width:100%" name="model_name" required>${modelOptions}</select></div>
+      <div class="field agent-local"><label>使用模型</label><select class="select" style="width:100%" name="model_name" ${httpOn?'':'required'}>${modelOptions}</select></div>
       <div class="field"><label>功能说明</label><input name="description" placeholder="说明 Agent 的业务职责" value="${row?escapeHtml(row.description||''):''}"></div>
       <div class="field"><label>初始版本</label><input name="version" placeholder="v1.0.0" value="${row?escapeHtml(row.version||''):''}"></div>
-      <div class="field"><label>执行沙箱</label><select class="select" style="width:100%" name="sandbox_id">${sandboxOptions}</select></div>
+      <div class="field agent-local"><label>执行沙箱</label><select class="select" style="width:100%" name="sandbox_id">${sandboxOptions}</select></div>
       ${row&&row.workspace?`<div class="field"><label>工作空间</label><input value="${escapeHtml(row.workspace)}" readonly></div>`:''}
     </div>
+    <section class="bind-section">
+      <div class="bind-head"><h3>接入外部 Agent</h3><small id="bindHttpCount"></small></div>
+      <p class="bind-hint">勾选其他平台的 HTTP 对话接口后，这个 Agent 就是对方本身：对话直连对方，不再使用本平台模型、MCP 和 Skill。</p>
+      ${bindPicker('http','http_agent_ids',httpRows,row&&row.http_agent_ids,'http-agents','HTTP 接口',true)}
+    </section>
+    <div class="agent-local">
     <div class="field"><label>系统提示词</label><textarea name="system_prompt" class="agent-prompt" placeholder="你是一名专业的企业助手">${row?escapeHtml(row.system_prompt||''):''}</textarea></div>
     <section class="bind-section">
       <div class="bind-head"><h3>关联 MCP 工具</h3><small id="bindMcpCount"></small></div>
@@ -1546,6 +1649,7 @@ function agentFormHtml(row, models, mcpRows, skillRows, sandboxRows){
       <p class="bind-hint">JSON 数组，留空表示不用。每条链路以 flow_名称 暴露给模型，一次调用按 steps 顺序跑完；步骤参数里可以用 {{input.字段}} 引用调用入参、{{steps.步骤id.output.字段}} 引用上一步结果。步骤引用的工具必须已经绑定在上面。</p>
       <textarea name="tool_flows" class="agent-prompt" spellcheck="false" placeholder='[{"name": "time_then_math", "description": "先取当前时间再算金额", "parameters": {"type": "object", "properties": {"amount": {"type": "number"}}, "required": ["amount"]}, "steps": [{"id": "now", "tool": "get_current_time"}, {"tool": "calculate", "arguments": {"expression": "{{input.amount}}*0.9"}}]}]'>${escapeHtml(toolFlowsText(row))}</textarea>
     </section>
+    </div>
   </div>`;
 }
 function toolFlowsText(row){
@@ -1553,19 +1657,41 @@ function toolFlowsText(row){
   if(!Array.isArray(flows)||!flows.length) return '';
   try{return JSON.stringify(flows,null,2)}catch(e){return ''}
 }
+function selectedHttpBindId(){
+  const box=$('#modalForm')&&$('#modalForm').querySelector('input[name="http_agent_ids"]:checked');
+  return box&&box.value?box.value:'';
+}
+function syncAgentHttpMode(){
+  const form=$('#modalForm'); if(!form) return;
+  const http=!!selectedHttpBindId();
+  form.classList.toggle('http-mode', http);
+  const inner=form.querySelector('.agent-form');
+  if(inner) inner.classList.toggle('http-mode', http);
+  const model=form.querySelector('[name="model_name"]');
+  if(model) model.required=!http;
+  updateBindCounts();
+}
+function pickerChecked(picker){
+  const radios=[...picker.querySelectorAll('input[type="radio"]')];
+  if(radios.length) return radios.filter(x=>x.checked&&x.value);
+  return [...picker.querySelectorAll('input[type="checkbox"]')].filter(x=>x.checked);
+}
 function updateBindCounts(){
   const form=$('#modalForm'); if(!form) return;
   form.querySelectorAll('.bind-picker').forEach(picker=>{
-    const boxes=[...picker.querySelectorAll('input[type="checkbox"]')];
-    const checked=boxes.filter(x=>x.checked);
-    const nouns={mcp:'MCP 工具',skill:'技能',agent:'Agent'};
+    const options=[...picker.querySelectorAll('input[type="checkbox"],input[type="radio"]')].filter(x=>x.value);
+    const checked=pickerChecked(picker);
+    const nouns={mcp:'MCP 工具',skill:'技能',http:'外部 Agent'};
     const noun=nouns[picker.dataset.bind]||'项目';
-    const countEl=picker.dataset.bind==='mcp'?$('#bindMcpCount'):picker.dataset.bind==='skill'?$('#bindSkillCount'):$('#bindAgentCount');
-    if(countEl) countEl.textContent=boxes.length?`${checked.length?`已选 ${checked.length} 个`:'未选择'} · 共 ${boxes.length} 个`:'未选择';
+    const countEl=picker.dataset.bind==='mcp'?$('#bindMcpCount'):picker.dataset.bind==='skill'?$('#bindSkillCount'):picker.dataset.bind==='http'?$('#bindHttpCount'):$('#bindAgentCount');
+    if(countEl){
+      if(picker.dataset.bind==='http') countEl.textContent=checked.length?'已接入 1 个':'未接入';
+      else countEl.textContent=options.length?`${checked.length?`已选 ${checked.length} 个`:'未选择'} · 共 ${options.length} 个`:'未选择';
+    }
     const summary=picker.querySelector('.bind-picker-summary');
     if(!summary) return;
     if(!checked.length){
-      summary.innerHTML=`<span class="bind-picker-placeholder">点击选择 ${noun}</span>`;
+      summary.innerHTML=`<span class="bind-picker-placeholder">${picker.dataset.bind==='http'?'点击接入外部 Agent':`点击选择 ${noun}`}</span>`;
       return;
     }
     summary.innerHTML=checked.map(box=>{
@@ -1641,27 +1767,30 @@ async function submitRenameAgent(form){
 async function openForm(page,row){
   if(!forms[page]){toast('已进入新建向导');return}
   const editing=!!row;
-  const names={agents:'新建 Agent',mcp:'添加 MCP 服务',skills:'添加 Skill',models:'添加模型配置',sandboxes:'新建沙箱策略',roles:'新建角色'};
-  const edits={agents:'编辑 Agent',mcp:'编辑 MCP 服务',skills:'编辑 Skill',models:'编辑模型配置',sandboxes:'编辑沙箱策略',roles:'编辑角色'};
+  const names={agents:'新建 Agent','http-agents':'登记 HTTP 接口',mcp:'添加 MCP 服务',skills:'添加 Skill',models:'添加模型配置',sandboxes:'新建沙箱策略',roles:'新建角色'};
+  const edits={agents:'编辑 Agent','http-agents':'编辑 HTTP 接口',mcp:'编辑 MCP 服务',skills:'编辑 Skill',models:'编辑模型配置',sandboxes:'编辑沙箱策略',roles:'编辑角色'};
   $('#modalEyebrow').textContent=editing?'编辑配置':'新建配置';
   $('#modalTitle').textContent=editing?edits[page]:names[page];
   resetModalSubmit(editing?'保存修改':'确认添加');
   $('#modalForm').noValidate=false;
-  $('#modal').classList.toggle('modal-wide', page==='agents'||page==='skills'||page==='roles');
+  $('#modal').classList.toggle('modal-wide', page==='agents'||page==='skills'||page==='roles'||page==='http-agents');
   let modelOptions=[], mcpRows=[], skillRows=[];
   if(page==='roles'){
     $('#modalFields').innerHTML=roleFormHtml(row);
   } else if(page==='mcp'){
     $('#modalFields').innerHTML=mcpFormHtml(row);
     bindMcpForm();
+  } else if(page==='http-agents'){
+    $('#modalFields').innerHTML=httpAgentFormHtml(row);
+    bindHttpAgentForm();
   } else if(page==='sandboxes'){
     $('#modalFields').innerHTML=sandboxFormHtml(row);
   } else if(page==='agents'){
-    const extras=await Promise.all([api('/api/models'), api('/api/mcp'), api('/api/skills'), api('/api/sandboxes')]);
+    const extras=await Promise.all([api('/api/models'), api('/api/mcp'), api('/api/skills'), api('/api/sandboxes'), api('/api/http-agents')]);
     modelOptions=extras[0].filter(model=>model.enabled||model.name===row?.model_name);
     mcpRows=extras[1]; skillRows=extras[2];
-    $('#modalFields').innerHTML=agentFormHtml(row, modelOptions, mcpRows, skillRows, extras[3]);
-    updateBindCounts();
+    $('#modalFields').innerHTML=agentFormHtml(row, modelOptions, mcpRows, skillRows, extras[3], extras[4]);
+    syncAgentHttpMode();
   } else {
     $('#modalFields').innerHTML=forms[page].map(f=>{
       const control=f[0]==='model_name'
@@ -1725,16 +1854,26 @@ $('#modalForm').addEventListener('submit',async e=>{
     return;
   }
   if(page==='agents'){
-    data.skill_ids=[...form.querySelectorAll('input[name="skill_ids"]:checked')].map(x=>Number(x.value));
-    data.mcp_ids=[...form.querySelectorAll('input[name="mcp_ids"]:checked')].map(x=>Number(x.value));
-    data.sandbox_id=data.sandbox_id?Number(data.sandbox_id):null;
-    const flowText=String(data.tool_flows||'').trim();
-    if(!flowText) data.tool_flows=[];
-    else{
-      let flows;
-      try{flows=JSON.parse(flowText)}catch(err){toast('工具链路不是合法 JSON：'+err.message);return}
-      if(!Array.isArray(flows)){toast('工具链路必须是 JSON 数组');return}
-      data.tool_flows=flows;
+    const httpId=selectedHttpBindId();
+    data.http_agent_ids=httpId?[Number(httpId)]:[];
+    if(data.http_agent_ids.length){
+      data.skill_ids=[];
+      data.mcp_ids=[];
+      data.sandbox_id=null;
+      data.tool_flows=[];
+      data.model_name='';
+    }else{
+      data.skill_ids=[...form.querySelectorAll('input[name="skill_ids"]:checked')].map(x=>Number(x.value));
+      data.mcp_ids=[...form.querySelectorAll('input[name="mcp_ids"]:checked')].map(x=>Number(x.value));
+      data.sandbox_id=data.sandbox_id?Number(data.sandbox_id):null;
+      const flowText=String(data.tool_flows||'').trim();
+      if(!flowText) data.tool_flows=[];
+      else{
+        let flows;
+        try{flows=JSON.parse(flowText)}catch(err){toast('工具链路不是合法 JSON：'+err.message);return}
+        if(!Array.isArray(flows)){toast('工具链路必须是 JSON 数组');return}
+        data.tool_flows=flows;
+      }
     }
   }
   if(page==='sandboxes'&&data.timeout_seconds!==undefined)data.timeout_seconds=Number(data.timeout_seconds);
@@ -1758,6 +1897,27 @@ $('#modalForm').addEventListener('submit',async e=>{
       if(!data.endpoint) data.endpoint='';
     }
     if(Object.keys(config).length) data.config=config;
+  }
+  if(page==='http-agents'){
+    const auth=String(data.auth||'').trim();
+    const model=String(data.openai_model||'').trim();
+    const user=String(data.dify_user||'').trim();
+    delete data.auth; delete data.openai_model; delete data.dify_user;
+    if(auth){
+      const headers={};
+      if(auth.includes(':')&&!/^bearer\s+/i.test(auth)){
+        const idx=auth.indexOf(':');
+        headers[auth.slice(0,idx).trim()]=auth.slice(idx+1).trim();
+      }else{
+        headers.Authorization=/^bearer\s+/i.test(auth)?auth:'Bearer '+auth;
+      }
+      data.headers=headers;
+    }
+    const config={};
+    if(model) config.model=model;
+    if(user) config.user=user;
+    if(Object.keys(config).length) data.config=config;
+    data.timeout_seconds=Number(data.timeout_seconds||30);
   }
   if(page==='roles'){
     data.permissions=[...form.querySelectorAll('input[name="permissions"]:checked')].map(x=>x.value);
@@ -1790,7 +1950,10 @@ function closeBindPickers(except){
   });
 }
 $('#modalForm').addEventListener('change', e=>{
-  if(e.target && (e.target.name==='mcp_ids' || e.target.name==='skill_ids' || e.target.name==='agent_ids')) updateBindCounts();
+  if(e.target && (e.target.name==='mcp_ids' || e.target.name==='skill_ids' || e.target.name==='http_agent_ids')){
+    if(e.target.name==='http_agent_ids') syncAgentHttpMode();
+    else updateBindCounts();
+  }
 });
 $('#modalForm').addEventListener('click', e=>{
   const chip=e.target.closest('.bind-chip-x');
@@ -1798,7 +1961,14 @@ $('#modalForm').addEventListener('click', e=>{
     e.preventDefault();
     e.stopPropagation();
     const box=$('#modalForm').querySelector(`input[name="${chip.dataset.unbind}"][value="${chip.dataset.id}"]`);
-    if(box){box.checked=false;box.dispatchEvent(new Event('change',{bubbles:true}));}
+    if(box){
+      box.checked=false;
+      if(box.type==='radio'){
+        const none=box.closest('.bind-picker')&&box.closest('.bind-picker').querySelector('input[type="radio"][value=""]');
+        if(none) none.checked=true;
+      }
+      box.dispatchEvent(new Event('change',{bubbles:true}));
+    }
     return;
   }
   const toggle=e.target.closest('.bind-picker-toggle');
@@ -1845,6 +2015,12 @@ async function testMcp(id){
     if(row&&row.transport==='opencli') openOpencliProbe(id, r);
     toast(r.message);
   }catch(e){toast('MCP 探测失败')}
+}
+async function testHttpAgent(id){
+  try{
+    const r=await api(`/api/http-agents/${id}/test`,{method:'POST'});
+    toast(r.message||(r.ready?'接口已连通':'接口不可用'));
+  }catch(e){toast(apiError(e)||'HTTP 接口试连失败')}
 }
 function openOpencliProbe(id, data){
   const row=resourceStore.mcp&&resourceStore.mcp[id];
@@ -1994,19 +2170,43 @@ function paintTrace(){
 function syncBindHint(){
   const el=$('#pgBindHint'); if(!el) return;
   const agent=currentAgent();
-  const skills=(pgCatalog.skills||[]).filter(x=>(agent&&(agent.skill_ids||[]).map(Number)||[]).includes(x.id));
-  const mcps=(pgCatalog.mcps||[]).filter(x=>(agent&&(agent.mcp_ids||[]).map(Number)||[]).includes(x.id));
-  const tools=mcps.flatMap(x=>(x.tools||[]).map(t=>t.name));
-  const skillText=skills.length?skills.map(x=>x.name).join('、'):'未关联技能';
-  const toolText=tools.length?tools.join('、'):'未关联工具';
-  el.innerHTML=`<span>${escapeHtml(skillText)} · ${escapeHtml(toolText)}</span>${agent?`<button type="button" class="bind-link" id="pgEditAgent">去配置</button>`:''}`;
+  if(isHttpBackedAgent(agent)){
+    const https=(pgCatalog.httpAgents||[]).filter(x=>(agent.http_agent_ids||[]).map(Number).includes(x.id));
+    const http=https[0]||(agent.bound_http_agents||[])[0];
+    const text=http?`外部接入 · ${httpProtocolLabel(http.protocol)} · ${http.endpoint||http.name}`:'已接入外部 Agent，对话直连对方平台';
+    el.innerHTML=`<span>${escapeHtml(text)}</span>${agent?`<button type="button" class="bind-link" id="pgEditAgent">去配置</button>`:''}`;
+  }else{
+    const skills=(pgCatalog.skills||[]).filter(x=>(agent&&(agent.skill_ids||[]).map(Number)||[]).includes(x.id));
+    const mcps=(pgCatalog.mcps||[]).filter(x=>(agent&&(agent.mcp_ids||[]).map(Number)||[]).includes(x.id));
+    const tools=mcps.flatMap(x=>(x.tools||[]).map(t=>t.name));
+    const skillText=skills.length?skills.map(x=>x.name).join('、'):'未关联技能';
+    const toolText=tools.length?tools.join('、'):'未关联工具';
+    el.innerHTML=`<span>${escapeHtml(skillText)} · ${escapeHtml(toolText)}</span>${agent?`<button type="button" class="bind-link" id="pgEditAgent">去配置</button>`:''}`;
+  }
   const btn=$('#pgEditAgent');
   if(btn) btn.onclick=()=>{resourceStore.agents=Object.fromEntries((pgCatalog.agents||[]).map(x=>[x.id,x]));openEdit('agents', agent.id)};
+}
+function syncPlaygroundMode(){
+  const http=isHttpBackedAgent(currentAgent());
+  const field=$('#runModelField');
+  if(field) field.hidden=http;
+  const warn=$('#pgModelWarning');
+  if(warn) warn.hidden=http||(pgCatalog.models||[]).length>0;
+  const canSend=http||(pgCatalog.models||[]).length>0;
+  const input=$('#runMessage');
+  const button=$('#runButton');
+  if(input) input.disabled=!canSend;
+  if(button) button.disabled=!canSend;
+  syncChatHeader();
 }
 function syncChatHeader(){
   const agent=$('#runAgent'),model=$('#runModel');
   if(agent&&agent.selectedOptions[0]){$('#chatPeerName').textContent=agent.selectedOptions[0].textContent;$('#chatAvatar').textContent=agent.selectedOptions[0].textContent[0]}
-  if(model&&model.selectedOptions[0]&&$('#chatPeerMeta'))$('#chatPeerMeta').textContent=model.selectedOptions[0].textContent;
+  const meta=$('#chatPeerMeta');
+  if(meta){
+    if(isHttpBackedAgent(currentAgent())) meta.textContent=agentRuntimeLabel(currentAgent());
+    else if(model&&model.selectedOptions[0]) meta.textContent=model.selectedOptions[0].textContent;
+  }
   syncBindHint();
 }
 function resetChat(){chatState.sessionId='';chatState.messages=[];chatState.spans=[];chatState.traceId='';chatState.latencyMs=0;chatState.mode='';chatState.checkpoint=null;persistChat();paintChat();paintTrace();paintExpHint(null);syncResumeButton();const state=$('#runState');if(state){state.className='pill draft';state.textContent='待发送'}}
@@ -2039,12 +2239,12 @@ async function runPlayground(){
   if(!button||!input||!log)return;
   const message=input.value.trim();
   if(!message){toast('请输入消息');return}
-  if(!$('#runModel').value){toast('请先启用一个模型');return}
+  if(!isHttpBackedAgent(currentAgent()) && (!$('#runModel') || !$('#runModel').value)){toast('请先启用一个模型');return}
   if($('#runExperiment')&&$('#runExperiment').value){
     const exp=currentExperiment();
     if(exp&&exp.status!=='running'){toast('只有进行中的实验才会分流，请先启动或改回「不分流」');return}
   }
-  chatState.agentId=$('#runAgent').value;chatState.modelId=$('#runModel').value;
+  chatState.agentId=$('#runAgent').value;chatState.modelId=$('#runModel')&&$('#runModel').value||chatState.modelId;
   chatState.messages.push({role:'user',content:message,agent:'我'});
   persistChat();input.value='';input.style.height='auto';paintChat();
   log.insertAdjacentHTML('beforeend',`<div class="wx-row theirs" id="chatTyping"><i class="wechat-avatar agent">${escapeHtml(currentAgentName()[0])}</i><div class="wx-col"><span class="wx-name">${escapeHtml(currentAgentName())}</span><div class="wx-bubble typing"><i></i><i></i><i></i></div></div></div>`);
@@ -2053,7 +2253,8 @@ async function runPlayground(){
   chatState.spans=[{title:'接收用户消息',kind:'input',status:'ok'},{title:'调用模型',kind:'llm',status:'ok',detail:'正在生成回复…'}];
   paintTrace();
   try{
-    const payload={agent_id:Number($('#runAgent').value),model_config_id:Number($('#runModel').value),message,session_id:chatState.sessionId||undefined};
+    const payload={agent_id:Number($('#runAgent').value),message,session_id:chatState.sessionId||undefined};
+    if($('#runModel')&&$('#runModel').value) payload.model_config_id=Number($('#runModel').value);
     if($('#runExperiment')&&$('#runExperiment').value) payload.experiment_id=Number($('#runExperiment').value);
     if($('#runUserKey')&&$('#runUserKey').value.trim()){payload.user_key=$('#runUserKey').value.trim();chatState.experimentUserKey=payload.user_key}
     const r=await api('/api/playground/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -2081,15 +2282,16 @@ async function resumePlayground(){
   const button=$('#resumeChat'),state=$('#runState'),log=$('#chatLog');
   if(!button||!log)return;
   if(!chatState.sessionId||!(chatState.checkpoint&&chatState.checkpoint.resumable)){toast('当前没有可恢复的检查点');return}
-  if(!$('#runModel').value){toast('请先启用一个模型');return}
-  chatState.agentId=$('#runAgent').value;chatState.modelId=$('#runModel').value;
+  if(!isHttpBackedAgent(currentAgent()) && (!$('#runModel') || !$('#runModel').value)){toast('请先启用一个模型');return}
+  chatState.agentId=$('#runAgent').value;chatState.modelId=$('#runModel')&&$('#runModel').value||chatState.modelId;
   log.insertAdjacentHTML('beforeend',`<div class="wx-row theirs" id="chatTyping"><i class="wechat-avatar agent">${escapeHtml(currentAgentName()[0])}</i><div class="wx-col"><span class="wx-name">${escapeHtml(currentAgentName())}</span><div class="wx-bubble typing"><i></i><i></i><i></i></div></div></div>`);
   log.scrollTop=log.scrollHeight;
   button.disabled=true;if(state){state.className='pill running';state.textContent='续跑中'}
   chatState.spans=[{title:'恢复检查点',kind:'input',status:'ok',detail:chatState.checkpoint.next||''},{title:'继续执行',kind:'llm',status:'ok',detail:'从失败处继续…'}];
   paintTrace();
   try{
-    const payload={agent_id:Number($('#runAgent').value),model_config_id:Number($('#runModel').value),session_id:chatState.sessionId};
+    const payload={agent_id:Number($('#runAgent').value),session_id:chatState.sessionId};
+    if($('#runModel')&&$('#runModel').value) payload.model_config_id=Number($('#runModel').value);
     const r=await api('/api/playground/resume',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const reply=r.reply||r.output||r.response||'没有返回内容';
     chatState.sessionId=r.session_id||chatState.sessionId;
@@ -2113,7 +2315,7 @@ function bindPage(page){
   evalStopPoll();
   if(page==='evaluations') bindEvalPage();
   if(page==='experiments') bindExpPage();
-  if(page==='sessions'){const runFilter=async()=>{const p=new URLSearchParams();const q=$('#sessionQ').value.trim(),a=$('#agentFilter').value,s=$('#statusFilter').value;if(q)p.set('q',q);if(a)p.set('agent_name',a);if(s)p.set('status',s);const rows=await api('/api/sessions?'+p);$('#sessionResults').innerHTML=sessionTable(rows).replace('<section class="panel wide-panel">','<section>');closeSessionDetail()};$('#doFilter').onclick=runFilter;$('#sessionQ').onkeydown=e=>{if(e.key==='Enter')runFilter()};$('#sessionResults').onclick=e=>{const hit=e.target.closest('[data-session-id]');if(hit)openSessionDetail(hit.dataset.sessionId)}}if(page==='playground'){paintChat();paintTrace();syncChatHeader();const form=$('#chatForm'),input=$('#runMessage');if(form)form.onsubmit=e=>{e.preventDefault();runPlayground()};if(input){input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runPlayground()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(120,input.scrollHeight)+'px'})}const agentSel=$('#runAgent'),modelSel=$('#runModel');if(agentSel)agentSel.onchange=async()=>{if(String(chatState.agentId)!==agentSel.value){await restoreAgentChat(agentSel.value);paintChat();paintTrace()}syncChatHeader()};if(modelSel)modelSel.onchange=()=>{chatState.modelId=modelSel.value;persistChat();syncChatHeader()};const expSel=$('#runExperiment');if(expSel)expSel.onchange=applyExperimentChoice;const userKey=$('#runUserKey');if(userKey)userKey.onchange=()=>{chatState.experimentUserKey=userKey.value.trim()};syncExpUserField();paintExpHint(null);if($('#resumeChat'))$('#resumeChat').onclick=resumePlayground;syncResumeButton();if($('#clearChat'))$('#clearChat').onclick=resetChat;input&&input.focus()}if(page==='workflows') bindWorkflowCanvas()}
+  if(page==='sessions'){const runFilter=async()=>{const p=new URLSearchParams();const q=$('#sessionQ').value.trim(),a=$('#agentFilter').value,s=$('#statusFilter').value;if(q)p.set('q',q);if(a)p.set('agent_name',a);if(s)p.set('status',s);const rows=await api('/api/sessions?'+p);$('#sessionResults').innerHTML=sessionTable(rows).replace('<section class="panel wide-panel">','<section>');closeSessionDetail()};$('#doFilter').onclick=runFilter;$('#sessionQ').onkeydown=e=>{if(e.key==='Enter')runFilter()};$('#sessionResults').onclick=e=>{const hit=e.target.closest('[data-session-id]');if(hit)openSessionDetail(hit.dataset.sessionId)}}if(page==='playground'){paintChat();paintTrace();syncPlaygroundMode();const form=$('#chatForm'),input=$('#runMessage');if(form)form.onsubmit=e=>{e.preventDefault();runPlayground()};if(input){input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runPlayground()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(120,input.scrollHeight)+'px'})}const agentSel=$('#runAgent'),modelSel=$('#runModel');if(agentSel)agentSel.onchange=async()=>{if(String(chatState.agentId)!==agentSel.value){await restoreAgentChat(agentSel.value);paintChat();paintTrace()}syncPlaygroundMode()};if(modelSel)modelSel.onchange=()=>{chatState.modelId=modelSel.value;persistChat();syncChatHeader()};const expSel=$('#runExperiment');if(expSel)expSel.onchange=applyExperimentChoice;const userKey=$('#runUserKey');if(userKey)userKey.onchange=()=>{chatState.experimentUserKey=userKey.value.trim()};syncExpUserField();paintExpHint(null);if($('#resumeChat'))$('#resumeChat').onclick=resumePlayground;syncResumeButton();if($('#clearChat'))$('#clearChat').onclick=resetChat;input&&input.focus()}if(page==='workflows') bindWorkflowCanvas()}
 function syncExpUserField(){
   const wrap=$('#runUserWrap');
   if(!wrap) return;

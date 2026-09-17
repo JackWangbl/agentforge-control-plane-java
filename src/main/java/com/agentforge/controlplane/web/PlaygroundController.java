@@ -5,10 +5,12 @@ import com.agentforge.controlplane.access.RequirePermission;
 import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.access.ResourceKind;
 import com.agentforge.controlplane.agent.ChatReply;
+import com.agentforge.controlplane.agent.HttpAgentRuntime;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.ChatMessage;
 import com.agentforge.controlplane.domain.Conversation;
 import com.agentforge.controlplane.domain.Experiment;
+import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.dto.ApiDtos;
 import com.agentforge.controlplane.experiment.ExperimentService;
@@ -39,16 +41,18 @@ public class PlaygroundController {
     private final ConversationRepository conversations;
     private final ChatMessageRepository messages;
     private final ExperimentService experiments;
+    private final HttpAgentRuntime httpAgents;
 
     public PlaygroundController(ResourceAccessService access, PlaygroundService playground, WorkspaceStore workspaces,
                                 ConversationRepository conversations, ChatMessageRepository messages,
-                                ExperimentService experiments) {
+                                ExperimentService experiments, HttpAgentRuntime httpAgents) {
         this.access = access;
         this.playground = playground;
         this.workspaces = workspaces;
         this.conversations = conversations;
         this.messages = messages;
         this.experiments = experiments;
+        this.httpAgents = httpAgents;
     }
 
     @RequirePermission({"session:write", "agent:write"})
@@ -72,10 +76,7 @@ public class PlaygroundController {
             }
         }
         Agent agent = access.getRow(user, ResourceKind.AGENT, agentId);
-        ModelConfig model = access.getRow(user, ResourceKind.CREDENTIAL, payload.model_config_id());
-        if (!model.isEnabled()) {
-            throw ApiException.conflict("Selected model config is disabled");
-        }
+        ModelConfig model = resolvePlaygroundModel(user, agent, payload.model_config_id());
         workspaces.ensureWorkspace(agent);
         sessionId = sessionId == null || sessionId.isBlank() ? "debug_" + shortId() : sessionId;
         Conversation conversation = conversations.findBySessionId(sessionId).orElse(null);
@@ -126,10 +127,7 @@ public class PlaygroundController {
     @PostMapping("/api/playground/resume")
     public Map<String, Object> resume(CurrentUser user, @Valid @RequestBody ApiDtos.PlaygroundResume payload) {
         Agent agent = access.getRow(user, ResourceKind.AGENT, payload.agent_id());
-        ModelConfig model = access.getRow(user, ResourceKind.CREDENTIAL, payload.model_config_id());
-        if (!model.isEnabled()) {
-            throw ApiException.conflict("Selected model config is disabled");
-        }
+        ModelConfig model = resolvePlaygroundModel(user, agent, payload.model_config_id());
         workspaces.ensureWorkspace(agent);
         String sessionId = payload.session_id();
         Map<String, Object> ckpt = workspaces.loadCheckpoint(agent, sessionId);
@@ -168,6 +166,21 @@ public class PlaygroundController {
                     "agent_name", row.getAgentName(), "created_at", Jsons.iso(row.getCreatedAt())));
         }
         return Jsons.ordered("session_id", sessionId, "messages", items);
+    }
+
+    private ModelConfig resolvePlaygroundModel(CurrentUser user, Agent agent, Long modelConfigId) {
+        if (httpAgents.isHttpBacked(agent)) {
+            HttpAgent http = httpAgents.primary(agent);
+            return HttpAgentRuntime.displayModel(http);
+        }
+        if (modelConfigId == null) {
+            throw ApiException.badRequest("请选择模型");
+        }
+        ModelConfig model = access.getRow(user, ResourceKind.CREDENTIAL, modelConfigId);
+        if (!model.isEnabled()) {
+            throw ApiException.conflict("Selected model config is disabled");
+        }
+        return model;
     }
 
     private static List<Map<String, Object>> historyFrom(Map<String, Object> stored) {

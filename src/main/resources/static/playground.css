@@ -253,7 +253,10 @@ input[type="checkbox"], input[type="radio"] {
   font-weight: 600;
   line-height: 1.4;
 }
-.bind-picker[data-bind="skill"] .bind-chip { background: #f3eefe; color: #5b3fc4; }
+.bind-picker[data-bind="http"] .bind-chip { background: #e8f7ef; color: #137a4a; }
+.http-mode .agent-local,
+.agent-form.http-mode .agent-local { display: none; }
+.tag.http { background: #e8f7ef; color: #137a4a; }
 .bind-chip-x {
   border: 0;
   background: transparent;
@@ -352,6 +355,7 @@ input[type="checkbox"], input[type="radio"] {
 .agent-tags .tag { font-size: 10px; padding: 3px 8px; border-radius: 999px; font-style: normal; }
 .tag.skill { background: #f3eefe; color: #5b3fc4; }
 .tag.tool { background: #eef4ff; color: #2367e8; }
+.tag.http { background: #e8f7ef; color: #137a4a; }
 .tag.empty { background: #f4f6f8; color: #90a0b0; }
 @media (max-width: 720px) {
   .agent-form-grid { grid-template-columns: 1fr; }

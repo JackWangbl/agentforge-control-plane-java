@@ -4,11 +4,13 @@ import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.agent.AgentScopeRuntime;
 import com.agentforge.controlplane.agent.ChatReply;
+import com.agentforge.controlplane.agent.HttpAgentRuntime;
 import com.agentforge.controlplane.agent.ToolRuntime;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.ChatMessage;
 import com.agentforge.controlplane.domain.Conversation;
 import com.agentforge.controlplane.domain.Experiment;
+import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.Skill;
@@ -44,11 +46,12 @@ public class PlaygroundService {
     private final ObservabilityService observability;
     private final ExperimentService experiments;
     private final BrowserRuntime browser;
+    private final HttpAgentRuntime httpAgents;
 
     public PlaygroundService(AgentScopeRuntime runtime, WorkspaceStore workspaces, ResourceAccessService access,
                              ToolRuntime tools, ChatMessageRepository messages, ConversationRepository conversations,
                              TraceRepository traces, ObservabilityService observability,
-                             ExperimentService experiments, BrowserRuntime browser) {
+                             ExperimentService experiments, BrowserRuntime browser, HttpAgentRuntime httpAgents) {
         this.runtime = runtime;
         this.workspaces = workspaces;
         this.access = access;
@@ -59,6 +62,7 @@ public class PlaygroundService {
         this.observability = observability;
         this.experiments = experiments;
         this.browser = browser;
+        this.httpAgents = httpAgents;
     }
 
     @Transactional
@@ -131,9 +135,9 @@ public class PlaygroundService {
         traces.save(trace);
         Map<String, Object> persisted = workspaces.persistRun(
                 agent, sessionId, message == null || message.isBlank() ? conversation.getTitle() : message,
-                message, reply.reply(), reply.mode(), model.getName(), traceId, spans, usage, latencyMs, includeUser);
+                message, reply.reply(), reply.mode(),                 model == null ? "" : model.getName(), traceId, spans, usage, latencyMs, includeUser);
         observability.exportPlayground(agent.getName(), sessionId, traceId, message, reply.reply(), reply.mode(),
-                model.getName(), model.getModelId(), spans, usage, latencyMs,
+                model == null ? "" : model.getName(), model == null ? "" : model.getModelId(), spans, usage, latencyMs,
                 message == null || message.isBlank() ? conversation.getTitle() : message);
         if (experiment != null) {
             experiments.recordRun(experiment, assignment, sessionId, reply.mode(), latencyMs,
@@ -147,7 +151,7 @@ public class PlaygroundService {
                 "output", reply.reply(),
                 "trace_id", traceId,
                 "session_id", sessionId,
-                "model", model.getName(),
+                "model", model == null ? "" : model.getName(),
                 "agent", agent.getName(),
                 "agent_id", agent.getId(),
                 "workspace", agent.getWorkspace(),
@@ -161,23 +165,51 @@ public class PlaygroundService {
 
     public ChatReply generate(Agent agent, ModelConfig model, List<Map<String, Object>> history,
                               String sessionId, boolean resume, boolean forceRerun) {
+        if (httpAgents.isHttpBacked(agent)) {
+            String lastUser = lastUserMessage(history);
+            return httpAgents.chat(agent, lastUser, sessionId);
+        }
         ExecutionContext context = ExecutionContext.forAgent(agent, sessionId + "-" + WorkspaceStore.newTraceId());
         return ExecutionContext.runScoped(context, browser,
                 () -> runtime.generate(agent, model, history, sessionId, resume, forceRerun));
     }
 
+    private static String lastUserMessage(List<Map<String, Object>> history) {
+        if (history == null) {
+            return "";
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Map<String, Object> item = history.get(i);
+            if ("user".equals(Jsons.text(item.get("role")))) {
+                return Jsons.text(item.get("content"));
+            }
+        }
+        return "";
+    }
+
     public List<Map<String, Object>> buildDebugSpans(Agent agent, ModelConfig model, String mode,
                                                      List<Map<String, Object>> toolSpans, int latencyMs) {
+        List<Map<String, Object>> spans = new ArrayList<>();
+        spans.add(AgentScopeRuntime.debugSpan("user.message", "接收用户消息", "input", "ok", 2, ""));
+        HttpAgent http = httpAgents.primary(agent);
+        if (http != null) {
+            spans.add(AgentScopeRuntime.debugSpan("agent.resolve", "外部 Agent · " + agent.getName(), "agent", "ok", 4,
+                    HttpAgentRuntime.protocolLabel(http.getProtocol()) + " · " + http.getEndpoint()));
+            if (toolSpans != null) {
+                spans.addAll(toolSpans);
+            }
+            spans.add(AgentScopeRuntime.debugSpan("reply.emit", "回写外部回复", "output",
+                    "error".equals(mode) ? "error" : "ok", 4, ""));
+            return spans;
+        }
+        spans.add(AgentScopeRuntime.debugSpan("agent.resolve", "解析 Agent · " + agent.getName(), "agent", "ok", 8,
+                agent.getSystemPrompt().isBlank() ? agent.getDescription() : agent.getSystemPrompt()));
         List<Skill> skills = tools.selectedSkills(agent);
         List<McpServer> mcps = tools.selectedMcps(agent);
         List<String> toolNames = new ArrayList<>();
         for (McpServer mcp : mcps) {
             tools.listMcpTools(mcp).forEach(tool -> toolNames.add(String.valueOf(tool.get("name"))));
         }
-        List<Map<String, Object>> spans = new ArrayList<>();
-        spans.add(AgentScopeRuntime.debugSpan("user.message", "接收用户消息", "input", "ok", 2, ""));
-        spans.add(AgentScopeRuntime.debugSpan("agent.resolve", "解析 Agent · " + agent.getName(), "agent", "ok", 8,
-                agent.getSystemPrompt().isBlank() ? agent.getDescription() : agent.getSystemPrompt()));
         if (skills.isEmpty()) {
             spans.add(AgentScopeRuntime.debugSpan("skill.inject", "未关联技能", "skill", "skip", 0,
                     "可在 Agent 编辑页勾选技能"));
@@ -192,8 +224,9 @@ public class PlaygroundService {
             spans.add(AgentScopeRuntime.debugSpan("mcp.bind", "关联 " + toolNames.size() + " 个工具", "mcp", "ok", 4,
                     String.join("、", toolNames)));
         }
-        String modelDetail = "preview".equals(mode) ? "预览模式：当前模型没有可用密钥" : model.getModelId();
-        spans.add(AgentScopeRuntime.debugSpan("model.chat", "调用模型 · " + model.getName(), "llm",
+        String modelDetail = "preview".equals(mode) ? "预览模式：当前模型没有可用密钥"
+                : (model == null ? "" : model.getModelId());
+        spans.add(AgentScopeRuntime.debugSpan("model.chat", "调用模型 · " + (model == null ? "" : model.getName()), "llm",
                 "error".equals(mode) ? "error" : "ok", Math.max(20, latencyMs - 40), modelDetail));
         if (toolSpans != null) {
             spans.addAll(toolSpans);

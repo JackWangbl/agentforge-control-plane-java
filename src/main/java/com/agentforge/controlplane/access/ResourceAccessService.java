@@ -5,6 +5,7 @@ import com.agentforge.controlplane.domain.Conversation;
 import com.agentforge.controlplane.domain.Dataset;
 import com.agentforge.controlplane.domain.EvaluationRun;
 import com.agentforge.controlplane.domain.Experiment;
+import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.OpenCliEndpoint;
@@ -36,6 +37,7 @@ public class ResourceAccessService {
 
     private static final Map<ResourceKind, Class<?>> KIND_MODELS = Map.ofEntries(
             Map.entry(ResourceKind.AGENT, Agent.class),
+            Map.entry(ResourceKind.HTTP_AGENT, HttpAgent.class),
             Map.entry(ResourceKind.CREDENTIAL, ModelConfig.class),
             Map.entry(ResourceKind.MCP, McpServer.class),
             Map.entry(ResourceKind.OPENCLI, OpenCliEndpoint.class),

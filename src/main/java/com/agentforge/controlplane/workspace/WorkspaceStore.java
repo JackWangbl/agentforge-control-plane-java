@@ -125,6 +125,7 @@ public class WorkspaceStore {
                 "skill_ids", agent.getSkillIds(),
                 "mcp_ids", agent.getMcpIds(),
                 "opencli_ids", agent.getOpencliIds(),
+                "http_agent_ids", agent.getHttpAgentIds(),
                 "updated_at", Jsons.iso(Instant.now())));
     }
 
