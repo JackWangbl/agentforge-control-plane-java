@@ -14,6 +14,8 @@ import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.dto.ApiDtos;
 import com.agentforge.controlplane.experiment.ExperimentService;
+import com.agentforge.controlplane.memory.MemoryService;
+import com.agentforge.controlplane.memory.MemorySummarizer;
 import com.agentforge.controlplane.playground.PlaygroundService;
 import com.agentforge.controlplane.repo.ChatMessageRepository;
 import com.agentforge.controlplane.repo.ConversationRepository;
@@ -44,11 +46,13 @@ public class PlaygroundController {
     private final ExperimentService experiments;
     private final HttpAgentRuntime httpAgents;
     private final ModelConfigRepository models;
+    private final MemoryService memories;
+    private final MemorySummarizer summarizer;
 
     public PlaygroundController(ResourceAccessService access, PlaygroundService playground, WorkspaceStore workspaces,
                                 ConversationRepository conversations, ChatMessageRepository messages,
                                 ExperimentService experiments, HttpAgentRuntime httpAgents,
-                                ModelConfigRepository models) {
+                                ModelConfigRepository models, MemoryService memories, MemorySummarizer summarizer) {
         this.access = access;
         this.playground = playground;
         this.workspaces = workspaces;
@@ -57,6 +61,8 @@ public class PlaygroundController {
         this.experiments = experiments;
         this.httpAgents = httpAgents;
         this.models = models;
+        this.memories = memories;
+        this.summarizer = summarizer;
     }
 
     @RequirePermission({"session:write", "agent:write"})
@@ -105,6 +111,7 @@ public class PlaygroundController {
             if (experiment != null) {
                 sessionId = "debug_" + shortId();
                 stored = null;
+                conversation = null;
                 assignment = experiments.assignUnit(experiment, sessionId,
                         (payload.user_key() == null || payload.user_key().isBlank() ? user.getUsername() : payload.user_key()),
                         user);
@@ -112,19 +119,17 @@ public class PlaygroundController {
                 throw ApiException.conflict("Session belongs to another agent workspace");
             }
         }
-        List<Map<String, Object>> history = historyFrom(stored);
-        if (history.isEmpty()) {
-            for (ChatMessage row : messages.findBySessionIdAndTenantIdOrderByIdAsc(sessionId, user.getTenantId())) {
-                if (agent.getId().equals(row.getAgentId())) {
-                    history.add(Map.of("role", row.getRole(), "content", row.getContent()));
-                }
-            }
+        if (conversation != null && !memories.canRead(user, conversation)) {
+            throw ApiException.conflict("这个会话属于其他人");
         }
+        List<Map<String, Object>> history = memories.shortTermHistory(user, agent.getId(), sessionId);
         history.add(Map.of("role", "user", "content", payload.message()));
         Instant started = Instant.now();
         ChatReply reply = playground.generate(agent, model, history, sessionId, false, false);
-        return playground.finalizeTurn(user, agent, model, sessionId, conversation, payload.message(), reply,
+        Map<String, Object> result = playground.finalizeTurn(user, agent, model, sessionId, conversation, payload.message(), reply,
                 started, true, "POST /api/playground/run", assignment, experiment);
+        summarizer.summarize(user, model, sessionId, payload.message(), reply.reply(), reply.mode());
+        return result;
     }
 
     @RequirePermission({"session:write", "agent:write"})
@@ -150,6 +155,9 @@ public class PlaygroundController {
         if (stored != null && stored.get("agent_id") != null
                 && !agent.getId().equals(Jsons.asLong(stored.get("agent_id")))) {
             throw ApiException.conflict("Session belongs to another agent workspace");
+        }
+        if (conversation != null && !memories.canRead(user, conversation)) {
+            throw ApiException.conflict("这个会话属于其他人");
         }
         List<Map<String, Object>> history = historyFrom(stored);
         if (history.isEmpty() && !Jsons.text(ckpt.get("last_user")).isEmpty()) {

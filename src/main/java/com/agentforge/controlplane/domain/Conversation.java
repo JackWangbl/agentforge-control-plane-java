@@ -39,6 +39,10 @@ public class Conversation extends TenantOwnedEntity {
     @Column(name = "channel", length = 32, nullable = false)
     private String channel = "API";
 
+    /** user:{id} 或 trial:{凭证}。空值只允许已登录的原主人继续读取。 */
+    @Column(name = "subject_key", length = 120)
+    private String subjectKey;
+
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
     public String getUserId() { return userId; }
@@ -59,4 +63,6 @@ public class Conversation extends TenantOwnedEntity {
     public void setLatencyMs(int latencyMs) { this.latencyMs = latencyMs; }
     public String getChannel() { return channel; }
     public void setChannel(String channel) { this.channel = channel; }
+    public String getSubjectKey() { return subjectKey; }
+    public void setSubjectKey(String subjectKey) { this.subjectKey = subjectKey; }
 }

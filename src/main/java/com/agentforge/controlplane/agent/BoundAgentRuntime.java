@@ -1,6 +1,10 @@
 package com.agentforge.controlplane.agent;
 
+import com.agentforge.controlplane.access.CurrentUser;
+import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.memory.MemoryService;
+import com.agentforge.controlplane.memory.MemorySummarizer;
 import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.repo.ModelConfigRepository;
@@ -29,14 +33,19 @@ public class BoundAgentRuntime {
     private final BrowserRuntime browser;
     private final WorkspaceStore workspaces;
     private final HttpAgentRuntime httpAgents;
+    private final MemoryService memories;
+    private final MemorySummarizer summarizer;
 
     public BoundAgentRuntime(ModelConfigRepository models, ObjectProvider<AgentScopeRuntime> runtime,
-                             BrowserRuntime browser, WorkspaceStore workspaces, HttpAgentRuntime httpAgents) {
+                             BrowserRuntime browser, WorkspaceStore workspaces, HttpAgentRuntime httpAgents,
+                             MemoryService memories, MemorySummarizer summarizer) {
         this.models = models;
         this.runtime = runtime;
         this.browser = browser;
         this.workspaces = workspaces;
         this.httpAgents = httpAgents;
+        this.memories = memories;
+        this.summarizer = summarizer;
     }
 
     /** 调试台 / 对外接口共用。HTTP 接入的 Agent 直接打到对方平台。 */
@@ -58,11 +67,21 @@ public class BoundAgentRuntime {
         if (model == null) {
             throw ApiException.unprocessable(target.getName() + " 没有可用的模型配置");
         }
-        List<Map<String, Object>> history = historyFrom(workspaces.loadSession(target, sid));
+        CurrentUser caller = CurrentUserHolder.get();
+        if (caller != null) {
+            memories.assertReadable(caller, sid);
+        }
+        List<Map<String, Object>> history = caller == null
+                ? historyFrom(workspaces.loadSession(target, sid))
+                : memories.shortTermHistory(caller, target.getId(), sid);
         history.add(Map.of("role", "user", "content", message));
         ExecutionContext nested = ExecutionContext.forAgent(target, sid + "-" + WorkspaceStore.newTraceId());
         ChatReply reply = ExecutionContext.runScoped(nested, browser,
                 () -> runtime.getObject().generate(target, model, history, sid, false, false));
+        if (caller != null) {
+            memories.recordExchange(caller, target, sid, message, reply.reply());
+            summarizer.summarize(caller, model, sid, message, reply.reply(), reply.mode());
+        }
         workspaces.persistRun(target, sid, message, message, reply.reply(), reply.mode(),
                 model.getName(), reply.traceId(), reply.spans(), reply.usage(), 1, true);
         return reply;

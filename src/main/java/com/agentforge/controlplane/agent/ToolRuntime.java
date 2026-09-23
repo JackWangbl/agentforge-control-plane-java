@@ -1,11 +1,15 @@
 package com.agentforge.controlplane.agent;
 
+import com.agentforge.controlplane.access.CurrentUser;
+import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.SandboxPolicy;
 import com.agentforge.controlplane.domain.Skill;
+import com.agentforge.controlplane.memory.MemoryService;
 import com.agentforge.controlplane.rag.KnowledgeSearchService;
+import com.agentforge.controlplane.web.ApiException;
 import com.agentforge.controlplane.repo.AgentRepository;
 import com.agentforge.controlplane.repo.McpServerRepository;
 import com.agentforge.controlplane.repo.SkillRepository;
@@ -56,10 +60,12 @@ public class ToolRuntime {
     private final McpStreamClient mcpStream;
     private final HttpAgentRuntime httpAgents;
     private final KnowledgeSearchService knowledge;
+    private final MemoryService memories;
 
     public ToolRuntime(SkillRepository skills, McpServerRepository mcps, AgentRepository agents,
                        BrowserRuntime browser, OpenCliRuntime opencli, SandboxRuntime sandbox,
-                       McpStreamClient mcpStream, HttpAgentRuntime httpAgents, KnowledgeSearchService knowledge) {
+                       McpStreamClient mcpStream, HttpAgentRuntime httpAgents, KnowledgeSearchService knowledge,
+                       MemoryService memories) {
         this.skills = skills;
         this.mcps = mcps;
         this.agents = agents;
@@ -69,6 +75,7 @@ public class ToolRuntime {
         this.mcpStream = mcpStream;
         this.httpAgents = httpAgents;
         this.knowledge = knowledge;
+        this.memories = memories;
     }
 
     public static List<ToolSpec> builtinToolSpecs() {
@@ -182,6 +189,9 @@ public class ToolRuntime {
         if ("search_documents".equals(toolName) && knowledge.hasReadyDocuments(agent)) {
             return true;
         }
+        if ("remember".equals(toolName) || "forget".equals(toolName) || "list_memories".equals(toolName)) {
+            return true;
+        }
         for (McpServer row : selectedMcps(agent)) {
             for (Map<String, Object> tool : listMcpTools(row)) {
                 if (toolName != null && toolName.equals(tool.get("name"))) {
@@ -232,6 +242,23 @@ public class ToolRuntime {
             tools.add(new ToolSpec("search_documents",
                     "在当前 Agent 绑定的知识库中检索用户上传的文档原文。回答文档中的事实、数字、条款或流程前必须先调用。",
                     ToolSpec.objectSchema(Map.of("query", ToolSpec.stringParam("要检索的问题或关键词")), "query")));
+        }
+        if (!seen.contains("remember")) {
+            seen.add("remember");
+            tools.add(new ToolSpec("remember",
+                    "立刻写下用户刚刚明确要求记住的一句话。普通事实会在本轮结束后自动总结，不要把闲聊写进来。",
+                    ToolSpec.objectSchema(Map.of(
+                            "content", ToolSpec.stringParam("要记住的事实，最多 500 字"),
+                            "kind", ToolSpec.stringParam("preference、profile、decision、correction 之一，可空")),
+                            "content")));
+            seen.add("forget");
+            tools.add(new ToolSpec("forget",
+                    "按关键词删除当前用户自己的长期记忆。只有用户明确说忘掉时才调用。",
+                    ToolSpec.objectSchema(Map.of("keyword", ToolSpec.stringParam("要忘掉的原文或关键词")), "keyword")));
+            seen.add("list_memories");
+            tools.add(new ToolSpec("list_memories",
+                    "列出当前用户自己的长期记忆。不能查看别人的记忆。",
+                    ToolSpec.objectSchema(Map.of("keyword", ToolSpec.stringParam("可选，按关键词过滤")))));
         }
         for (Map<String, Object> spec : FlowRuntime.flowToolSpecs(agent)) {
             String name = String.valueOf(spec.get("name"));
@@ -347,7 +374,31 @@ public class ToolRuntime {
         if (!documents.isBlank()) {
             extras.add(documents);
         }
+        String memoryBlock = memories.promptBlock();
+        if (!memoryBlock.isBlank()) {
+            extras.add(memoryBlock);
+        }
         return extras.isEmpty() ? base : (base + "\n\n" + String.join("\n\n", extras)).strip();
+    }
+
+    private String runMemoryTool(String name, Map<String, Object> args) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) {
+            return "当前没有登录身份，无法读写记忆。";
+        }
+        try {
+            if ("remember".equals(name)) {
+                return memories.remember(user, Jsons.text(args.get("content")), Jsons.text(args.get("kind")));
+            }
+            if ("forget".equals(name)) {
+                return memories.forget(user, Jsons.text(args.get("keyword")));
+            }
+            return memories.listText(user, Jsons.text(args.get("keyword")));
+        } catch (ApiException e) {
+            return e.getMessage();
+        } catch (RuntimeException e) {
+            return "记忆暂时不可用。";
+        }
     }
 
     public String executeTool(String name, Map<String, Object> arguments, Agent agent) {
@@ -394,6 +445,9 @@ public class ToolRuntime {
                 return "缺少 Agent 上下文，无法检索知识库。";
             }
             return knowledge.searchForAgent(agent, Jsons.text(args.get("query")));
+        }
+        if ("remember".equals(name) || "forget".equals(name) || "list_memories".equals(name)) {
+            return runMemoryTool(name, args);
         }
         if ("list_agents".equals(name)) {
             return listAgents(tenantId);

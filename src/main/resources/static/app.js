@@ -21,7 +21,7 @@ function apiError(err){
 }
 const authState = {token: localStorage.getItem('af_token')||'', me:null, trialExpiresAt:''};
 let trialTimer=0;
-const pagePerm = {dashboard:'',sessions:'session:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',knowledge:'knowledge:read',models:'model:read',vectors:'tenant:admin',sandboxes:'sandbox:read',roles:'role:read'};
+const pagePerm = {dashboard:'',memories:'',sessions:'session:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',knowledge:'knowledge:read',models:'model:read',vectors:'tenant:admin',sandboxes:'sandbox:read',roles:'role:read'};
 function can(perm){
   if(!perm) return !!authState.me;
   const granted=authState.me?.permissions||[];
@@ -108,9 +108,9 @@ const api = async (path, options={}) => {
 const fmt = n => n >= 1000000 ? (n/1000000).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : n;
 const dt = value => new Date(value+'Z').toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 const statusText = {completed:'已完成',running:'运行中',failed:'失败',ok:'正常',error:'异常',published:'已发布',draft:'草稿',queued:'排队中',passed:'通过',skipped:'跳过',cancelled:'已取消',paused:'已暂停'};
-const titles = {dashboard:'运行概览',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'Agent 编排',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
+const titles = {dashboard:'运行概览',memories:'记忆',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'Agent 编排',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
 const pageMeta = {
-  sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
+  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
 };
 let currentPage='dashboard', currentParam='';
 function pageTools(extra=''){
@@ -2360,6 +2360,7 @@ async function resumePlayground(){
 }
 function bindPage(page){
   evalStopPoll();
+  if(page==='memories') bindMemories();
   if(page==='knowledge') bindKnowledgeUpload();
   if(page==='evaluations') bindEvalPage();
   if(page==='experiments') bindExpPage();
@@ -2376,6 +2377,45 @@ let kbPollToken=0;
 function kbStatus(status){
   const labels={queued:'排队',processing:'处理中',ready:'就绪',failed:'失败'};
   return labels[status]||status||'';
+}
+const memoryKinds=[{id:'preference',label:'偏好'},{id:'profile',label:'资料'},{id:'decision',label:'决定'},{id:'correction',label:'更正'}];
+let memoryEditing=null;
+async function memoriesPage(){
+  const rows=await api('/api/memories');
+  const options=memoryKinds.map(item=>`<option value="${item.id}">${item.label}</option>`).join('');
+  const editor=memoryEditing?`<section class="panel" style="margin-bottom:14px"><form id="memoryForm" class="memory-form"><input type="hidden" id="memoryId" value="${memoryEditing.id}"><div class="field"><label>改正这条记忆</label><textarea id="memoryContent" rows="3" maxlength="500" required>${escapeHtml(memoryEditing.content||'')}</textarea></div><div class="field"><label>类型</label><select class="select" id="memoryKind">${options}</select></div><div class="page-actions"><button class="btn primary" type="submit">保存修改</button><button class="btn ghost" type="button" onclick="cancelMemoryEdit()">取消</button></div></form></section>`:'';
+  const cards=rows.length?`<div class="resource-grid">${rows.map(row=>`<article class="resource-card"><div class="resource-head"><div class="resource-logo">✎</div><div><h3>${escapeHtml(row.kind_label||'偏好')}${row.pinned?' · 置顶':''}</h3><p>${escapeHtml(row.content||'')}</p></div></div><div class="resource-meta"><span>${row.source==='agent'?'自动总结':'已改正'}</span><span>${dt(row.updated_at)}</span><span class="resource-ops"><button class="btn ghost" onclick="editMemory(${row.id})">改正</button><button class="btn ghost" onclick="pinMemory(${row.id},${row.pinned?'false':'true'})">${row.pinned?'取消置顶':'置顶'}</button><button class="btn ghost" onclick="deleteMemory(${row.id})">删除</button></span></div></article>`).join('')}</div>`:'<div class="empty">还没有记忆。和 Agent 对话后，会自动把需要长期记住的事实总结到这里。</div>';
+  return `${head('memories', pageTools())}${editor}${cards}`;
+}
+function bindMemories(){
+  const form=$('#memoryForm');
+  if(!form) return;
+  if(memoryEditing){const kind=$('#memoryKind'); if(kind) kind.value=memoryEditing.kind||'preference'}
+  form.onsubmit=async e=>{
+    e.preventDefault();
+    const id=$('#memoryId').value;
+    const body={content:$('#memoryContent').value,kind:$('#memoryKind').value};
+    try{
+      await api('/api/memories/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      memoryEditing=null;
+      toast('已改正');
+      render('memories');
+    }catch(err){toast(apiError(err)||'保存失败')}
+  };
+}
+async function editMemory(id){
+  const rows=await api('/api/memories');
+  memoryEditing=(rows||[]).find(row=>Number(row.id)===Number(id))||null;
+  if(!memoryEditing){toast('记忆不存在'); return}
+  render('memories');
+}
+function cancelMemoryEdit(){memoryEditing=null; render('memories')}
+async function pinMemory(id, pinned){
+  try{await api('/api/memories/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({pinned})}); render('memories')}catch(err){toast(apiError(err)||'置顶失败')}
+}
+async function deleteMemory(id){
+  if(!confirm('删除这条记忆？之后 Agent 不会再使用它。')) return;
+  try{if(memoryEditing&&Number(memoryEditing.id)===Number(id)) memoryEditing=null; await api('/api/memories/'+id,{method:'DELETE'}); toast('已删除'); render('memories')}catch(err){toast(apiError(err)||'删除失败')}
 }
 async function knowledgePage(){
   const [bases,models]=await Promise.all([api('/api/knowledge'),api('/api/models').catch(()=>[])]);
@@ -2526,6 +2566,7 @@ async function render(page,param=''){
   try{
     let html;
     if(page==='dashboard')html=await dashboard();
+    else if(page==='memories')html=await memoriesPage();
     else if(page==='sessions')html=await sessions();
     else if(page==='studio')html=await studio();
     else if(page==='evaluations')html=await evaluations();

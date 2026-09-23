@@ -16,6 +16,7 @@ import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.Skill;
 import com.agentforge.controlplane.domain.Trace;
 import com.agentforge.controlplane.experiment.ExperimentService;
+import com.agentforge.controlplane.memory.MemoryService;
 import com.agentforge.controlplane.observability.ObservabilityService;
 import com.agentforge.controlplane.repo.ChatMessageRepository;
 import com.agentforge.controlplane.repo.ConversationRepository;
@@ -47,11 +48,13 @@ public class PlaygroundService {
     private final ExperimentService experiments;
     private final BrowserRuntime browser;
     private final HttpAgentRuntime httpAgents;
+    private final MemoryService memories;
 
     public PlaygroundService(AgentScopeRuntime runtime, WorkspaceStore workspaces, ResourceAccessService access,
                              ToolRuntime tools, ChatMessageRepository messages, ConversationRepository conversations,
                              TraceRepository traces, ObservabilityService observability,
-                             ExperimentService experiments, BrowserRuntime browser, HttpAgentRuntime httpAgents) {
+                             ExperimentService experiments, BrowserRuntime browser, HttpAgentRuntime httpAgents,
+                             MemoryService memories) {
         this.runtime = runtime;
         this.workspaces = workspaces;
         this.access = access;
@@ -63,6 +66,7 @@ public class PlaygroundService {
         this.experiments = experiments;
         this.browser = browser;
         this.httpAgents = httpAgents;
+        this.memories = memories;
     }
 
     @Transactional
@@ -92,6 +96,7 @@ public class PlaygroundService {
                 conversation.setTitle(cut(message, 80));
             }
             conversation.setUpdatedAt(Instant.now());
+            memories.bindSubject(user, conversation);
             if (conversation.getTenantId() == null) {
                 conversation.setTenantId(user.getTenantId());
             }
@@ -112,6 +117,7 @@ public class PlaygroundService {
             conversation.setTotalTokens(tokens);
             conversation.setLatencyMs(latencyMs);
             conversation.setChannel("Playground");
+            memories.bindSubject(user, conversation);
             access.stampOwner(conversation, user);
             conversations.save(conversation);
         }

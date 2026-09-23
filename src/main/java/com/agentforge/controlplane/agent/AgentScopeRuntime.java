@@ -3,6 +3,7 @@ package com.agentforge.controlplane.agent;
 import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.memory.MemoryService;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.util.Jsons;
 import com.agentforge.controlplane.web.ApiException;
@@ -35,15 +36,21 @@ public class AgentScopeRuntime implements ChatTurnRunner {
 
     private final ToolRuntime tools;
     private final WorkspaceStore workspaces;
+    private final MemoryService memories;
 
-    public AgentScopeRuntime(ToolRuntime tools, WorkspaceStore workspaces) {
+    public AgentScopeRuntime(ToolRuntime tools, WorkspaceStore workspaces, MemoryService memories) {
         this.tools = tools;
         this.workspaces = workspaces;
+        this.memories = memories;
     }
 
     @Override
     public ChatTurnResult run(Agent agent, ModelConfig model, String message, String sessionId) {
         List<Map<String, Object>> history = new ArrayList<>();
+        CurrentUser caller = CurrentUserHolder.get();
+        if (caller != null) {
+            history.addAll(memories.shortTermHistory(caller, agent.getId(), sessionId));
+        }
         history.add(Map.of("role", "user", "content", message == null ? "" : message));
         ChatReply reply = generate(agent, model, history, sessionId, false, false);
         return new ChatTurnResult(
@@ -114,6 +121,9 @@ public class AgentScopeRuntime implements ChatTurnRunner {
         }
 
         int stepHolder = step;
+        if (caller != null) {
+            caller.setActiveSessionId(sessionId);
+        }
         try {
             flush(agent, sessionId, runId, "running", next, stepHolder, working, pending, doneIds, traces, usage, "", lastUser);
             if ("tool".equals(next) && !pending.isEmpty()) {
@@ -167,6 +177,10 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                     traces,
                     intUsage(usage),
                     runId);
+        } finally {
+            if (caller != null) {
+                caller.setActiveSessionId(null);
+            }
         }
     }
 

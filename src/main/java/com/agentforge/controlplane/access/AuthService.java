@@ -128,6 +128,7 @@ public class AuthService {
             CurrentUser actor = loadUser(row.getUserId(), tenantOverride);
             if (row.getTrialKey() != null && !row.getTrialKey().isBlank()) {
                 actor.setTrialExpiresAt(row.getExpiresAt());
+                actor.setTrialKey(row.getTrialKey().strip());
             }
             return actor;
         }

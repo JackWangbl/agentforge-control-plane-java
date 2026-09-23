@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>记忆模块设计方案</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm; }
+  * { box-sizing: border-box; }
+  html { font-size: 11pt; }
+  body {
+    margin: 0;
+    color: #1c2430;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+    line-height: 1.65;
+  }
+  h1 { font-size: 22pt; line-height: 1.3; margin: 0 0 6px; letter-spacing: 0.02em; }
+  h2 { font-size: 14pt; margin: 22px 0 8px; padding-top: 4px; border-top: 1px solid #e4e8ee; }
+  h3 { font-size: 12pt; margin: 14px 0 6px; }
+  p { margin: 6px 0 8px; }
+  ul, ol { margin: 6px 0 10px; padding-left: 1.3em; }
+  li { margin: 3px 0; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; background: #f3f5f8; padding: 0 4px; border-radius: 3px; }
+  .meta { color: #5c6b7e; font-size: 10.5pt; margin-bottom: 14px; }
+  .badge {
+    display: inline-block;
+    background: #fff4e5;
+    color: #9a5b00;
+    border: 1px solid #f0d7a8;
+    border-radius: 999px;
+    padding: 1px 10px;
+    font-size: 10pt;
+    margin-right: 8px;
+  }
+  .lead { font-size: 11.5pt; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 10pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #d5dbe3; padding: 5px 8px; vertical-align: top; text-align: left; }
+  th { background: #f4f7fb; font-weight: 600; }
+  pre {
+    background: #f6f8fb;
+    border: 1px solid #e3e8ef;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 9.5pt;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    page-break-inside: avoid;
+  }
+  .note {
+    background: #f7f9fc;
+    border-left: 3px solid #2367e8;
+    padding: 8px 12px;
+    margin: 10px 0 12px;
+    page-break-inside: avoid;
+  }
+  .review {
+    background: #fff8ee;
+    border-left: 3px solid #e49b18;
+    padding: 8px 12px;
+    margin: 10px 0 12px;
+    page-break-inside: avoid;
+  }
+  .review strong { color: #8a5a00; }
+  h2, h3 { page-break-after: avoid; }
+  tr { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<h1>记忆模块设计方案</h1>
+<p class="meta"><span class="badge">待审查</span>AgentForge 控制面 · 2026-09-23 · 批准后再写代码</p>
+
+<p class="lead">给每个登录用户一份只属于自己的记忆。短期记忆让同一次对话接得上上文。长期记忆让换一个会话之后，仍然记得这个人明确留下的事实。隔离键是租户加上这个人，管理员不能借身份看到别人的记忆。</p>
+
+<h2>1. 要补上的能力</h2>
+<p>调试台现在会把<strong>同一个会话</strong>里已经存下的 <code>chat_messages</code> 再送给模型，所以一轮对话里能接着上文说。换一个会话、换一天再来，这些内容不会被当成「这个人的记忆」带回去。</p>
+<p>另外有三处和记忆相关的缺口：</p>
+<ol>
+  <li>评测和一部分接口调用只把当前这一句发给模型，同一次会话的上文也不带。</li>
+  <li>模型运行时写死的用户标识是 <code>playground</code>，不是登录用户。知识库检索已经改成携带真实登录身份，记忆要走同一条路。</li>
+  <li>试用访客在库里是同一个 <code>guest</code> 用户。如果按用户 id 记长期记忆，所有试用浏览器会共用一份。</li>
+</ol>
+<p>知识库继续负责文档。记忆负责这个人自己的事实。两者不共用表，也不共用检索。</p>
+
+<h2>2. 参照</h2>
+<table>
+  <tr><th>做法</th><th>本方案采纳的部分</th></tr>
+  <tr><td>ChatGPT Memory</td><td>用户能看见、修改、删除自己的长期记忆。模型只在用户明确要求记住或忘掉时写入</td></tr>
+  <tr><td>Mem0</td><td>长期记忆是短事实，按用户隔离，有添加、检索、删除</td></tr>
+  <tr><td>AgentScope 的对话 Memory</td><td>短期记忆就是当前会话的消息列表，有长度窗口</td></tr>
+  <tr><td>Dify 会话变量与知识库</td><td>会话上下文、个人事实、文档知识库分成三种东西</td></tr>
+</table>
+<p>本版不采纳：每轮对话自动抽取摘要、向量检索记忆、把记忆分享给其他用户、管理员查看全员记忆。</p>
+
+<h2>3. 两层怎么分</h2>
+<pre>当前这一轮用户消息
+        │
+        ├─ 短期记忆：本会话最近若干轮（chat_messages）
+        │
+        └─ 长期记忆：这个人在这个租户下的事实（memory_items）
+                │
+                ▼
+        系统提示词里的一小段 + 模型可调用的记忆工具
+                │
+                ▼
+        现有 ReAct 对话（知识库、MCP、技能保持原样）</pre>
+
+<h3>3.1 短期记忆</h3>
+<p>不新建表。来源就是现有的 <code>chat_messages</code>。范围是一次会话。</p>
+<table>
+  <tr><th>项</th><th>规则</th></tr>
+  <tr><td>何时注入</td><td>同一次会话的后续轮次。新会话不带上一会话的原文</td></tr>
+  <tr><td>窗口</td><td>最近 20 条，并且总字数不超过约 6000。先碰到的限制生效。本轮用户消息始终保留</td></tr>
+  <tr><td>谁能读到</td><td>这条会话的主人。已登录用户还要 <code>owner_id</code> 等于自己，并且租户一致</td></tr>
+  <tr><td>界面</td><td>仍在「会话查询」里看原文。不另做短期记忆编辑页</td></tr>
+  <tr><td>续跑</td><td>失败检查点继续用检查点里的 working 历史，不再截一刀</td></tr>
+</table>
+<p>调试台、绑定 Agent 的调用、评测，生成前都走这一个窗口函数。现在评测走的是只含当前一句的入口，本方案把它改过来。</p>
+
+<h3>3.2 长期记忆</h3>
+<p>一条长期记忆是一句稳定事实：偏好、称呼、做过的决定、用户要求更正的内容。换会话、换一天仍然注入。</p>
+<table>
+  <tr><th>项</th><th>规则</th></tr>
+  <tr><td>归属</td><td>租户 + 这个人。这个人在该租户里的各个 Agent 都能读到</td></tr>
+  <tr><td>单条长度</td><td>最多 500 字</td></tr>
+  <tr><td>条数</td><td>每个身份在每个租户最多 200 条未删除记录</td></tr>
+  <tr><td>注入</td><td>置顶的在前，其余按更新时间。最多 12 条，合计约 1500 字，写进系统提示词</td></tr>
+  <tr><td>写入</td><td>记忆页手工添加；或用户在对话里明确说「记住」「忘掉」时，由工具写入</td></tr>
+  <tr><td>删除</td><td>从列表和后续注入中消失。库内软删除，界面不提供回收站</td></tr>
+</table>
+
+<div class="review">
+  <strong>请确认：</strong>长期记忆默认不按 Agent 拆开。表上预留可空的 <code>agent_id</code>，第一版界面不展示这个字段，值保持为空。若审查时希望「个人助手」和「客服助手」各记各的，把该字段改成按 Agent 隔离即可，不必换表。
+</div>
+
+<h2>4. 隔离</h2>
+<p>身份键 <code>subject_key</code>：</p>
+<table>
+  <tr><th>谁</th><th>键</th><th>原因</th></tr>
+  <tr><td>已登录用户</td><td><code>user:{用户 id}</code></td><td>稳定，不随显示名变化</td></tr>
+  <tr><td>试用访客</td><td><code>trial:{af_trial 凭证}</code></td><td>试用账号都是 guest，用户 id 相同，不能拿来分开两个人</td></tr>
+</table>
+<p>每一条查询同时带上当前 <code>tenant_id</code> 和 <code>subject_key</code>。平台管理员用租户切换器换到另一个租户时，看到的是自己在那个租户下的记忆，不是该租户其他人的记忆。直接用 id 访问别人的记录，返回不存在。</p>
+<p>记忆不跨租户携带。同一个人在默认租户和演示租户各有一份。</p>
+<p>短期记忆沿用会话。会话创建时写入同一个 <code>subject_key</code>。读取历史时，会话上的键必须等于当前身份，租户也必须一致。旧会话这条键为空时：已登录用户按 <code>owner_id</code> 匹配；试用用户不读取空键历史，避免串到共用的 guest 会话上。</p>
+
+<div class="note">试用凭证和访问次数用的是同一个 <code>af_trial</code> cookie。登录之后改按用户 id 记，试用期间写下的长期记忆不自动并进登录账号。</div>
+
+<h2>5. 数据</h2>
+<p><code>SchemaMigrator</code> 增加 <code>memory_items</code>。已有表只加列，不改对话和知识库的表结构，除了会话上补一列身份键。</p>
+
+<h3>5.1 memory_items</h3>
+<table>
+  <tr><th>列</th><th>说明</th></tr>
+  <tr><td><code>id</code></td><td>主键</td></tr>
+  <tr><td><code>tenant_id</code></td><td>租户</td></tr>
+  <tr><td><code>subject_key</code></td><td><code>user:{id}</code> 或 <code>trial:{凭证}</code>，最长 120</td></tr>
+  <tr><td><code>agent_id</code></td><td>可空。空表示该用户在该租户的全部 Agent 可用</td></tr>
+  <tr><td><code>content</code></td><td>事实正文，最长 500 字</td></tr>
+  <tr><td><code>kind</code></td><td><code>preference</code>、<code>profile</code>、<code>decision</code>、<code>correction</code>。界面显示为偏好、资料、决定、更正</td></tr>
+  <tr><td><code>source</code></td><td><code>user</code> 页面写入，<code>agent</code> 对话工具写入</td></tr>
+  <tr><td><code>pinned</code></td><td>置顶后优先注入</td></tr>
+  <tr><td><code>session_id</code></td><td>可空。对话里记住时记下当时的会话，方便对账</td></tr>
+  <tr><td><code>created_at</code> / <code>updated_at</code></td><td>时间</td></tr>
+  <tr><td><code>deleted_at</code></td><td>可空。有值则列表和注入都跳过</td></tr>
+</table>
+<p>索引：<code>(tenant_id, subject_key, deleted_at)</code>。正文留在 MySQL。一个人几十到几百条，按时间和置顶取值即可。以后条数上来，再接到现有 Milvus，本版不做向量。</p>
+
+<h3>5.2 conversations 增加一列</h3>
+<table>
+  <tr><th>列</th><th>说明</th></tr>
+  <tr><td><code>subject_key</code></td><td>可空，最长 120。新会话在创建时写入。用于短期历史的主人校验</td></tr>
+</table>
+
+<h2>6. 生成回复时怎么用</h2>
+<p>挂在现有两个点上，不新开一条对话链路。</p>
+<ol>
+  <li><strong>系统提示词。</strong><code>ToolRuntime.buildSystemPrompt</code> 在技能、工具说明、知识库提示之后，追加一段「关于当前用户的记忆」。身份来自 <code>CurrentUserHolder</code>，工具线程上已经能拿到登录用户。</li>
+  <li><strong>本轮消息列表。</strong>调试台、绑定调用、评测在调用 <code>generate</code> 之前，把短期窗口放在本轮用户消息前面。</li>
+</ol>
+<p>注入文本的形状：</p>
+<pre>关于当前用户的记忆（仅供回答时参考，不要主动复述整份清单）：
+- [偏好] 回答使用中文，结论放在前面
+- [资料] 称呼用林默
+用户要求记住、更正或忘掉时，调用 remember 或 forget。</pre>
+<p>记忆服务出错时，本轮省略这段，对话继续。日志记一条失败原因，不把数据库错误返回给用户。</p>
+
+<h3>6.1 工具</h3>
+<p>在现有工具列表里增加三个，和 <code>search_documents</code> 一样按当前身份执行。</p>
+<table>
+  <tr><th>工具</th><th>作用</th></tr>
+  <tr><td><code>remember</code></td><td>写入一条长期记忆。参数：正文、类型。超过 500 字或超过 200 条时返回失败原因</td></tr>
+  <tr><td><code>forget</code></td><td>按正文关键词软删除当前身份下匹配的记忆。没有匹配时说明没找到，不删别人的</td></tr>
+  <tr><td><code>list_memories</code></td><td>按关键词列出当前身份的记忆，给模型在提示词片段之外再查一条。只返回自己的</td></tr>
+</table>
+<p>系统提示词约束模型：只有用户明确说记住、更正或忘掉时才调用 <code>remember</code> 和 <code>forget</code>。闲聊、问答、知识库检索的结果不写入长期记忆。</p>
+
+<div class="review">
+  <strong>请确认：</strong>第一版不做「每轮结束自动总结并写入」。自动写入容易把闲聊变成事实。需要的话作为下一版，并且写入前在界面里给用户看一条待确认。
+</div>
+
+<h2>7. 界面和接口</h2>
+<p>侧栏增加「记忆」，试用用户可见。模型配置页对试用保持隐藏，这一点不变。</p>
+<p>页面只有自己的长期记忆：</p>
+<ul>
+  <li>列表：正文、类型、来源（我添加 / 对话记住）、更新时间、是否置顶。</li>
+  <li>操作：新增、编辑、置顶、删除。</li>
+  <li>空状态说明：在这里写下希望 Agent 一直记得的事实，或在对话里说「记住……」。</li>
+  <li>没有「查看他人」、没有租户全量、没有按用户筛选。</li>
+</ul>
+<p>接口都要求已登录或处于试用中。服务层再次按租户和 <code>subject_key</code> 过滤。</p>
+<table>
+  <tr><th>接口</th><th>行为</th></tr>
+  <tr><td><code>GET /api/memories</code></td><td>当前身份的未删除记忆，置顶在前</td></tr>
+  <tr><td><code>POST /api/memories</code></td><td>新增。来源记为 user</td></tr>
+  <tr><td><code>PATCH /api/memories/{id}</code></td><td>改正文、类型或置顶。不是自己的 id 返回不存在</td></tr>
+  <tr><td><code>DELETE /api/memories/{id}</code></td><td>软删除</td></tr>
+</table>
+<p>不新增「管理员可读全部记忆」的权限。进这个页面不需要 <code>tenant:admin</code>。</p>
+
+<h2>8. 和现有对象的关系</h2>
+<table>
+  <tr><th>现有对象</th><th>本方案中的位置</th></tr>
+  <tr><td>会话消息 <code>chat_messages</code></td><td>短期记忆的原文。增加读取窗口和主人校验</td></tr>
+  <tr><td>会话 <code>conversations</code></td><td>补 <code>subject_key</code>。标题、状态、统计不变</td></tr>
+  <tr><td>知识库</td><td>不改。文档检索仍然按成员和可见性取交集</td></tr>
+  <tr><td>访问次数 <code>visitor_days</code></td><td>不改。那是概览计数，不是记忆</td></tr>
+  <tr><td>工作区检查点</td><td>只用于失败后续跑。不作为跨会话记忆</td></tr>
+</table>
+
+<h2>9. 实现时会动到的位置</h2>
+<p>批准后按这些点改，避免另起一套运行时。</p>
+<ul>
+  <li><code>SchemaMigrator</code>：建 <code>memory_items</code>，给 <code>conversations</code> 加 <code>subject_key</code>。</li>
+  <li>新建记忆服务：身份键、窗口、增删改查、注入文本。</li>
+  <li><code>ToolRuntime.buildSystemPrompt</code> 和工具注册：挂上长期记忆片段和三个工具。</li>
+  <li><code>PlaygroundController</code>、<code>BoundAgentRuntime</code>、<code>EvalService</code>：生成前套上短期窗口。</li>
+  <li>会话创建：写入 <code>subject_key</code>。</li>
+  <li>前端：侧栏「记忆」页，以及 <code>app.js</code> 的缓存版本号。</li>
+</ul>
+
+<h2>10. 验收</h2>
+<ol>
+  <li>用户 A 在记忆页新增「称呼用林默」。用户 B 的列表里没有这条，用 id 访问得到不存在。</li>
+  <li>A 换一个新会话问「你怎么称呼我」，回答使用这条长期记忆。B 问同样的问题，不会出现林默。</li>
+  <li>A 在默认租户写下的记忆，切到演示租户后看不到。切回来仍然在。</li>
+  <li>两个试用浏览器各记一条，互相看不到。试用结束后登录，不会自动带上试用期间的记忆。</li>
+  <li>同一会话里第二轮能接上第一轮的上文。超过窗口的更早轮次不再整段送入。</li>
+  <li>对话里说「记住我喜欢先看结论」，记忆页出现来源为「对话记住」的一条。说「忘掉」之后，下一轮不再注入。</li>
+  <li>闲聊一轮之后，记忆条数不增加。</li>
+  <li>记忆库暂时不可用时，对话仍能完成，只是这一轮没有记忆片段。</li>
+  <li>平台管理员打开记忆页，只能看到自己的记录。</li>
+</ol>
+
+<div class="note">审查通过后按本文实现。若第 3.2 节的 Agent 隔离、或第 6.1 节的「不自动抽取」需要改，指出即可，我按修改后的口径再写代码。</div>
+
+</body>
+</html>

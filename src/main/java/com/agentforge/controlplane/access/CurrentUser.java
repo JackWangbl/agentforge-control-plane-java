@@ -22,6 +22,10 @@ public class CurrentUser {
     private final String roleName;
     private final List<String> permissions;
     private Instant trialExpiresAt;
+    /** 试用凭证。长期记忆用它把共用的 guest 账号拆开。 */
+    private String trialKey;
+    /** 这一轮对话的会话 id，只在生成回复期间有值，供记忆工具记下出处。 */
+    private String activeSessionId;
 
     public CurrentUser(Long id, String username, String displayName, Long tenantId, Long homeTenantId,
                        String tenantName, Long roleId, String roleName, List<String> permissions) {
@@ -43,6 +47,10 @@ public class CurrentUser {
     public Instant getTrialExpiresAt() { return trialExpiresAt; }
 
     public void setTrialExpiresAt(Instant trialExpiresAt) { this.trialExpiresAt = trialExpiresAt; }
+    public String getTrialKey() { return trialKey; }
+    public void setTrialKey(String trialKey) { this.trialKey = trialKey; }
+    public String getActiveSessionId() { return activeSessionId; }
+    public void setActiveSessionId(String activeSessionId) { this.activeSessionId = activeSessionId; }
 
     public boolean isPlatformAdmin() {
         return has("*", "platform:admin");

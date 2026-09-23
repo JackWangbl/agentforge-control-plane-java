@@ -51,6 +51,35 @@ public class SchemaMigrator implements ApplicationRunner {
                 }
                 log.info("visitor_days 改为按次累计，不再按人去重");
             }
+            if (!hasTable(conn, "memory_items")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE memory_items (
+                              id BIGINT NOT NULL AUTO_INCREMENT,
+                              tenant_id BIGINT NOT NULL,
+                              subject_key VARCHAR(120) NOT NULL,
+                              agent_id BIGINT NULL,
+                              content VARCHAR(500) NOT NULL,
+                              kind VARCHAR(24) NOT NULL,
+                              source VARCHAR(16) NOT NULL,
+                              pinned TINYINT(1) NOT NULL DEFAULT 0,
+                              session_id VARCHAR(80) NULL,
+                              created_at DATETIME(6) NOT NULL,
+                              updated_at DATETIME(6) NOT NULL,
+                              deleted_at DATETIME(6) NULL,
+                              PRIMARY KEY (id),
+                              KEY idx_memory_items_owner (tenant_id, subject_key, deleted_at)
+                            )
+                            """);
+                }
+                log.info("已创建 memory_items 表");
+            }
+            if (!hasColumn(conn, "conversations", "subject_key")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE conversations ADD COLUMN subject_key VARCHAR(120) NULL");
+                }
+                log.info("已为 conversations 表补齐 subject_key 列");
+            }
             if (!hasTable(conn, "http_agents")) {
                 try (Statement stmt = conn.createStatement()) {
                     stmt.execute("""
