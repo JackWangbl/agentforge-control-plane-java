@@ -7,7 +7,9 @@ import com.agentforge.controlplane.access.ResourceKind;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.Conversation;
 import com.agentforge.controlplane.observability.ObservabilityService;
+import com.agentforge.controlplane.observability.VisitService;
 import com.agentforge.controlplane.repo.ConversationRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,13 +30,15 @@ public class HealthController {
     private final ConversationRepository conversations;
     private final ResourceAccessService access;
     private final ResourceDumper dumper;
+    private final VisitService visits;
 
     public HealthController(ObservabilityService observability, ConversationRepository conversations,
-                            ResourceAccessService access, ResourceDumper dumper) {
+                            ResourceAccessService access, ResourceDumper dumper, VisitService visits) {
         this.observability = observability;
         this.conversations = conversations;
         this.access = access;
         this.dumper = dumper;
+        this.visits = visits;
     }
 
     @PublicEndpoint
@@ -53,7 +57,7 @@ public class HealthController {
     }
 
     @GetMapping("/api/dashboard")
-    public Map<String, Object> dashboard(CurrentUser user) {
+    public Map<String, Object> dashboard(CurrentUser user, HttpServletRequest request) {
         long total = conversations.countByTenantId(user.getTenantId());
         long completed = conversations.countByTenantIdAndStatus(user.getTenantId(), "completed");
         Double avg = conversations.avgLatencyByTenant(user.getTenantId());
@@ -68,7 +72,10 @@ public class HealthController {
                 sessions.add(dumper.dump(row, user));
             }
         }
+        VisitService.VisitCounts visitors = visits.recordAndCount(user, request);
         Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("visitors_total", visitors.total());
+        metrics.put("visitors_today", visitors.today());
         metrics.put("requests", total * 2568);
         metrics.put("success_rate", total == 0 ? 0 : Math.round(completed * 1000.0 / total) / 10.0);
         metrics.put("avg_latency_ms", Math.round(avg == null ? 0 : avg));

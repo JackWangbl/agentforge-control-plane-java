@@ -30,6 +30,27 @@ public class SchemaMigrator implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         try (Connection conn = dataSource.getConnection()) {
+            if (!hasTable(conn, "visitor_days")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE visitor_days (
+                              id BIGINT NOT NULL AUTO_INCREMENT,
+                              visitor_key VARCHAR(120) NOT NULL,
+                              visited_on DATE NOT NULL,
+                              created_at DATETIME(6) NOT NULL,
+                              PRIMARY KEY (id),
+                              KEY idx_visitor_days_day (visited_on)
+                            )
+                            """);
+                }
+                log.info("已创建 visitor_days 表");
+            } else if (hasIndex(conn, "visitor_days", "uk_visitor_days_key_day")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE visitor_days DROP INDEX uk_visitor_days_key_day");
+                    stmt.execute("ALTER TABLE visitor_days ADD INDEX idx_visitor_days_day (visited_on)");
+                }
+                log.info("visitor_days 改为按次累计，不再按人去重");
+            }
             if (!hasTable(conn, "http_agents")) {
                 try (Statement stmt = conn.createStatement()) {
                     stmt.execute("""
@@ -333,6 +354,18 @@ public class SchemaMigrator implements ApplicationRunner {
         try (ResultSet rs = meta.getTables(catalog, null, table, new String[]{"TABLE"})) {
             return rs.next();
         }
+    }
+
+    private static boolean hasIndex(Connection conn, String table, String index) throws Exception {
+        DatabaseMetaData meta = conn.getMetaData();
+        try (ResultSet rs = meta.getIndexInfo(conn.getCatalog(), null, table, false, false)) {
+            while (rs.next()) {
+                if (index.equalsIgnoreCase(rs.getString("INDEX_NAME"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean hasColumn(Connection conn, String table, String column) throws Exception {

@@ -1,0 +1,30 @@
+[Unit]
+Description=AgentForge Control Plane (Java)
+After=network-online.target mysqld.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agentforge
+Group=agentforge
+WorkingDirectory=/opt/agentforge-control-plane-java
+Environment=SERVER_ADDRESS=0.0.0.0
+Environment=SERVER_PORT=80
+Environment=SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=8
+Environment=SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2
+ExecStart=/usr/bin/java -Xms64m -Xmx256m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -Xss512k -XX:+UseSerialGC -jar /opt/agentforge-control-plane-java/app.jar
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+TimeoutStopSec=30
+MemoryMax=640M
+MemorySwapMax=512M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/agentforge-control-plane-java
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

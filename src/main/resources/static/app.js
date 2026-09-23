@@ -126,7 +126,9 @@ async function afterChange(page, message){
 function head(page, action=''){const m=pageMeta[page];return `<div class="page-head"><div><div class="eyebrow">${m[0]}</div><h1>${m[1]}</h1><p>${m[2]}</p></div>${action}</div>`}
 function pill(s){return `<span class="pill ${s}">${statusText[s]||s}</span>`}
 async function dashboard(){const d=await api('/api/dashboard');const m=d.metrics;return `${head('sessions', pageTools()).replace('会话查询','运行概览').replace('检索和审计所有 Agent 会话记录','实时掌握 Agent 服务的运行状态与业务表现')}
-<div class="metric-grid">
+<div class="visit-grid">
+${metric('总访问次数',fmt(m.visitors_total||0),'累计','每次打开概览','#2367e8','次')}${metric('当日访问次数',fmt(m.visitors_today||0),'今天','北京时间','#16a56a','日')}
+</div><div class="metric-grid">
 ${metric('今日请求',fmt(m.requests),'↗ 12.6%','较昨日','#2367e8','↗')}${metric('成功率',m.success_rate+'%','↗ 1.2%','近 24 小时','#16a56a','✓')}${metric('平均延迟',(m.avg_latency_ms/1000).toFixed(2)+'s','↘ 8.3%','响应更快','#7457e8','⌁')}${metric('Token 消耗',fmt(m.tokens),'↗ 6.8%','今日累计','#e49b18','T')}
 </div><div class="dashboard-grid"><section class="panel"><div class="panel-title"><h3>请求趋势</h3><small>近 24 小时 · 每小时</small></div><div class="chart-wrap">${d.activity.map(v=>`<i class="bar" style="height:${v/3.8}px"></i>`).join('')}</div></section><section class="panel"><div class="panel-title"><h3>Agent 健康度</h3><small>${d.agents.length} 个在线</small></div><div class="agent-list">${d.agents.map((a,i)=>`<div class="agent-row"><div class="agent-icon">${a.name[0]}</div><div><b>${a.name}</b><small>${a.model_name} · ${a.version}</small><div class="progress"><i style="width:${a.success_rate}%"></i></div></div><span class="score">${a.success_rate}%</span></div>`).join('')}</div></section></div>${sessionTable(d.recent_sessions,true)}`}
 function metric(label,value,trend,sub,color,icon){return `<div class="metric-card" style="--accent:${color}"><div class="metric-label">${label}<span class="metric-icon">${icon}</span></div><div class="metric-value">${value}</div><div class="trend">${trend}<span>${sub}</span></div></div>`}
