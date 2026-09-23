@@ -1,11 +1,14 @@
 package com.agentforge.controlplane.agent;
 
+import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.OpenCliEndpoint;
 import com.agentforge.controlplane.domain.SandboxPolicy;
 import com.agentforge.controlplane.domain.Skill;
+import com.agentforge.controlplane.rag.KnowledgeAccess;
 import com.agentforge.controlplane.repo.HttpAgentRepository;
+import com.agentforge.controlplane.repo.KnowledgeBaseRepository;
 import com.agentforge.controlplane.repo.McpServerRepository;
 import com.agentforge.controlplane.repo.OpenCliEndpointRepository;
 import com.agentforge.controlplane.repo.SandboxPolicyRepository;
@@ -28,15 +31,20 @@ public class BindingValidator {
     private final OpenCliEndpointRepository openclis;
     private final SandboxPolicyRepository sandboxes;
     private final HttpAgentRepository httpAgents;
+    private final KnowledgeBaseRepository knowledge;
+    private final KnowledgeAccess knowledgeAccess;
     private final ToolRuntime tools;
 
     public BindingValidator(SkillRepository skills, McpServerRepository mcps, OpenCliEndpointRepository openclis,
-                            SandboxPolicyRepository sandboxes, HttpAgentRepository httpAgents, ToolRuntime tools) {
+                            SandboxPolicyRepository sandboxes, HttpAgentRepository httpAgents,
+                            KnowledgeBaseRepository knowledge, KnowledgeAccess knowledgeAccess, ToolRuntime tools) {
         this.skills = skills;
         this.mcps = mcps;
         this.openclis = openclis;
         this.sandboxes = sandboxes;
         this.httpAgents = httpAgents;
+        this.knowledge = knowledge;
+        this.knowledgeAccess = knowledgeAccess;
         this.tools = tools;
     }
 
@@ -67,6 +75,17 @@ public class BindingValidator {
             throw ApiException.unprocessable("接入外部 Agent 时只能勾选 1 个 HTTP 接口");
         }
         validateIds(httpAgents.findAllById(orEmpty(httpAgentIds)), httpAgentIds, tenantId, "HTTP 接口");
+    }
+
+    public void validateKnowledge(CurrentUser user, List<Long> knowledgeIds, List<Long> previousIds, List<Long> httpAgentIds) {
+        if (httpAgentIds != null && !httpAgentIds.isEmpty() && knowledgeIds != null && !knowledgeIds.isEmpty()) {
+            throw ApiException.unprocessable("外部 HTTP Agent 不能绑定知识库");
+        }
+        knowledgeAccess.assertCanBind(user, knowledgeIds, previousIds);
+    }
+
+    public List<Long> retainVisibleKnowledge(CurrentUser user, List<Long> knowledgeIds) {
+        return knowledgeAccess.retainVisible(user, knowledgeIds);
     }
 
     public void validateFlowTools(Long tenantId, List<Long> mcpIds, Long sandboxId,

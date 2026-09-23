@@ -14,10 +14,14 @@ import com.agentforge.controlplane.repo.RoleRepository;
 import com.agentforge.controlplane.repo.TenantRepository;
 import com.agentforge.controlplane.repo.UserRepository;
 import com.agentforge.controlplane.util.Jsons;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,6 +49,25 @@ public class AuthController {
         this.users = users;
         this.roles = roles;
         this.tenants = tenants;
+    }
+
+    public static final String TRIAL_COOKIE = "af_trial";
+
+    @PublicEndpoint
+    @PostMapping("/api/auth/trial")
+    public Map<String, Object> trial(HttpServletRequest request, HttpServletResponse response) {
+        AuthService.TrialGrant grant = auth.beginTrial(trialCookie(request));
+        ResponseCookie cookie = ResponseCookie.from(TRIAL_COOKIE, grant.trialKey())
+                .httpOnly(true)
+                .path("/")
+                .maxAge(Duration.ofDays(7))
+                .sameSite("Lax")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        return Jsons.ordered(
+                "token", grant.token(),
+                "expires_at", grant.expiresAt(),
+                "trial", true);
     }
 
     @PublicEndpoint
@@ -88,6 +112,8 @@ public class AuthController {
         data.put("role_name", user.getRoleName());
         data.put("permissions", user.getPermissions());
         data.put("is_platform_admin", user.isPlatformAdmin());
+        data.put("trial", user.isTrial());
+        data.put("trial_expires_at", user.getTrialExpiresAt());
         data.put("tenants", tenantRows);
         data.put("catalog", Permissions.CATALOG);
         return data;
@@ -216,5 +242,18 @@ public class AuthController {
     private static Map<String, Object> dumpTenant(Tenant row) {
         return Jsons.ordered("id", row.getId(), "slug", row.getSlug(), "name", row.getName(),
                 "description", row.getDescription());
+    }
+
+    private static String trialCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return "";
+        }
+        for (Cookie cookie : cookies) {
+            if (TRIAL_COOKIE.equals(cookie.getName())) {
+                return cookie.getValue() == null ? "" : cookie.getValue().strip();
+            }
+        }
+        return "";
     }
 }

@@ -12,11 +12,15 @@ import com.agentforge.controlplane.domain.Dataset;
 import com.agentforge.controlplane.domain.EvaluationRun;
 import com.agentforge.controlplane.domain.Experiment;
 import com.agentforge.controlplane.domain.HttpAgent;
+import com.agentforge.controlplane.domain.KnowledgeBase;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.SandboxPolicy;
 import com.agentforge.controlplane.domain.Skill;
 import com.agentforge.controlplane.domain.Trace;
+import com.agentforge.controlplane.rag.KnowledgeAccess;
+import com.agentforge.controlplane.repo.KnowledgeBaseRepository;
+import com.agentforge.controlplane.repo.KnowledgeDocumentRepository;
 import com.agentforge.controlplane.runtime.McpStreamClient;
 import com.agentforge.controlplane.runtime.OpenCliRuntime;
 import com.agentforge.controlplane.runtime.SandboxRuntime;
@@ -53,11 +57,19 @@ public class ResourceDumper {
     private final ResourceAccessService access;
     private final ToolRuntime tools;
     private final SandboxRuntime sandbox;
+    private final KnowledgeBaseRepository knowledgeBases;
+    private final KnowledgeDocumentRepository knowledgeDocuments;
+    private final KnowledgeAccess knowledgeAccess;
 
-    public ResourceDumper(ResourceAccessService access, ToolRuntime tools, SandboxRuntime sandbox) {
+    public ResourceDumper(ResourceAccessService access, ToolRuntime tools, SandboxRuntime sandbox,
+                          KnowledgeBaseRepository knowledgeBases, KnowledgeDocumentRepository knowledgeDocuments,
+                          KnowledgeAccess knowledgeAccess) {
         this.access = access;
         this.tools = tools;
         this.sandbox = sandbox;
+        this.knowledgeBases = knowledgeBases;
+        this.knowledgeDocuments = knowledgeDocuments;
+        this.knowledgeAccess = knowledgeAccess;
     }
 
     public Map<String, Object> dump(Object row) {
@@ -145,6 +157,23 @@ public class ResourceDumper {
             data.put("bound_skills", boundSkills);
             data.put("bound_mcps", boundMcps);
             data.put("bound_http_agents", boundHttpAgents);
+            List<Map<String, Object>> boundKnowledge = new ArrayList<>();
+            CurrentUser viewer = CurrentUserHolder.get();
+            for (KnowledgeBase base : knowledgeBases.findAllById(agent.getKnowledgeIds() == null ? List.of() : agent.getKnowledgeIds())) {
+                if (agent.getTenantId() != null && !agent.getTenantId().equals(base.getTenantId())) {
+                    continue;
+                }
+                if (viewer != null && !knowledgeAccess.canViewInConsole(viewer, base)) {
+                    continue;
+                }
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", base.getId());
+                item.put("name", base.getName());
+                item.put("ready_documents", knowledgeDocuments.countByKnowledgeIdAndStatus(base.getId(), "ready"));
+                boundKnowledge.add(item);
+            }
+            data.put("knowledge_ids", agent.getKnowledgeIds());
+            data.put("bound_knowledge", boundKnowledge);
             data.put("workspace", agent.getWorkspace() == null ? "" : agent.getWorkspace());
             SandboxPolicy box = tools.selectedSandbox(agent);
             data.put("sandbox_name", box == null ? "" : box.getName());

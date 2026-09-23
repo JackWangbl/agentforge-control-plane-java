@@ -1,5 +1,7 @@
 package com.agentforge.controlplane.agent;
 
+import com.agentforge.controlplane.access.CurrentUser;
+import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.util.Jsons;
@@ -59,6 +61,7 @@ public class AgentScopeRuntime implements ChatTurnRunner {
     public ChatReply generate(Agent agent, ModelConfig model, List<Map<String, Object>> history,
                               String sessionId, boolean resume, boolean forceRerunTools) {
         String lastUser = lastUserContent(history);
+        CurrentUser caller = CurrentUserHolder.get();
         String credential = resolveCredential(model);
         List<ToolSpec> specs = tools.agentTools(agent);
         if (credential.isBlank()) {
@@ -114,11 +117,11 @@ public class AgentScopeRuntime implements ChatTurnRunner {
         try {
             flush(agent, sessionId, runId, "running", next, stepHolder, working, pending, doneIds, traces, usage, "", lastUser);
             if ("tool".equals(next) && !pending.isEmpty()) {
-                stepHolder = runPending(agent, pending, doneIds, forceRerunTools, working, traces, stepHolder,
+                stepHolder = runPending(agent, caller, pending, doneIds, forceRerunTools, working, traces, stepHolder,
                         sessionId, runId, usage, lastUser);
             }
             OpenAIChatModel chatModel = buildModel(model, credential);
-            Toolkit toolkit = buildToolkit(agent, specs, traces);
+            Toolkit toolkit = buildToolkit(agent, caller, specs, traces);
             int maxIters = specs.stream().map(ToolSpec::name)
                     .anyMatch(name -> name.startsWith("browser_") || name.startsWith("opencli_")) ? 8 : 4;
             ReActAgent react = ReActAgent.builder()
@@ -222,15 +225,15 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                 "detail", text);
     }
 
-    private Toolkit buildToolkit(Agent agent, List<ToolSpec> specs, List<Map<String, Object>> traces) {
+    private Toolkit buildToolkit(Agent agent, CurrentUser caller, List<ToolSpec> specs, List<Map<String, Object>> traces) {
         Toolkit toolkit = new Toolkit();
         for (ToolSpec spec : specs) {
             toolkit.registerAgentTool(new DelegatingTool(spec, args -> {
                 long started = System.nanoTime();
                 boolean allowed = tools.agentAllowsTool(agent, spec.name());
-                String output = allowed
+                String output = CurrentUserHolder.call(caller, () -> allowed
                         ? tools.executeTool(spec.name(), args, agent)
-                        : Jsons.json(Map.of("error", "Agent 未绑定工具 " + spec.name()));
+                        : Jsons.json(Map.of("error", "Agent 未绑定工具 " + spec.name())));
                 int duration = Math.max(1, (int) ((System.nanoTime() - started) / 1_000_000));
                 traces.add(debugSpan("mcp." + spec.name(), "调用工具 " + spec.name(), "tool",
                         allowed ? "ok" : "error", duration, output));
@@ -253,7 +256,7 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                 .build();
     }
 
-    private int runPending(Agent agent, List<Map<String, Object>> pending, List<String> doneIds,
+    private int runPending(Agent agent, CurrentUser caller, List<Map<String, Object>> pending, List<String> doneIds,
                            boolean forceRerun, List<Map<String, Object>> working,
                            List<Map<String, Object>> traces, int step, String sessionId, String runId,
                            Map<String, Object> usage, String lastUser) {
@@ -272,10 +275,11 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                 continue;
             }
             Map<String, Object> args = ToolRuntime.parseToolArguments(fn.get("arguments"));
-            boolean allowed = tools.agentAllowsTool(agent, name);
-            String output = allowed
-                    ? tools.executeTool(name, args, agent)
-                    : Jsons.json(Map.of("error", "Agent 未绑定工具 " + name));
+            String toolName = name;
+            boolean allowed = tools.agentAllowsTool(agent, toolName);
+            String output = CurrentUserHolder.call(caller, () -> allowed
+                    ? tools.executeTool(toolName, args, agent)
+                    : Jsons.json(Map.of("error", "Agent 未绑定工具 " + toolName)));
             traces.add(debugSpan("mcp." + name, "调用工具 " + name, "tool", allowed ? "ok" : "error", 8, output));
             if (allowed && FlowRuntime.isFlowTool(name)) {
                 traces.addAll(FlowRuntime.flowStepSpans(name, output));

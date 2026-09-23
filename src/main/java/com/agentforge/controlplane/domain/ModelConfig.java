@@ -35,6 +35,10 @@ public class ModelConfig extends TenantOwnedEntity {
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
 
+    /** chat、embedding 或 rerank。旧数据缺列时由启动迁移补成 chat。 */
+    @Column(name = "purpose", length = 20, nullable = false)
+    private String purpose = "chat";
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getProvider() { return provider; }
@@ -51,4 +55,6 @@ public class ModelConfig extends TenantOwnedEntity {
     public void setTemperature(double temperature) { this.temperature = temperature; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public String getPurpose() { return purpose == null || purpose.isBlank() ? "chat" : purpose; }
+    public void setPurpose(String purpose) { this.purpose = purpose == null || purpose.isBlank() ? "chat" : purpose; }
 }

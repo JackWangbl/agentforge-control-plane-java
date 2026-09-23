@@ -51,4 +51,16 @@ public class ApiException extends RuntimeException {
     public static ApiException badGateway(String message) {
         return new ApiException(HttpStatus.BAD_GATEWAY, message);
     }
+
+    public static ApiException payloadTooLarge(String message) {
+        return new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, message);
+    }
+
+    public static ApiException unsupportedMedia(String message) {
+        return new ApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, message);
+    }
+
+    public static ApiException unavailable(String message) {
+        return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, message);
+    }
 }

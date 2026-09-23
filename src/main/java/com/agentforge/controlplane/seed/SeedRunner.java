@@ -1,5 +1,6 @@
 package com.agentforge.controlplane.seed;
 
+import com.agentforge.controlplane.access.AuthService;
 import com.agentforge.controlplane.access.PasswordHasher;
 import com.agentforge.controlplane.agent.ToolRuntime;
 import com.agentforge.controlplane.domain.Agent;
@@ -41,7 +42,17 @@ public class SeedRunner implements ApplicationRunner {
             "agent:read", "agent:write", "workflow:read", "workflow:write",
             "eval:read", "eval:run", "experiment:read", "experiment:write",
             "mcp:read", "mcp:write", "skill:read", "model:read",
+            "knowledge:read", "knowledge:write",
             "sandbox:read", "session:read", "session:write");
+
+    /** 试用可以进入除模型配置以外的页面。不给 tenant:admin，避免看到模型密钥。 */
+    private static final List<String> TRIAL_PERMS = List.of(
+            "agent:read", "agent:write", "workflow:read", "workflow:write",
+            "eval:read", "eval:run", "experiment:read", "experiment:write",
+            "mcp:read", "mcp:write", "skill:read", "skill:write",
+            "knowledge:read", "knowledge:write",
+            "sandbox:read", "sandbox:write", "session:read", "session:write",
+            "trace:read", "role:read", "user:read", "vector:read");
 
     private final TenantRepository tenants;
     private final RoleRepository roles;
@@ -150,11 +161,21 @@ public class SeedRunner implements ApplicationRunner {
         if (!granted.contains("experiment:write")) {
             granted.add("experiment:write");
         }
+        if (!granted.contains("knowledge:read")) {
+            granted.add("knowledge:read");
+        }
+        if (!granted.contains("knowledge:write")) {
+            granted.add("knowledge:write");
+        }
         dev.setPermissions(granted);
         roles.save(dev);
 
         getOrCreateUser(def.getId(), "linmo", "林默", "admin123", admin.getId());
         getOrCreateUser(def.getId(), "developer", "陈开发", "dev123", dev.getId());
+        Role trial = getOrCreateRole(def.getId(), "试用访客", "未登录试用，不能查看模型配置", TRIAL_PERMS);
+        trial.setPermissions(new ArrayList<>(TRIAL_PERMS));
+        roles.save(trial);
+        getOrCreateUser(def.getId(), AuthService.TRIAL_USER, "试用访客", AuthService.newToken(), trial.getId());
         getOrCreateUser(def.getId(), "auditor", "周审计", "audit123", auditor.getId());
         getOrCreateUser(demo.getId(), "demo", "演示管理员", "demo123", demoRole.getId());
 

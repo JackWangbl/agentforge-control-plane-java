@@ -19,8 +19,9 @@ function apiError(err){
   }catch(e){}
   return raw.slice(0,180);
 }
-const authState = {token: localStorage.getItem('af_token')||'', me:null};
-const pagePerm = {dashboard:'',sessions:'session:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',models:'model:read',sandboxes:'sandbox:read',roles:'role:read'};
+const authState = {token: localStorage.getItem('af_token')||'', me:null, trialExpiresAt:''};
+let trialTimer=0;
+const pagePerm = {dashboard:'',sessions:'session:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',knowledge:'knowledge:read',models:'model:read',vectors:'tenant:admin',sandboxes:'sandbox:read',roles:'role:read'};
 function can(perm){
   if(!perm) return !!authState.me;
   const granted=authState.me?.permissions||[];
@@ -39,12 +40,14 @@ function authHeaders(extra={}){
   if(tenant) headers['X-Tenant-Id']=tenant;
   return headers;
 }
-function showLogin(message=''){
+function showLogin(message='', options={}){
   const gate=$('#loginGate');
   if(!gate) return;
   gate.hidden=false;
   const err=$('#loginError');
   if(err){err.hidden=!message;err.textContent=message||''}
+  const cont=$('#trialContinue');
+  if(cont) cont.hidden=options.allowContinue!==true;
 }
 function hideLogin(){const gate=$('#loginGate'); if(gate) gate.hidden=true}
 async function logout(){
@@ -69,10 +72,14 @@ async function logout(){
 function applyMe(me){
   authState.me=me;
   if($('#userName')) $('#userName').textContent=me.display_name||me.username;
-  if($('#userRole')) $('#userRole').textContent=(me.tenant_name||'')+' · '+(me.role_name||'成员');
+  if($('#userRole')) $('#userRole').textContent=me.trial?'试用中，5 分钟后需要登录':((me.tenant_name||'')+' · '+(me.role_name||'成员'));
   if($('#userAvatar')) $('#userAvatar').textContent=(me.display_name||me.username||'?').slice(0,1);
+  if($('#logoutBtn')) $('#logoutBtn').textContent=me.trial?'登录':'退出登录';
+  if($('#logoutTopBtn')) $('#logoutTopBtn').textContent=me.trial?'登录':'退出登录';
+  if(!me.trial) stopTrialClock();
   document.querySelectorAll('.nav-item').forEach(btn=>{
-    btn.hidden=!can(pagePerm[btn.dataset.page]||'');
+    const page=btn.dataset.page;
+    btn.hidden=me.trial?page==='models':!can(pagePerm[page]||'');
   });
   const sw=$('#tenantSwitch');
   if(sw){
@@ -84,7 +91,15 @@ function applyMe(me){
 const api = async (path, options={}) => {
   options.headers = authHeaders(options.headers||{});
   const r = await fetch(path, options);
-  if(r.status===401){ authState.token=''; localStorage.removeItem('af_token'); showLogin('请先登录'); throw new Error('请先登录'); }
+  if(r.status===401){
+    let message='请先登录';
+    try{ const data=JSON.parse(await r.text()); if(typeof data.detail==='string'&&data.detail) message=data.detail; }catch(e){}
+    authState.token='';
+    localStorage.removeItem('af_token');
+    stopTrialClock();
+    showLogin(message);
+    throw new Error(message);
+  }
   if(!r.ok) throw new Error(await r.text());
   if(r.status===204) return {};
   const text=await r.text();
@@ -93,9 +108,9 @@ const api = async (path, options={}) => {
 const fmt = n => n >= 1000000 ? (n/1000000).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : n;
 const dt = value => new Date(value+'Z').toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 const statusText = {completed:'已完成',running:'运行中',failed:'失败',ok:'正常',error:'异常',published:'已发布',draft:'草稿',queued:'排队中',passed:'通过',skipped:'跳过',cancelled:'已取消',paused:'已暂停'};
-const titles = {dashboard:'运行概览',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'Agent 编排',mcp:'MCP 工具',skills:'Skill 管理',models:'模型配置',sandboxes:'沙箱管理',roles:'权限管理'};
+const titles = {dashboard:'运行概览',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'Agent 编排',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
 const pageMeta = {
-  sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], models:['MODEL GATEWAY','模型配置','填写模型供应商、API 密钥与推理参数'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
+  sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
 };
 let currentPage='dashboard', currentParam='';
 function pageTools(extra=''){
@@ -157,7 +172,8 @@ function resourceActions(page,x){
     return `<div class="card-menu"><button type="button" class="card-menu-btn" aria-label="更多操作" aria-haspopup="menu" aria-expanded="false" onclick="toggleCardMenu(event,this)">⋮</button><div class="card-menu-list" role="menu">${items.join('')}</div></div>`;
   }
   const primary=page==='models'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用模型'"} onclick="testModel(${x.id})">连通测试</button>`:page==='mcp'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用 MCP'"} onclick="testMcp(${x.id})">${x.transport==='opencli'?'探测浏览器':'探测工具'}</button>`:page==='http-agents'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用接口'"} onclick="testHttpAgent(${x.id})">试连</button>`:page==='skills'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用 Skill'"} onclick="testSkill(${x.id})">预览指令</button>`:page==='sandboxes'?`<button type="button" class="btn primary resource-edit" ${x.enabled?'':"disabled title='请先启用沙箱'"} onclick="testSandbox(${x.id})">试跑代码</button>`:'';
-  return `${primary}${writable?`<button type="button" class="btn ghost resource-edit" onclick="openEdit('${page}',${x.id})">编辑</button><button type="button" class="btn ghost resource-edit danger" onclick="removeResource('${page}',${x.id})">删除</button>`:'<span class="muted">只读</span>'}`
+  const copy=page==='models'&&writable?`<button type="button" class="btn ghost resource-edit" onclick="copyModel(${x.id})">复制</button>`:'';
+  return `${primary}${copy}${writable?`<button type="button" class="btn ghost resource-edit" onclick="openEdit('${page}',${x.id})">编辑</button><button type="button" class="btn ghost resource-edit danger" onclick="removeResource('${page}',${x.id})">删除</button>`:'<span class="muted">只读</span>'}`
 }
 function toggleCardMenu(event,btn){
   event.stopPropagation();
@@ -207,10 +223,11 @@ function agentTags(x){
     return `<div class="agent-tags"><i class="tag http">外部接入</i>${names.map(name=>`<i class="tag tool">${escapeHtml(name)}</i>`).join('')}</div>`;
   }
   const skills=x.bound_skills||(x.skill_ids||[]).map(id=>resourceStore.skills&&resourceStore.skills[id]).filter(Boolean);
+  const knowledge=x.bound_knowledge||[];
   const mcps=x.bound_mcps||(x.mcp_ids||[]).map(id=>resourceStore.mcp&&resourceStore.mcp[id]).filter(Boolean);
   const tools=mcps.flatMap(item=>(item.tools||[]).map(tool=>tool.name||tool));
-  if(!skills.length && !tools.length && !mcps.length) return `<div class="agent-tags"><i class="tag empty">未关联技能或工具</i></div>`;
-  return `<div class="agent-tags">${skills.map(item=>`<i class="tag skill">${escapeHtml(item.name||item)}</i>`).join('')}${tools.length?tools.map(name=>`<i class="tag tool">${escapeHtml(name)}</i>`).join(''):mcps.map(item=>`<i class="tag tool">${escapeHtml(item.name)}</i>`).join('')}</div>`;
+  if(!skills.length && !tools.length && !mcps.length && !knowledge.length) return `<div class="agent-tags"><i class="tag empty">未关联技能或工具</i></div>`;
+  return `<div class="agent-tags">${skills.map(item=>`<i class="tag skill">${escapeHtml(item.name||item)}</i>`).join('')}${knowledge.map(item=>`<i class="tag tool">${escapeHtml(item.name||item)}</i>`).join('')}${tools.length?tools.map(name=>`<i class="tag tool">${escapeHtml(name)}</i>`).join(''):mcps.map(item=>`<i class="tag tool">${escapeHtml(item.name)}</i>`).join('')}</div>`;
 }
 async function iam(){
   const [roles, users, me] = await Promise.all([api('/api/roles'), api('/api/users'), api('/api/auth/me')]);
@@ -344,7 +361,7 @@ function evalAgentRuns(){
 }
 async function evaluations(){
   const [datasets,runs,agents,models,guide]=await Promise.all([
-    api('/api/datasets'),api('/api/evaluations'),api('/api/agents'),api('/api/models'),
+    api('/api/datasets'),api('/api/evaluations'),api('/api/agents'),api('/api/models').catch(()=>[]),
     api('/api/evaluations/scoring-guide').catch(()=>({guides:[]}))
   ]);
   evalState.catalog={datasets,runs,agents,models};
@@ -1115,8 +1132,8 @@ async function studio(){
 }
 let pgCatalog={agents:[],models:[],mcps:[],skills:[]};
 async function playground(selectedAgent=''){
-  const [agents,allModels,mcps,skills,httpAgents,expRows]=await Promise.all([api('/api/agents'),api('/api/models'),api('/api/mcp'),api('/api/skills'),api('/api/http-agents').catch(()=>[]),api('/api/experiments').catch(()=>[])]);
-  const models=allModels.filter(x=>x.enabled);
+  const [agents,allModels,mcps,skills,httpAgents,expRows]=await Promise.all([api('/api/agents'),api('/api/models').catch(()=>[]),api('/api/mcp'),api('/api/skills'),api('/api/http-agents').catch(()=>[]),api('/api/experiments').catch(()=>[])]);
+  const models=allModels||[];
   const liveMcps=(mcps||[]).filter(x=>x.enabled!==false);
   const liveSkills=(skills||[]).filter(x=>x.enabled!==false);
   const liveHttp=(httpAgents||[]).filter(x=>x.enabled!==false);
@@ -1124,28 +1141,25 @@ async function playground(selectedAgent=''){
   pgCatalog={agents,models,mcps:liveMcps,skills:liveSkills,httpAgents:liveHttp,experiments};
   if(selectedAgent) chatState.agentId=String(selectedAgent);
   if(!chatState.agentId && agents[0]) chatState.agentId=String(agents[0].id);
-  if(!chatState.modelId && models[0]) chatState.modelId=String(models[0].id);
   if(chatState.experimentId && !experiments.some(x=>String(x.id)===String(chatState.experimentId))) chatState.experimentId='';
   await restoreAgentChat(chatState.agentId);
   const agent=agents.find(x=>String(x.id)===String(chatState.agentId))||agents[0];
-  const model=models.find(x=>String(x.id)===String(chatState.modelId))||models[0];
   const expOptions=experiments.map(x=>{
     const live=x.status==='running';
     const mark=live?'进行中':(statusText[x.status]||x.status);
     return `<option value="${x.id}" ${String(x.id)===String(chatState.experimentId)?'selected':''}>${escapeHtml(x.name)}（${mark}）</option>`;
   }).join('');
   const http=isHttpBackedAgent(agent);
-  const canSend=http||models.length>0;
-  const peerMeta=http?agentRuntimeLabel(agent):(model?model.name+' · '+model.model_id:'请选择模型');
+  const canSend=http||!!(agent&&agent.model_name);
+  const peerMeta=http?agentRuntimeLabel(agent):playgroundModelLabel(agent);
   return `<div class="pg-page">${head('playground', pageTools('<button class="btn ghost" type="button" id="resumeChat" hidden>从失败处继续</button><button class="btn ghost" type="button" id="clearChat">新开会话</button>'))}
 <div class="pg-controls">
   <label class="pg-field">智能体<select id="runAgent" class="select">${agents.map(x=>`<option value="${x.id}" ${String(x.id)===String(agent&&agent.id)?'selected':''}>${x.name}</option>`).join('')||'<option value="">暂无智能体</option>'}</select></label>
-  <label class="pg-field" id="runModelField" ${http?'hidden':''}>模型<select id="runModel" class="select">${models.map(x=>`<option value="${x.id}" ${String(x.id)===String(model&&model.id)?'selected':''}>${x.name}</option>`).join('')||'<option value="">暂无可用模型</option>'}</select></label>
   <label class="pg-field">是否分流<select id="runExperiment" class="select"><option value="">不分流，使用所选智能体</option>${expOptions}</select></label>
   <label class="pg-field" id="runUserWrap" hidden>用户 ID<input id="runUserKey" value="${escapeHtml(chatState.experimentUserKey||'')}" placeholder="例如 u_1001"></label>
   <div class="pg-bind" id="pgBindHint"></div>
   <div class="exp-hint" id="expHint"></div>
-  ${models.length||http?'':`<div class="inline-warning" id="pgModelWarning">没有已启用的模型，请先到模型配置中启用。</div>`}
+  ${http||(agent&&agent.model_name)?'':`<div class="inline-warning" id="pgModelWarning">这个 Agent 还没有绑定模型，请到 Agent 管理里配置。</div>`}
 </div>
 <div class="pg-shell">
   <div class="pg-split">
@@ -1596,10 +1610,12 @@ function bindPicker(kind, name, rows, selected, emptyPage, emptyLabel, single){
       ? `${mcpTransportLabel(x.transport)} · ${x.endpoint||'MCP'} · ${tools.length||x.tools_count||0} 个工具`
       : kind==='http'
       ? `${httpProtocolLabel(x.protocol)} · ${x.endpoint||''}`
+      : kind==='knowledge'
+      ? `${x.vector_store_name||'Milvus'} · 就绪 ${x.ready_documents||0}`
       : `${x.description||'Skill'} · ${x.version||''}`;
     return `<label class="bind-option" data-search="${escapeHtml(`${x.name} ${meta}`.toLowerCase())}">
       <input type="${type}" name="${name}" value="${x.id}" ${ids.includes(x.id)?'checked':''}>
-      <span class="bind-icon${kind==='skill'?' skill':''}">${kind==='skill'?'✦':kind==='http'?'↗':'⚙'}</span>
+      <span class="bind-icon${kind==='skill'?' skill':''}">${kind==='skill'?'✦':kind==='http'?'↗':kind==='knowledge'?'▤':'⚙'}</span>
       <span class="bind-copy"><b>${escapeHtml(x.name)}</b><small>${escapeHtml(meta)}</small></span>
     </label>`;
   }).join('');
@@ -1614,7 +1630,7 @@ function bindPicker(kind, name, rows, selected, emptyPage, emptyLabel, single){
     </div>
   </div>`;
 }
-function agentFormHtml(row, models, mcpRows, skillRows, sandboxRows, httpRows){
+function agentFormHtml(row, models, mcpRows, skillRows, sandboxRows, httpRows, knowledgeRows){
   const httpOn=isHttpBackedAgent(row);
   const modelOptions=`<option value="">不使用本平台模型</option>`+models.map(m=>`<option value="${escapeHtml(m.name)}" ${row&&row.model_name===m.name?'selected':''}>${escapeHtml(m.name)} · ${escapeHtml(m.model_id)}</option>`).join('');
   const sandboxOptions=`<option value="">不使用沙箱</option>`+(sandboxRows||[]).filter(x=>x.enabled!==false||Number(x.id)===Number(row&&row.sandbox_id)).map(x=>`<option value="${x.id}" ${Number(row&&row.sandbox_id)===Number(x.id)?'selected':''}>${escapeHtml(x.name)} · ${escapeHtml(x.runtime||'')} · ${x.network_mode==='deny'?'断网':'可联网'}</option>`).join('');
@@ -1643,6 +1659,12 @@ function agentFormHtml(row, models, mcpRows, skillRows, sandboxRows, httpRows){
       <div class="bind-head"><h3>关联技能</h3><small id="bindSkillCount"></small></div>
       <p class="bind-hint">点开后滚动勾选，技能说明会写入系统提示词。</p>
       ${bindPicker('skill','skill_ids',skillRows,row&&row.skill_ids,'skills','技能')}
+    </section>
+    <section class="bind-section">
+      <div class="bind-head"><h3>关联知识库</h3><small id="bindKnowledgeCount"></small></div>
+      <p class="bind-hint">只能绑定你能看见的知识库。对话时还会再按当前用户的权限过滤，私人库不会被其他对话者检索到。</p>
+      ${bindPicker('knowledge','knowledge_ids',knowledgeRows||[],(row&&row.knowledge_ids||[]).filter(id=>(knowledgeRows||[]).some(item=>Number(item.id)===Number(id))),'knowledge','知识库')}
+      ${(row&&row.knowledge_ids||[]).filter(id=>!(knowledgeRows||[]).some(item=>Number(item.id)===Number(id))).map(id=>`<input type="hidden" name="knowledge_ids" value="${id}">`).join('')}
     </section>
     <section class="bind-section">
       <div class="bind-head"><h3>工具链路</h3><small>按固定顺序执行的 MCP 工具</small></div>
@@ -1735,6 +1757,12 @@ async function openUserEdit(id){
   $('#modal').showModal();
 }
 async function removeResource(page,id){const row=resourceStore[page]&&resourceStore[page][id];const name=(row&&row.name)||'该配置';if(!confirm(`确定删除「${name}」吗？此操作不可恢复。`))return;try{await api(`/api/${page}/${id}`,{method:'DELETE'});await afterChange(page,'配置已删除')}catch(e){toast('删除失败，请稍后重试')}}
+async function copyModel(id){
+  try{
+    const row=await api(`/api/models/${id}/copy`,{method:'POST'});
+    await afterChange('models',`已复制为「${row.name}」`);
+  }catch(err){toast(apiError(err)||'复制失败')}
+}
 async function copyAgent(id){
   try{
     const row=await api(`/api/agents/${id}/copy`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -1786,10 +1814,10 @@ async function openForm(page,row){
   } else if(page==='sandboxes'){
     $('#modalFields').innerHTML=sandboxFormHtml(row);
   } else if(page==='agents'){
-    const extras=await Promise.all([api('/api/models'), api('/api/mcp'), api('/api/skills'), api('/api/sandboxes'), api('/api/http-agents')]);
-    modelOptions=extras[0].filter(model=>model.enabled||model.name===row?.model_name);
+    const extras=await Promise.all([api('/api/models').catch(()=>[]), api('/api/mcp'), api('/api/skills'), api('/api/sandboxes'), api('/api/http-agents'), api('/api/knowledge').catch(()=>[])]);
+    modelOptions=extras[0].filter(model=>(model.purpose||'chat')==='chat' && (model.enabled||model.name===row?.model_name));
     mcpRows=extras[1]; skillRows=extras[2];
-    $('#modalFields').innerHTML=agentFormHtml(row, modelOptions, mcpRows, skillRows, extras[3], extras[4]);
+    $('#modalFields').innerHTML=agentFormHtml(row, modelOptions, mcpRows, skillRows, extras[3], extras[4], extras[5]);
     syncAgentHttpMode();
   } else {
     $('#modalFields').innerHTML=forms[page].map(f=>{
@@ -1812,6 +1840,11 @@ async function openForm(page,row){
         el.value=val??'';
       });
     }
+    if(page==='models'){
+      $('#modalFields').insertAdjacentHTML('beforeend', `<div class="field"><label>用途</label><select class="select" style="width:100%" name="purpose"><option value="chat">对话</option><option value="embedding">向量</option><option value="rerank">重排序</option></select></div>`);
+      const purpose=$('#modalForm [name="purpose"]');
+      if(purpose) purpose.value=(row&&row.purpose)||'chat';
+    }
   }
   $('#modalForm').dataset.page=page;
   $('#modalForm').dataset.id=editing?String(row.id):'';
@@ -1821,6 +1854,10 @@ $('#modalForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=e.currentTarget,page=form.dataset.page,id=form.dataset.id,data=Object.fromEntries(new FormData(form));
   if(page==='preview'){ $('#modal').close(); return; }
+  if(page==='kb-vector'||page==='kb-base'){
+    try{await submitKnowledgeForm(page,id,data)}catch(err){toast(apiError(err)||'保存失败')}
+    return;
+  }
   if(page==='agent-rename'){
     try{await submitRenameAgent(form)}catch(err){toast(apiError(err)||'重命名失败')}
     return;
@@ -1859,12 +1896,14 @@ $('#modalForm').addEventListener('submit',async e=>{
     if(data.http_agent_ids.length){
       data.skill_ids=[];
       data.mcp_ids=[];
+      data.knowledge_ids=[];
       data.sandbox_id=null;
       data.tool_flows=[];
       data.model_name='';
     }else{
       data.skill_ids=[...form.querySelectorAll('input[name="skill_ids"]:checked')].map(x=>Number(x.value));
       data.mcp_ids=[...form.querySelectorAll('input[name="mcp_ids"]:checked')].map(x=>Number(x.value));
+      data.knowledge_ids=[...form.querySelectorAll('input[name="knowledge_ids"]:checked'),...form.querySelectorAll('input[type="hidden"][name="knowledge_ids"]')].map(x=>Number(x.value));
       data.sandbox_id=data.sandbox_id?Number(data.sandbox_id):null;
       const flowText=String(data.tool_flows||'').trim();
       if(!flowText) data.tool_flows=[];
@@ -2186,13 +2225,21 @@ function syncBindHint(){
   const btn=$('#pgEditAgent');
   if(btn) btn.onclick=()=>{resourceStore.agents=Object.fromEntries((pgCatalog.agents||[]).map(x=>[x.id,x]));openEdit('agents', agent.id)};
 }
+function agentBoundModel(agent){
+  if(!agent||!agent.model_name) return null;
+  return (pgCatalog.models||[]).find(x=>x.name===agent.model_name)||null;
+}
+function playgroundModelLabel(agent){
+  const bound=agentBoundModel(agent);
+  if(bound) return bound.name+' · '+bound.model_id;
+  return (agent&&agent.model_name)||'未绑定模型';
+}
 function syncPlaygroundMode(){
-  const http=isHttpBackedAgent(currentAgent());
-  const field=$('#runModelField');
-  if(field) field.hidden=http;
+  const agent=currentAgent();
+  const http=isHttpBackedAgent(agent);
   const warn=$('#pgModelWarning');
-  if(warn) warn.hidden=http||(pgCatalog.models||[]).length>0;
-  const canSend=http||(pgCatalog.models||[]).length>0;
+  if(warn) warn.hidden=http||!!(agent&&agent.model_name);
+  const canSend=http||!!(agent&&agent.model_name);
   const input=$('#runMessage');
   const button=$('#runButton');
   if(input) input.disabled=!canSend;
@@ -2200,12 +2247,12 @@ function syncPlaygroundMode(){
   syncChatHeader();
 }
 function syncChatHeader(){
-  const agent=$('#runAgent'),model=$('#runModel');
+  const agent=$('#runAgent');
   if(agent&&agent.selectedOptions[0]){$('#chatPeerName').textContent=agent.selectedOptions[0].textContent;$('#chatAvatar').textContent=agent.selectedOptions[0].textContent[0]}
   const meta=$('#chatPeerMeta');
   if(meta){
-    if(isHttpBackedAgent(currentAgent())) meta.textContent=agentRuntimeLabel(currentAgent());
-    else if(model&&model.selectedOptions[0]) meta.textContent=model.selectedOptions[0].textContent;
+    const current=currentAgent();
+    meta.textContent=isHttpBackedAgent(current)?agentRuntimeLabel(current):playgroundModelLabel(current);
   }
   syncBindHint();
 }
@@ -2239,12 +2286,12 @@ async function runPlayground(){
   if(!button||!input||!log)return;
   const message=input.value.trim();
   if(!message){toast('请输入消息');return}
-  if(!isHttpBackedAgent(currentAgent()) && (!$('#runModel') || !$('#runModel').value)){toast('请先启用一个模型');return}
+  if(!isHttpBackedAgent(currentAgent()) && !(currentAgent()&&currentAgent().model_name)){toast('这个 Agent 还没有绑定模型');return}
   if($('#runExperiment')&&$('#runExperiment').value){
     const exp=currentExperiment();
     if(exp&&exp.status!=='running'){toast('只有进行中的实验才会分流，请先启动或改回「不分流」');return}
   }
-  chatState.agentId=$('#runAgent').value;chatState.modelId=$('#runModel')&&$('#runModel').value||chatState.modelId;
+  chatState.agentId=$('#runAgent').value;
   chatState.messages.push({role:'user',content:message,agent:'我'});
   persistChat();input.value='';input.style.height='auto';paintChat();
   log.insertAdjacentHTML('beforeend',`<div class="wx-row theirs" id="chatTyping"><i class="wechat-avatar agent">${escapeHtml(currentAgentName()[0])}</i><div class="wx-col"><span class="wx-name">${escapeHtml(currentAgentName())}</span><div class="wx-bubble typing"><i></i><i></i><i></i></div></div></div>`);
@@ -2254,7 +2301,6 @@ async function runPlayground(){
   paintTrace();
   try{
     const payload={agent_id:Number($('#runAgent').value),message,session_id:chatState.sessionId||undefined};
-    if($('#runModel')&&$('#runModel').value) payload.model_config_id=Number($('#runModel').value);
     if($('#runExperiment')&&$('#runExperiment').value) payload.experiment_id=Number($('#runExperiment').value);
     if($('#runUserKey')&&$('#runUserKey').value.trim()){payload.user_key=$('#runUserKey').value.trim();chatState.experimentUserKey=payload.user_key}
     const r=await api('/api/playground/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -2282,8 +2328,8 @@ async function resumePlayground(){
   const button=$('#resumeChat'),state=$('#runState'),log=$('#chatLog');
   if(!button||!log)return;
   if(!chatState.sessionId||!(chatState.checkpoint&&chatState.checkpoint.resumable)){toast('当前没有可恢复的检查点');return}
-  if(!isHttpBackedAgent(currentAgent()) && (!$('#runModel') || !$('#runModel').value)){toast('请先启用一个模型');return}
-  chatState.agentId=$('#runAgent').value;chatState.modelId=$('#runModel')&&$('#runModel').value||chatState.modelId;
+  if(!isHttpBackedAgent(currentAgent()) && !(currentAgent()&&currentAgent().model_name)){toast('这个 Agent 还没有绑定模型');return}
+  chatState.agentId=$('#runAgent').value;
   log.insertAdjacentHTML('beforeend',`<div class="wx-row theirs" id="chatTyping"><i class="wechat-avatar agent">${escapeHtml(currentAgentName()[0])}</i><div class="wx-col"><span class="wx-name">${escapeHtml(currentAgentName())}</span><div class="wx-bubble typing"><i></i><i></i><i></i></div></div></div>`);
   log.scrollTop=log.scrollHeight;
   button.disabled=true;if(state){state.className='pill running';state.textContent='续跑中'}
@@ -2291,7 +2337,6 @@ async function resumePlayground(){
   paintTrace();
   try{
     const payload={agent_id:Number($('#runAgent').value),session_id:chatState.sessionId};
-    if($('#runModel')&&$('#runModel').value) payload.model_config_id=Number($('#runModel').value);
     const r=await api('/api/playground/resume',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const reply=r.reply||r.output||r.response||'没有返回内容';
     chatState.sessionId=r.session_id||chatState.sessionId;
@@ -2313,9 +2358,10 @@ async function resumePlayground(){
 }
 function bindPage(page){
   evalStopPoll();
+  if(page==='knowledge') bindKnowledgeUpload();
   if(page==='evaluations') bindEvalPage();
   if(page==='experiments') bindExpPage();
-  if(page==='sessions'){const runFilter=async()=>{const p=new URLSearchParams();const q=$('#sessionQ').value.trim(),a=$('#agentFilter').value,s=$('#statusFilter').value;if(q)p.set('q',q);if(a)p.set('agent_name',a);if(s)p.set('status',s);const rows=await api('/api/sessions?'+p);$('#sessionResults').innerHTML=sessionTable(rows).replace('<section class="panel wide-panel">','<section>');closeSessionDetail()};$('#doFilter').onclick=runFilter;$('#sessionQ').onkeydown=e=>{if(e.key==='Enter')runFilter()};$('#sessionResults').onclick=e=>{const hit=e.target.closest('[data-session-id]');if(hit)openSessionDetail(hit.dataset.sessionId)}}if(page==='playground'){paintChat();paintTrace();syncPlaygroundMode();const form=$('#chatForm'),input=$('#runMessage');if(form)form.onsubmit=e=>{e.preventDefault();runPlayground()};if(input){input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runPlayground()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(120,input.scrollHeight)+'px'})}const agentSel=$('#runAgent'),modelSel=$('#runModel');if(agentSel)agentSel.onchange=async()=>{if(String(chatState.agentId)!==agentSel.value){await restoreAgentChat(agentSel.value);paintChat();paintTrace()}syncPlaygroundMode()};if(modelSel)modelSel.onchange=()=>{chatState.modelId=modelSel.value;persistChat();syncChatHeader()};const expSel=$('#runExperiment');if(expSel)expSel.onchange=applyExperimentChoice;const userKey=$('#runUserKey');if(userKey)userKey.onchange=()=>{chatState.experimentUserKey=userKey.value.trim()};syncExpUserField();paintExpHint(null);if($('#resumeChat'))$('#resumeChat').onclick=resumePlayground;syncResumeButton();if($('#clearChat'))$('#clearChat').onclick=resetChat;input&&input.focus()}if(page==='workflows') bindWorkflowCanvas()}
+  if(page==='sessions'){const runFilter=async()=>{const p=new URLSearchParams();const q=$('#sessionQ').value.trim(),a=$('#agentFilter').value,s=$('#statusFilter').value;if(q)p.set('q',q);if(a)p.set('agent_name',a);if(s)p.set('status',s);const rows=await api('/api/sessions?'+p);$('#sessionResults').innerHTML=sessionTable(rows).replace('<section class="panel wide-panel">','<section>');closeSessionDetail()};$('#doFilter').onclick=runFilter;$('#sessionQ').onkeydown=e=>{if(e.key==='Enter')runFilter()};$('#sessionResults').onclick=e=>{const hit=e.target.closest('[data-session-id]');if(hit)openSessionDetail(hit.dataset.sessionId)}}if(page==='playground'){paintChat();paintTrace();syncPlaygroundMode();const form=$('#chatForm'),input=$('#runMessage');if(form)form.onsubmit=e=>{e.preventDefault();runPlayground()};if(input){input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runPlayground()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(120,input.scrollHeight)+'px'})}const agentSel=$('#runAgent');if(agentSel)agentSel.onchange=async()=>{if(String(chatState.agentId)!==agentSel.value){await restoreAgentChat(agentSel.value);paintChat();paintTrace()}syncPlaygroundMode()};const expSel=$('#runExperiment');if(expSel)expSel.onchange=applyExperimentChoice;const userKey=$('#runUserKey');if(userKey)userKey.onchange=()=>{chatState.experimentUserKey=userKey.value.trim()};syncExpUserField();paintExpHint(null);if($('#resumeChat'))$('#resumeChat').onclick=resumePlayground;syncResumeButton();if($('#clearChat'))$('#clearChat').onclick=resetChat;input&&input.focus()}if(page==='workflows') bindWorkflowCanvas()}
 function syncExpUserField(){
   const wrap=$('#runUserWrap');
   if(!wrap) return;
@@ -2323,9 +2369,152 @@ function syncExpUserField(){
   const userBased=!!exp && (exp.assignment_strategy==='user_hash'||exp.assignment_strategy==='user_first'||exp.assignment_unit==='user');
   wrap.hidden=!userBased;
 }
+const kbState={tab:'bases',knowledgeId:'',docId:''};
+let kbPollToken=0;
+function kbStatus(status){
+  const labels={queued:'排队',processing:'处理中',ready:'就绪',failed:'失败'};
+  return labels[status]||status||'';
+}
+async function knowledgePage(){
+  const [bases,models]=await Promise.all([api('/api/knowledge'),api('/api/models').catch(()=>[])]);
+  kbState.models=(models||[]).filter(item=>(item.purpose||'chat')==='embedding');
+  kbState.rerankModels=(models||[]).filter(item=>(item.purpose||'chat')==='rerank');
+  kbState.bases=bases;
+  if(kbState.knowledgeId){
+    return `${head('knowledge')}${await knowledgeDetail(bases.find(x=>String(x.id)===String(kbState.knowledgeId)))}`;
+  }
+  const card=x=>`<article class="resource-card"><div class="resource-head"><div class="resource-logo">▤</div><div><h3>${escapeHtml(x.name)}</h3><p>${escapeHtml(x.description||'默认只有成员能看见')}</p></div></div><div class="resource-meta"><span>${x.visibility==='tenant'?'租户公开':'私有'}</span><span>${x.rerank_name?escapeHtml(x.rerank_name):'不重排'} · 就绪 ${x.ready_documents||0}</span><span class="resource-ops"><button class="btn primary" onclick="openKnowledge(${x.id})">编辑</button>${x.can_manage?`<button class="btn ghost" onclick="deleteKnowledge(${x.id})">删除</button>`:''}</span></div></article>`;
+  const group=(relation,title)=> {
+    const rows=(bases||[]).filter(x=>x.relation===relation);
+    return rows.length?`<h3 style="margin:18px 0 8px">${title}</h3><div class="resource-grid">${rows.map(card).join('')}</div>`:'';
+  };
+  const grouped=`${group('owned','我创建的')}${group('shared','分享给我的')}${group('tenant','租户公开')}${group('admin','排障可见')}`;
+  const body=`<div class="page-tools" style="margin:12px 0">${can('knowledge:write')?'<button class="btn primary" onclick="openKbForm(\'base\')">＋ 新建知识库</button>':''}</div>${grouped||'<div class="empty">还没有知识库。新建后默认只有你能看见。</div>'}`;
+  return `${head('knowledge')}${body}`;
+}
+async function vectorStorePage(){
+  const stores=await api('/api/vector-stores');
+  const cards=stores.map(x=>`<article class="resource-card"><div class="resource-head"><div class="resource-logo">▦</div><div><h3>${escapeHtml(x.name)}</h3><p>${escapeHtml(x.uri)}</p></div></div><div class="resource-meta"><span>${escapeHtml(x.database_name||'default')}</span><span>${x.is_default?'默认':''} ${x.enabled?'启用':'停用'}</span><span class="resource-ops"><button class="btn ghost" onclick="testVectorStore(${x.id})">探测</button>${x.is_default?'':`<button class="btn ghost" onclick="makeDefaultVector(${x.id})">设为默认</button>`}<button class="btn ghost" onclick="deleteVectorStore(${x.id})">删除</button></span></div></article>`).join('');
+  return `${head('vectors')}<div class="page-tools" style="margin:12px 0"><button class="btn primary" onclick="openKbForm('vector')">＋ 登记 Milvus</button></div><div class="resource-grid">${cards||'<div class="empty">还没有向量数据库。新建知识库前需要一个默认连接。</div>'}</div>`;
+}
+function kbTab(tab){kbState.tab=tab; kbState.knowledgeId=''; kbPollToken++; render('knowledge')}
+function openKnowledge(id){kbState.tab='bases'; kbState.knowledgeId=id; kbState.docId=''; render('knowledge')}
+async function knowledgeDetail(base){
+  if(!base){kbState.knowledgeId=''; return '<div class="empty">知识库不存在</div>'}
+  const docs=await api('/api/knowledge/'+base.id+'/documents');
+  if(docs.some(item=>item.status==='queued'||item.status==='processing')){
+    const token=++kbPollToken;
+    setTimeout(()=>{if(token===kbPollToken && currentPage==='knowledge' && String(kbState.knowledgeId)===String(base.id)) render('knowledge')},2000);
+  }
+  let detail='';
+  if(kbState.docId){
+    try{
+      const doc=await api('/api/knowledge/'+base.id+'/documents/'+kbState.docId);
+      const chunks=(doc.chunks||[]).map(chunk=>`<article class="session-message"><header><b>${escapeHtml(chunk.heading||'无标题')}</b></header><p>${escapeHtml(chunk.content||'')}</p>${chunk.context&&chunk.context!==chunk.content?`<p style="color:#667085">章节：${escapeHtml(chunk.context)}</p>`:''}</article>`).join('');
+      detail=`<section class="panel" style="margin-top:16px"><div class="panel-title"><h3>${escapeHtml(doc.filename)}</h3><small>${escapeHtml(doc.strategy_reason||'')}</small></div><p>策略 ${escapeHtml(doc.strategy||'-')} · ${doc.chunk_count||0} 块</p>${chunks||'<p>还没有可预览的分块</p>'}${base.can_edit?`<div class="field"><label>改用策略后重建</label><select id="kbStrategy" class="select"><option value="">重新自动选择</option>${['heading','paragraph','sentence','qa','article','table_row','recursive'].map(name=>`<option ${doc.strategy_override===name?'selected':''}>${name}</option>`).join('')}</select><button class="btn primary" onclick="reindexDocument(${base.id},${doc.id})">重建索引</button></div>`:''}</section>`;
+    }catch(err){detail=`<div class="empty">${escapeHtml(apiError(err))}</div>`}
+  }
+  const rows=docs.map(doc=>`<tr><td>${escapeHtml(doc.filename)}</td><td>${escapeHtml(kbStatus(doc.status))}</td><td>${escapeHtml(doc.strategy||'-')}</td><td>${doc.chunk_count||0}</td><td>${escapeHtml(doc.error_message||'')}</td><td><button class="btn ghost" onclick="kbState.docId=${doc.id};render('knowledge')">查看</button>${base.can_edit?`<button class="btn ghost" onclick="deleteDocument(${base.id},${doc.id})">删除</button>`:''}</td></tr>`).join('');
+  const members=base.can_manage?await knowledgeMembers(base):'';
+  const reranks=kbState.rerankModels||[];
+  const settings=base.can_manage?`<form id="kbSettings" class="panel" style="padding:16px;margin-bottom:16px"><div class="field"><label>可见性</label><select name="visibility" class="select"><option value="private" ${base.visibility==='private'?'selected':''}>私有</option><option value="tenant" ${base.visibility==='tenant'?'selected':''}>租户公开</option></select></div><div class="field"><label>重排序模型</label><select name="rerank_model_id" class="select"><option value="">不重排</option>${reranks.map(item=>`<option value="${item.id}" ${String(base.rerank_model_id)===String(item.id)?'selected':''}>${escapeHtml(item.name)}</option>`).join('')}</select></div><div class="field"><label>返回条数</label><input name="top_k" type="number" min="1" max="10" value="${base.top_k||5}"></div><button class="btn primary" type="submit">保存设置</button></form>`:'';
+  return `<div class="page-tools" style="margin:12px 0"><button class="btn ghost" onclick="kbState.knowledgeId='';kbPollToken++;render('knowledge')">返回</button><b style="margin-left:8px">${escapeHtml(base.name)}</b><span style="margin-left:8px;color:#8994a4">${base.visibility==='tenant'?'租户公开':'私有'} · ${base.rerank_name?escapeHtml(base.rerank_name):'不重排'}</span></div>
+  ${settings}${members}
+  ${base.can_edit?`<form id="kbUpload" class="panel" style="padding:16px;margin-bottom:16px"><input id="kbFiles" type="file" multiple accept=".txt,.md,.markdown,.html,.htm,.csv,.docx,.pdf"><button class="btn primary" type="submit">上传</button></form>`:''}
+  <section class="panel"><table class="data-table"><thead><tr><th>文件</th><th>状态</th><th>策略</th><th>块数</th><th>说明</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6">还没有文档</td></tr>'}</tbody></table></section>
+  <section class="panel" style="margin-top:16px"><div class="panel-title"><h3>调试检索</h3></div><div class="field"><input id="kbQuery" placeholder="输入问题"><button class="btn primary" onclick="searchKnowledge(${base.id})">检索</button></div><div id="kbHits"></div></section>${detail}`;
+}
+async function knowledgeMembers(base){
+  const data=await api('/api/knowledge/'+base.id+'/members');
+  const rows=(data.members||[]).map(member=>`<tr><td>${escapeHtml(member.display_name||member.username)}</td><td>${member.role}</td><td><button class="btn ghost" onclick="revokeKnowledgeMember(${base.id},${member.user_id})">移除</button></td></tr>`).join('');
+  const options=(data.candidates||[]).map(person=>`<option value="${person.id}">${escapeHtml(person.display_name||person.username)}</option>`).join('');
+  return `<form id="kbMembers" class="panel" style="padding:16px;margin-bottom:16px"><div class="panel-title"><h3>成员</h3></div><table class="data-table"><tbody>${rows}</tbody></table><div class="field"><label>分享给</label><select name="user_id" class="select">${options}</select></div><div class="field"><label>角色</label><select name="role" class="select"><option value="viewer">查看者</option><option value="editor">编辑者</option><option value="owner">所有者</option></select></div><button class="btn ghost" type="submit">添加</button></form>`;
+}
+function bindKnowledgeUpload(){
+  const settings=$('#kbSettings');
+  if(settings){
+    settings.onsubmit=async event=>{
+      event.preventDefault();
+      const data=Object.fromEntries(new FormData(settings));
+      try{
+        await api('/api/knowledge/'+kbState.knowledgeId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({visibility:data.visibility,rerank_model_id:data.rerank_model_id?Number(data.rerank_model_id):null,top_k:Number(data.top_k||5)})});
+        toast('已保存');
+        render('knowledge');
+      }catch(err){toast(apiError(err)||'保存失败')}
+    };
+  }
+  const members=$('#kbMembers');
+  if(members){
+    members.onsubmit=async event=>{
+      event.preventDefault();
+      const data=Object.fromEntries(new FormData(members));
+      try{
+        await api('/api/knowledge/'+kbState.knowledgeId+'/members',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:Number(data.user_id),role:data.role})});
+        render('knowledge');
+      }catch(err){toast(apiError(err)||'分享失败')}
+    };
+  }
+  const form=$('#kbUpload');
+  if(!form) return;
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    const input=$('#kbFiles');
+    if(!input||!input.files.length){toast('请选择文件');return}
+    const body=new FormData();
+    [...input.files].forEach(file=>body.append('file', file));
+    try{
+      await api('/api/knowledge/'+kbState.knowledgeId+'/documents',{method:'POST',body});
+      toast('已开始处理');
+      render('knowledge');
+    }catch(err){toast(apiError(err)||'上传失败')}
+  };
+}
+async function openKbForm(kind){
+  const editing=false;
+  $('#modalEyebrow').textContent='新建配置';
+  $('#modalTitle').textContent=kind==='vector'?'登记 Milvus':'新建知识库';
+  resetModalSubmit('确认添加');
+  let html='';
+  if(kind==='vector'){
+    html=`<div class="field"><label>名称</label><input name="name" required></div><div class="field"><label>地址</label><input name="uri" placeholder="http://127.0.0.1:19530" required></div><div class="field"><label>Database</label><input name="database_name" value="default"></div><div class="field"><label>Token</label><input name="token" placeholder="user:password，可空"></div>`;
+  }else{
+    const models=kbState.models||[];
+    const reranks=kbState.rerankModels||[];
+    const embeddingOptions=models.length
+      ? `<option value="">请选择向量模型</option>${models.map(item=>`<option value="${item.id}" ${models.length===1?'selected':''}>${escapeHtml(item.name)}</option>`).join('')}`
+      : '<option value="">还没有向量模型，请先在模型配置里把用途设为「向量」</option>';
+    html=`<div class="field"><label>名称</label><input name="name" required></div><div class="field"><label>说明</label><input name="description"></div><div class="field"><label>向量模型</label><select class="select" style="width:100%" name="embedding_model_id" required>${embeddingOptions}</select></div><div class="field"><label>可见性</label><select class="select" style="width:100%" name="visibility"><option value="private">私有</option><option value="tenant">租户公开</option></select></div><div class="field"><label>重排序模型</label><select class="select" style="width:100%" name="rerank_model_id"><option value="">不重排</option>${reranks.map(item=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('')}</select></div>`;
+  }
+  $('#modalFields').innerHTML=html;
+  $('#modalForm').dataset.page=kind==='vector'?'kb-vector':kind==='rerank'?'kb-rerank':'kb-base';
+  $('#modalForm').dataset.id='';
+  $('#modal').showModal();
+}
+async function submitKnowledgeForm(page,id,data){
+  if(page==='kb-vector'){
+    await api('/api/vector-stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:data.name,type:'milvus',uri:data.uri,database_name:data.database_name||'default',token:data.token||''})});
+  }else{
+    await api('/api/knowledge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:data.name,description:data.description||'',visibility:data.visibility||'private',embedding_model_id:Number(data.embedding_model_id),rerank_model_id:data.rerank_model_id?Number(data.rerank_model_id):null})});
+  }
+  $('#modal').close();
+  toast('已保存');
+  render(page==='kb-vector'?'vectors':'knowledge');
+}
+async function testVectorStore(id){try{const r=await api('/api/vector-stores/'+id+'/test',{method:'POST'});toast(r.message||'连接成功')}catch(err){toast(apiError(err)||'连接失败')}}
+async function makeDefaultVector(id){try{await api('/api/vector-stores/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_default:true})}); render('vectors')}catch(err){toast(apiError(err)||'设置失败')}}
+async function deleteVectorStore(id){if(!confirm('删除这个向量数据库连接？'))return; try{await api('/api/vector-stores/'+id,{method:'DELETE'}); render('vectors')}catch(err){toast(apiError(err)||'删除失败')}}
+async function revokeKnowledgeMember(id,userId){try{await api('/api/knowledge/'+id+'/members/'+userId,{method:'DELETE'}); render('knowledge')}catch(err){toast(apiError(err)||'移除失败')}}
+async function deleteKnowledge(id){if(!confirm('删除知识库？非空库会同时删除 Milvus collection。'))return; try{await api('/api/knowledge/'+id+'?force=true',{method:'DELETE'}); kbState.knowledgeId=''; render('knowledge')}catch(err){toast(apiError(err)||'删除失败')}}
+async function deleteDocument(baseId,docId){if(!confirm('删除这份文档和它的分块？'))return; try{await api('/api/knowledge/'+baseId+'/documents/'+docId,{method:'DELETE'}); kbState.docId=''; render('knowledge')}catch(err){toast(apiError(err)||'删除失败')}}
+async function reindexDocument(baseId,docId){const strategy=$('#kbStrategy')?$('#kbStrategy').value:''; try{await api('/api/knowledge/'+baseId+'/documents/'+docId+'/reindex',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(strategy?{strategy}:{})}); toast('已开始重建'); render('knowledge')}catch(err){toast(apiError(err)||'重建失败')}}
+async function searchKnowledge(id){const query=$('#kbQuery')?$('#kbQuery').value:''; try{const data=await api('/api/knowledge/'+id+'/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})}); const hits=(data.hits||[]).map(hit=>`<article class="session-message"><header><b>${escapeHtml(hit.filename||'')} / ${escapeHtml(hit.heading||'')}</b><span>名次 ${hit.rank}${hit.rerank_score==null?'':' · 重排 '+Number(hit.rerank_score).toFixed(3)}</span></header><p>${escapeHtml(hit.content||'')}</p>${hit.context&&hit.context!==hit.content?`<p style="color:#667085">${escapeHtml(hit.context)}</p>`:''}</article>`).join(''); $('#kbHits').innerHTML=`<p>${escapeHtml(data.vector_store||'')} · ${escapeHtml(data.retriever||'')} · ${escapeHtml(data.reranker||'none')}</p>${hits||'<p>没有命中</p>'}`}catch(err){toast(apiError(err)||'检索失败')}}
 let renderSeq=0;
 async function render(page,param=''){
   if(page==='traces')page='studio';
+  if(authState.me&&authState.me.trial&&page==='models'){
+    toast('试用账号不能查看模型配置');
+    return;
+  }
   currentPage=page;
   currentParam=param;
   const seq=++renderSeq;
@@ -2341,6 +2530,8 @@ async function render(page,param=''){
     else if(page==='experiments')html=await experiments();
     else if(page==='playground')html=await playground(param);
     else if(page==='roles')html=await iam();
+    else if(page==='knowledge')html=await knowledgePage();
+    else if(page==='vectors')html=await vectorStorePage();
     else html=await resources(page);
     if(seq!==renderSeq) return;
     $('#content').innerHTML=html;
@@ -2352,35 +2543,133 @@ async function render(page,param=''){
 }
 document.querySelectorAll('.nav-item').forEach(n=>n.onclick=()=>{render(n.dataset.page);$('.sidebar').classList.remove('open')});
 $('#menuBtn').onclick=()=>$('.sidebar').classList.toggle('open');
-if($('#logoutBtn')) $('#logoutBtn').onclick=logout;
-if($('#logoutTopBtn')) $('#logoutTopBtn').onclick=logout;
+function trialInstant(value){
+  if(!value) return NaN;
+  const text=String(value);
+  const normalized=/[zZ]|[+-]\d{2}:?\d{2}$/.test(text)?text:text+'Z';
+  return new Date(normalized).getTime();
+}
+function trialRemainingMs(){
+  const ends=trialInstant(authState.trialExpiresAt);
+  if(!Number.isFinite(ends)) return 0;
+  return ends-Date.now();
+}
+function formatRemain(ms){
+  const total=Math.max(0, Math.ceil(ms/1000));
+  const minutes=Math.floor(total/60);
+  const seconds=total%60;
+  return minutes+':'+String(seconds).padStart(2,'0');
+}
+function stopTrialClock(){
+  clearInterval(trialTimer);
+  trialTimer=0;
+  authState.trialExpiresAt='';
+  const banner=$('#trialBanner');
+  if(banner) banner.hidden=true;
+}
+function expireTrial(){
+  authState.token='';
+  authState.me=null;
+  localStorage.removeItem('af_token');
+  stopTrialClock();
+  if($('#userName')) $('#userName').textContent='未登录';
+  if($('#userRole')) $('#userRole').textContent='试用已结束';
+  showLogin('试用已结束，请登录');
+}
+function startTrialClock(expiresAt){
+  authState.trialExpiresAt=expiresAt||'';
+  const banner=$('#trialBanner');
+  if(banner) banner.hidden=false;
+  clearInterval(trialTimer);
+  const tick=()=>{
+    const left=trialRemainingMs();
+    const label=$('#trialRemain');
+    if(label) label.textContent=formatRemain(left);
+    if(left<=0) expireTrial();
+  };
+  tick();
+  trialTimer=setInterval(tick,1000);
+}
+function openApp(){
+  const first=[...document.querySelectorAll('.nav-item')].find(btn=>!btn.hidden);
+  render(first?first.dataset.page:'dashboard');
+}
+function onAccountButton(){
+  if(authState.me&&authState.me.trial){
+    showLogin('', {allowContinue:trialRemainingMs()>0});
+    return;
+  }
+  logout();
+}
+async function enterTrial(){
+  const r=await fetch('/api/auth/trial',{method:'POST'});
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok){
+    showLogin(typeof data.detail==='string'?data.detail:'请先登录');
+    return;
+  }
+  authState.token=data.token;
+  localStorage.setItem('af_token', data.token);
+  const me=await api('/api/auth/me');
+  applyMe(me);
+  hideLogin();
+  startTrialClock(me.trial_expires_at||data.expires_at);
+  openApp();
+}
+if($('#logoutBtn')) $('#logoutBtn').onclick=onAccountButton;
+if($('#logoutTopBtn')) $('#logoutTopBtn').onclick=onAccountButton;
+if($('#trialLoginBtn')) $('#trialLoginBtn').onclick=onAccountButton;
+if($('#trialContinue')) $('#trialContinue').onclick=()=>{ if(trialRemainingMs()>0) hideLogin(); };
 if($('#tenantSwitch')) $('#tenantSwitch').onchange=async e=>{localStorage.setItem('af_tenant_id', e.target.value); const me=await api('/api/auth/me'); applyMe(me); render('dashboard')};
 if($('#loginForm')) $('#loginForm').onsubmit=async e=>{
   e.preventDefault();
   try{
     const body={username:$('#loginUser').value.trim(),password:$('#loginPass').value};
     const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r.ok) throw new Error('用户名或密码错误');
+    if(!r.ok){
+      let message='用户名或密码错误';
+      try{
+        const failed=await r.json();
+        if(typeof failed.detail==='string'&&failed.detail) message=failed.detail;
+      }catch(e){}
+      throw new Error(message);
+    }
     const data=await r.json();
     authState.token=data.token;
     localStorage.setItem('af_token', data.token);
     localStorage.removeItem('af_tenant_id');
     hideLogin();
+    stopTrialClock();
     applyMe(await api('/api/auth/me'));
     render('dashboard');
-  }catch(err){showLogin(err.message||'登录失败')}
+  }catch(err){
+    const message=err.message||'登录失败';
+    showLogin(message);
+    toast(message);
+  }
 };
 document.addEventListener('click', e=>{
   if(e.target.closest('.card-menu-item') || !e.target.closest('.card-menu')) closeCardMenus();
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeCardMenus(); });
 async function boot(){
-  if(!authState.token){showLogin();return}
+  if(authState.token){
+    try{
+      const me=await api('/api/auth/me');
+      applyMe(me);
+      hideLogin();
+      if(me.trial) startTrialClock(me.trial_expires_at);
+      openApp();
+      return;
+    }catch(e){
+      authState.token='';
+      localStorage.removeItem('af_token');
+    }
+  }
   try{
-    applyMe(await api('/api/auth/me'));
-    hideLogin();
-    const first=[...document.querySelectorAll('.nav-item')].find(btn=>!btn.hidden);
-    render(first?first.dataset.page:'dashboard');
-  }catch(e){showLogin('请重新登录')}
+    await enterTrial();
+  }catch(e){
+    showLogin(e.message||'请先登录');
+  }
 }
 boot();

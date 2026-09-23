@@ -78,13 +78,15 @@ public final class ApiDtos {
             String api_key,
             String api_key_ref,
             Double temperature,
-            Boolean enabled) {
+            Boolean enabled,
+            String purpose) {
         public ModelCreate {
             base_url = base_url == null ? "" : base_url;
             api_key = api_key == null ? "" : api_key;
             api_key_ref = api_key_ref == null ? "" : api_key_ref;
             temperature = temperature == null ? 0.2 : temperature;
             enabled = enabled == null || enabled;
+            purpose = purpose == null || purpose.isBlank() ? "chat" : purpose;
         }
     }
 
@@ -111,6 +113,7 @@ public final class ApiDtos {
             List<Long> mcp_ids,
             List<Long> opencli_ids,
             List<Long> http_agent_ids,
+            List<Long> knowledge_ids,
             List<Map<String, Object>> tool_flows,
             Long sandbox_id) {
         public AgentCreate {
@@ -123,6 +126,7 @@ public final class ApiDtos {
             mcp_ids = mcp_ids == null ? List.of() : mcp_ids;
             opencli_ids = opencli_ids == null ? List.of() : opencli_ids;
             http_agent_ids = http_agent_ids == null ? List.of() : http_agent_ids;
+            knowledge_ids = knowledge_ids == null ? List.of() : knowledge_ids;
             tool_flows = tool_flows == null ? List.of() : tool_flows;
         }
     }

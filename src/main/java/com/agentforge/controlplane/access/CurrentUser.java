@@ -1,5 +1,6 @@
 package com.agentforge.controlplane.access;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -20,6 +21,7 @@ public class CurrentUser {
     private final Long roleId;
     private final String roleName;
     private final List<String> permissions;
+    private Instant trialExpiresAt;
 
     public CurrentUser(Long id, String username, String displayName, Long tenantId, Long homeTenantId,
                        String tenantName, Long roleId, String roleName, List<String> permissions) {
@@ -33,6 +35,14 @@ public class CurrentUser {
         this.roleName = roleName == null ? "" : roleName;
         this.permissions = permissions == null ? new ArrayList<>() : new ArrayList<>(permissions);
     }
+
+    public boolean isTrial() {
+        return trialExpiresAt != null;
+    }
+
+    public Instant getTrialExpiresAt() { return trialExpiresAt; }
+
+    public void setTrialExpiresAt(Instant trialExpiresAt) { this.trialExpiresAt = trialExpiresAt; }
 
     public boolean isPlatformAdmin() {
         return has("*", "platform:admin");

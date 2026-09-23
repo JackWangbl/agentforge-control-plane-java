@@ -17,6 +17,7 @@ import com.agentforge.controlplane.experiment.ExperimentService;
 import com.agentforge.controlplane.playground.PlaygroundService;
 import com.agentforge.controlplane.repo.ChatMessageRepository;
 import com.agentforge.controlplane.repo.ConversationRepository;
+import com.agentforge.controlplane.repo.ModelConfigRepository;
 import com.agentforge.controlplane.util.Jsons;
 import com.agentforge.controlplane.workspace.WorkspaceStore;
 import jakarta.validation.Valid;
@@ -42,10 +43,12 @@ public class PlaygroundController {
     private final ChatMessageRepository messages;
     private final ExperimentService experiments;
     private final HttpAgentRuntime httpAgents;
+    private final ModelConfigRepository models;
 
     public PlaygroundController(ResourceAccessService access, PlaygroundService playground, WorkspaceStore workspaces,
                                 ConversationRepository conversations, ChatMessageRepository messages,
-                                ExperimentService experiments, HttpAgentRuntime httpAgents) {
+                                ExperimentService experiments, HttpAgentRuntime httpAgents,
+                                ModelConfigRepository models) {
         this.access = access;
         this.playground = playground;
         this.workspaces = workspaces;
@@ -53,6 +56,7 @@ public class PlaygroundController {
         this.messages = messages;
         this.experiments = experiments;
         this.httpAgents = httpAgents;
+        this.models = models;
     }
 
     @RequirePermission({"session:write", "agent:write"})
@@ -76,7 +80,7 @@ public class PlaygroundController {
             }
         }
         Agent agent = access.getRow(user, ResourceKind.AGENT, agentId);
-        ModelConfig model = resolvePlaygroundModel(user, agent, payload.model_config_id());
+        ModelConfig model = resolvePlaygroundModel(user, agent);
         workspaces.ensureWorkspace(agent);
         sessionId = sessionId == null || sessionId.isBlank() ? "debug_" + shortId() : sessionId;
         Conversation conversation = conversations.findBySessionId(sessionId).orElse(null);
@@ -127,7 +131,7 @@ public class PlaygroundController {
     @PostMapping("/api/playground/resume")
     public Map<String, Object> resume(CurrentUser user, @Valid @RequestBody ApiDtos.PlaygroundResume payload) {
         Agent agent = access.getRow(user, ResourceKind.AGENT, payload.agent_id());
-        ModelConfig model = resolvePlaygroundModel(user, agent, payload.model_config_id());
+        ModelConfig model = resolvePlaygroundModel(user, agent);
         workspaces.ensureWorkspace(agent);
         String sessionId = payload.session_id();
         Map<String, Object> ckpt = workspaces.loadCheckpoint(agent, sessionId);
@@ -168,17 +172,20 @@ public class PlaygroundController {
         return Jsons.ordered("session_id", sessionId, "messages", items);
     }
 
-    private ModelConfig resolvePlaygroundModel(CurrentUser user, Agent agent, Long modelConfigId) {
+    private ModelConfig resolvePlaygroundModel(CurrentUser user, Agent agent) {
         if (httpAgents.isHttpBacked(agent)) {
             HttpAgent http = httpAgents.primary(agent);
             return HttpAgentRuntime.displayModel(http);
         }
-        if (modelConfigId == null) {
-            throw ApiException.badRequest("请选择模型");
+        String name = agent.getModelName() == null ? "" : agent.getModelName().strip();
+        if (name.isEmpty()) {
+            throw ApiException.badRequest("这个 Agent 还没有绑定模型");
         }
-        ModelConfig model = access.getRow(user, ResourceKind.CREDENTIAL, modelConfigId);
+        ModelConfig model = models.findByName(name)
+                .filter(row -> row.getTenantId() == null || row.getTenantId().equals(user.getTenantId()))
+                .orElseThrow(() -> ApiException.badRequest("Agent 绑定的模型不存在：" + name));
         if (!model.isEnabled()) {
-            throw ApiException.conflict("Selected model config is disabled");
+            throw ApiException.conflict("Agent 绑定的模型已停用：" + name);
         }
         return model;
     }

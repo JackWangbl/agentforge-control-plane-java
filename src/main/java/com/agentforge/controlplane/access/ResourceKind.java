@@ -7,6 +7,7 @@ public enum ResourceKind {
     MCP,
     OPENCLI,
     SKILL,
+    KNOWLEDGE,
     WORKFLOW,
     SANDBOX,
     DATASET,

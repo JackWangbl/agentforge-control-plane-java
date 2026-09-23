@@ -25,6 +25,10 @@ public class AuthService {
 
     /** 与 Python 版 TOKEN_TTL_HOURS = 24 * 7 一致。 */
     private static final Duration TOKEN_TTL = Duration.ofHours(24 * 7);
+    /** 未登录可直接进页面的时长。同一浏览器记一次，到点后必须登录。 */
+    public static final Duration TRIAL_TTL = Duration.ofMinutes(5);
+    public static final String TRIAL_EXPIRED = "试用已结束，请登录";
+    public static final String TRIAL_USER = "guest";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UserRepository users;
@@ -63,6 +67,44 @@ public class AuthService {
         return token.getToken();
     }
 
+    /**
+     * 这个浏览器还没有试用记录时发 5 分钟凭证；还在有效期内则沿用原到期时间；
+     * 已经用完则拒绝，避免清掉本地 token 再刷一次就重新计时。
+     */
+    @Transactional
+    public TrialGrant beginTrial(String trialKey) {
+        boolean known = trialKey != null && !trialKey.isBlank();
+        AuthToken existing = known ? tokens.findByTrialKey(trialKey).orElse(null) : null;
+        String decision = trialDecision(Instant.now(), existing != null, existing == null ? null : existing.getExpiresAt());
+        if ("resume".equals(decision)) {
+            return new TrialGrant(existing.getToken(), existing.getExpiresAt(), existing.getTrialKey());
+        }
+        if ("expired".equals(decision)) {
+            throw ApiException.unauthorized(TRIAL_EXPIRED);
+        }
+        User guest = users.findByUsername(TRIAL_USER)
+                .filter(User::isEnabled)
+                .orElseThrow(() -> ApiException.unauthorized("试用暂不可用"));
+        AuthToken token = new AuthToken();
+        token.setToken(newToken());
+        token.setUserId(guest.getId());
+        token.setTrialKey(newToken());
+        token.setExpiresAt(Instant.now().plus(TRIAL_TTL));
+        tokens.save(token);
+        return new TrialGrant(token.getToken(), token.getExpiresAt(), token.getTrialKey());
+    }
+
+    /** known 为 false 表示这个浏览器还没有试用记录。 */
+    static String trialDecision(Instant now, boolean known, Instant expiresAt) {
+        if (!known) {
+            return "new";
+        }
+        if (expiresAt != null && expiresAt.isAfter(now)) {
+            return "resume";
+        }
+        return "expired";
+    }
+
     @Transactional
     public void logout(String token) {
         if (token != null && !token.isBlank()) {
@@ -77,10 +119,17 @@ public class AuthService {
         if (!token.isBlank()) {
             AuthToken row = tokens.findByToken(token)
                     .orElseThrow(() -> ApiException.unauthorized("登录已过期，请重新登录"));
-            if (row.getExpiresAt() == null || row.getExpiresAt().isBefore(Instant.now())) {
+            if (row.getExpiresAt() == null || !row.getExpiresAt().isAfter(Instant.now())) {
+                if (row.getTrialKey() != null && !row.getTrialKey().isBlank()) {
+                    throw ApiException.unauthorized(TRIAL_EXPIRED);
+                }
                 throw ApiException.unauthorized("登录已过期，请重新登录");
             }
-            return loadUser(row.getUserId(), tenantOverride);
+            CurrentUser actor = loadUser(row.getUserId(), tenantOverride);
+            if (row.getTrialKey() != null && !row.getTrialKey().isBlank()) {
+                actor.setTrialExpiresAt(row.getExpiresAt());
+            }
+            return actor;
         }
         String devUser = settings.getAuthDevUser().strip();
         if (!devUser.isBlank()) {
@@ -133,6 +182,8 @@ public class AuthService {
         }
         return "";
     }
+
+    public record TrialGrant(String token, Instant expiresAt, String trialKey) {}
 
     private static Long parseTenant(String header) {
         if (header == null || header.isBlank()) {

@@ -34,8 +34,8 @@ spring:
       write-dates-as-timestamps: false
   servlet:
     multipart:
-      max-file-size: 6MB
-      max-request-size: 6MB
+      max-file-size: 16MB
+      max-request-size: 16MB
   web:
     resources:
       static-locations: classpath:/static/
@@ -53,6 +53,7 @@ agentforge:
   # 开发期免登录：设成某个用户名即可以该身份访问
   auth-dev-user: ${AUTH_DEV_USER:}
   workspaces-dir: ${WORKSPACES_DIR:}
+  rag-files-dir: ${RAG_FILES_DIR:}
   sandboxes-dir: ${SANDBOXES_DIR:}
 
   allow-unsafe-local-sandbox: ${ALLOW_UNSAFE_LOCAL_SANDBOX:false}

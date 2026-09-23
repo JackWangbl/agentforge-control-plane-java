@@ -27,6 +27,10 @@ public class AuthToken {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
+    /** 非空表示这是某个浏览器的试用凭证。同一浏览器只发一次，过期后必须登录。 */
+    @Column(name = "trial_key", length = 80, unique = true)
+    private String trialKey;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -40,4 +44,6 @@ public class AuthToken {
     public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public String getTrialKey() { return trialKey; }
+    public void setTrialKey(String trialKey) { this.trialKey = trialKey; }
 }

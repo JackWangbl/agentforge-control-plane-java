@@ -1,3 +1,16 @@
+.trial-banner {
+  align-items: center;
+  background: #fff7e8;
+  border: 1px solid #f3d7a1;
+  border-radius: 999px;
+  color: #8a5a12;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  padding: 4px 8px 4px 12px;
+}
+.trial-banner[hidden] { display: none !important; }
+.trial-banner b { font-variant-numeric: tabular-nums; }
 .login-gate {
   align-items: center;
   background: rgba(17, 24, 39, 0.62);
@@ -48,9 +61,17 @@
   font: inherit;
   padding: 10px 12px;
 }
-.login-error {
+.login-card .login-error {
+  background: #fdecec;
+  border: 1px solid #f6c9c9;
+  border-radius: 8px;
   color: var(--red);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 8px 10px;
 }
+.toast { z-index: 90; }
 .tenant-switch {
   max-width: 180px;
 }

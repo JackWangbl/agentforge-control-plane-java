@@ -181,6 +181,27 @@ public class ResourceController {
         row.setApiKeyRef(payload.api_key_ref());
         row.setTemperature(payload.temperature());
         row.setEnabled(payload.enabled());
+        row.setPurpose(normalizePurpose(payload.purpose()));
+        access.stampOwner(row, user);
+        models.save(row);
+        return dumper.dump(row, user);
+    }
+
+    @RequirePermission("model:write")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/api/models/{modelId}/copy")
+    public Map<String, Object> copyModel(CurrentUser user, @PathVariable Long modelId) {
+        ModelConfig source = access.getRow(user, ResourceKind.CREDENTIAL, modelId);
+        ModelConfig row = new ModelConfig();
+        row.setName(uniqueModelCopyName(source.getName()));
+        row.setProvider(source.getProvider());
+        row.setModelId(source.getModelId());
+        row.setBaseUrl(source.getBaseUrl());
+        row.setApiKey(source.getApiKey());
+        row.setApiKeyRef(source.getApiKeyRef());
+        row.setTemperature(source.getTemperature());
+        row.setEnabled(source.isEnabled());
+        row.setPurpose(source.getPurpose());
         access.stampOwner(row, user);
         models.save(row);
         return dumper.dump(row, user);
@@ -207,6 +228,7 @@ public class ResourceController {
         requireUniqueAgentName(payload.name(), null);
         bindings.validateBindings(user.getTenantId(), payload.skill_ids(), payload.mcp_ids(),
                 payload.opencli_ids(), payload.sandbox_id(), payload.http_agent_ids());
+        bindings.validateKnowledge(user, payload.knowledge_ids(), List.of(), payload.http_agent_ids());
         bindings.validateFlowTools(user.getTenantId(), payload.mcp_ids(), payload.sandbox_id(),
                 payload.http_agent_ids(), payload.tool_flows(), null);
         Agent row = new Agent();
@@ -220,6 +242,7 @@ public class ResourceController {
         row.setMcpIds(payload.mcp_ids());
         row.setOpencliIds(payload.opencli_ids());
         row.setHttpAgentIds(payload.http_agent_ids());
+        row.setKnowledgeIds(payload.knowledge_ids());
         row.setToolFlows(payload.tool_flows());
         row.setSandboxId(payload.sandbox_id());
         applyHttpProxyMode(row);
@@ -272,6 +295,7 @@ public class ResourceController {
         row.setMcpIds(new ArrayList<>(source.getMcpIds()));
         row.setOpencliIds(new ArrayList<>(source.getOpencliIds()));
         row.setHttpAgentIds(new ArrayList<>(source.getHttpAgentIds()));
+        row.setKnowledgeIds(new ArrayList<>(bindings.retainVisibleKnowledge(user, source.getKnowledgeIds())));
         row.setToolFlows(new ArrayList<>(source.getToolFlows()));
         row.setSandboxId(source.getSandboxId());
         row.setWorkspace("");
@@ -630,6 +654,11 @@ public class ResourceController {
         if (payload.containsKey("http_agent_ids")) {
             row.setHttpAgentIds(Jsons.longList(payload.get("http_agent_ids")));
         }
+        List<Long> previousKnowledge = row.getKnowledgeIds() == null
+                ? List.of() : new ArrayList<>(row.getKnowledgeIds());
+        if (payload.containsKey("knowledge_ids")) {
+            row.setKnowledgeIds(Jsons.longList(payload.get("knowledge_ids")));
+        }
         if (payload.containsKey("tool_flows") && payload.get("tool_flows") instanceof List<?>) {
             row.setToolFlows(Jsons.mapList(payload.get("tool_flows")));
         }
@@ -642,6 +671,10 @@ public class ResourceController {
                 payload.containsKey("opencli_ids") ? row.getOpencliIds() : null,
                 payload.containsKey("sandbox_id") ? row.getSandboxId() : null,
                 payload.containsKey("http_agent_ids") ? row.getHttpAgentIds() : null);
+        bindings.validateKnowledge(user,
+                payload.containsKey("knowledge_ids") ? row.getKnowledgeIds() : null,
+                previousKnowledge,
+                row.getHttpAgentIds());
         bindings.validateFlowTools(user.getTenantId(),
                 payload.containsKey("mcp_ids") ? row.getMcpIds() : null,
                 payload.containsKey("sandbox_id") ? row.getSandboxId() : null,
@@ -662,6 +695,7 @@ public class ResourceController {
         row.setSkillIds(List.of());
         row.setMcpIds(List.of());
         row.setOpencliIds(List.of());
+        row.setKnowledgeIds(List.of());
         row.setToolFlows(List.of());
         row.setSandboxId(null);
         if (row.getModelName() == null) {
@@ -791,6 +825,17 @@ public class ResourceController {
         if (payload.containsKey("enabled") && payload.get("enabled") instanceof Boolean enabled) {
             row.setEnabled(enabled);
         }
+        if (payload.containsKey("purpose")) {
+            row.setPurpose(normalizePurpose(Jsons.text(payload.get("purpose"))));
+        }
+    }
+
+    private static String normalizePurpose(String purpose) {
+        String value = purpose == null || purpose.isBlank() ? "chat" : purpose.strip();
+        if (!"chat".equals(value) && !"embedding".equals(value) && !"rerank".equals(value)) {
+            throw ApiException.unprocessable("模型用途只能是 chat、embedding 或 rerank");
+        }
+        return value;
     }
 
     private static void applyWorkflow(Workflow row, Map<String, Object> payload) {
@@ -871,6 +916,27 @@ public class ResourceController {
             throw ApiException.conflict("Agent 名称已存在");
         }
         return clean;
+    }
+
+    private String uniqueModelCopyName(String sourceName) {
+        String raw = ((sourceName == null || sourceName.isBlank() ? "模型" : sourceName.strip()) + " 副本");
+        if (raw.length() > 100) {
+            raw = raw.substring(0, 100).strip();
+        }
+        if (models.findByName(raw).isEmpty()) {
+            return raw;
+        }
+        String base = raw.length() > 90 ? raw.substring(0, 90).strip() : raw;
+        for (int index = 2; index < 1000; index++) {
+            String candidate = base + " " + index;
+            if (candidate.length() > 100) {
+                candidate = candidate.substring(0, 100);
+            }
+            if (models.findByName(candidate).isEmpty()) {
+                return candidate;
+            }
+        }
+        throw ApiException.conflict("无法生成不重复的模型名称");
     }
 
     private String uniqueCopyName(String sourceName, String requested) {

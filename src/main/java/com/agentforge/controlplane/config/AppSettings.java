@@ -11,6 +11,7 @@ public class AppSettings {
     private Langfuse langfuse = new Langfuse();
     private String authDevUser = "";
     private String workspacesDir = "";
+    private String ragFilesDir = "";
     private String sandboxesDir = "";
     private boolean allowUnsafeLocalSandbox = false;
     private String sandboxDefaultImage = "python:3.11-slim";
@@ -65,6 +66,8 @@ public class AppSettings {
     public void setAuthDevUser(String v) { this.authDevUser = v == null ? "" : v; }
     public String getWorkspacesDir() { return workspacesDir; }
     public void setWorkspacesDir(String v) { this.workspacesDir = v == null ? "" : v; }
+    public String getRagFilesDir() { return ragFilesDir; }
+    public void setRagFilesDir(String v) { this.ragFilesDir = v == null ? "" : v; }
     public String getSandboxesDir() { return sandboxesDir; }
     public void setSandboxesDir(String v) { this.sandboxesDir = v == null ? "" : v; }
     public boolean isAllowUnsafeLocalSandbox() { return allowUnsafeLocalSandbox; }

@@ -5,6 +5,7 @@ import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.SandboxPolicy;
 import com.agentforge.controlplane.domain.Skill;
+import com.agentforge.controlplane.rag.KnowledgeSearchService;
 import com.agentforge.controlplane.repo.AgentRepository;
 import com.agentforge.controlplane.repo.McpServerRepository;
 import com.agentforge.controlplane.repo.SkillRepository;
@@ -54,10 +55,11 @@ public class ToolRuntime {
     private final SandboxRuntime sandbox;
     private final McpStreamClient mcpStream;
     private final HttpAgentRuntime httpAgents;
+    private final KnowledgeSearchService knowledge;
 
     public ToolRuntime(SkillRepository skills, McpServerRepository mcps, AgentRepository agents,
                        BrowserRuntime browser, OpenCliRuntime opencli, SandboxRuntime sandbox,
-                       McpStreamClient mcpStream, HttpAgentRuntime httpAgents) {
+                       McpStreamClient mcpStream, HttpAgentRuntime httpAgents, KnowledgeSearchService knowledge) {
         this.skills = skills;
         this.mcps = mcps;
         this.agents = agents;
@@ -66,6 +68,7 @@ public class ToolRuntime {
         this.sandbox = sandbox;
         this.mcpStream = mcpStream;
         this.httpAgents = httpAgents;
+        this.knowledge = knowledge;
     }
 
     public static List<ToolSpec> builtinToolSpecs() {
@@ -176,6 +179,9 @@ public class ToolRuntime {
         if (HttpAgentRuntime.isHttpAgentTool(toolName) && httpAgents.allowsTool(agent, toolName)) {
             return true;
         }
+        if ("search_documents".equals(toolName) && knowledge.hasReadyDocuments(agent)) {
+            return true;
+        }
         for (McpServer row : selectedMcps(agent)) {
             for (Map<String, Object> tool : listMcpTools(row)) {
                 if (toolName != null && toolName.equals(tool.get("name"))) {
@@ -220,6 +226,12 @@ public class ToolRuntime {
                         ? (Map<String, Object>) map : ToolSpec.emptySchema();
                 tools.add(new ToolSpec(name, Jsons.text(spec.get("description")), schema));
             }
+        }
+        if (knowledge.hasReadyDocuments(agent) && !seen.contains("search_documents")) {
+            seen.add("search_documents");
+            tools.add(new ToolSpec("search_documents",
+                    "在当前 Agent 绑定的知识库中检索用户上传的文档原文。回答文档中的事实、数字、条款或流程前必须先调用。",
+                    ToolSpec.objectSchema(Map.of("query", ToolSpec.stringParam("要检索的问题或关键词")), "query")));
         }
         for (Map<String, Object> spec : FlowRuntime.flowToolSpecs(agent)) {
             String name = String.valueOf(spec.get("name"));
@@ -331,6 +343,10 @@ public class ToolRuntime {
         if (!flows.isBlank()) {
             extras.add(flows);
         }
+        String documents = knowledge.promptHint(agent);
+        if (!documents.isBlank()) {
+            extras.add(documents);
+        }
         return extras.isEmpty() ? base : (base + "\n\n" + String.join("\n\n", extras)).strip();
     }
 
@@ -372,6 +388,12 @@ public class ToolRuntime {
         }
         if ("search_knowledge".equals(name)) {
             return searchKnowledge(Jsons.text(args.get("query")), tenantId);
+        }
+        if ("search_documents".equals(name)) {
+            if (agent == null) {
+                return "缺少 Agent 上下文，无法检索知识库。";
+            }
+            return knowledge.searchForAgent(agent, Jsons.text(args.get("query")));
         }
         if ("list_agents".equals(name)) {
             return listAgents(tenantId);

@@ -55,6 +55,10 @@ public class Agent extends TenantOwnedEntity {
     @Column(name = "tool_flows", columnDefinition = "json")
     private List<Map<String, Object>> toolFlows = new ArrayList<>();
 
+    @Convert(converter = JsonConverters.LongListConverter.class)
+    @Column(name = "knowledge_ids", columnDefinition = "json")
+    private List<Long> knowledgeIds = new ArrayList<>();
+
     @Column(name = "sandbox_id")
     private Long sandboxId;
 
@@ -88,6 +92,10 @@ public class Agent extends TenantOwnedEntity {
     }
     public List<Map<String, Object>> getToolFlows() { return toolFlows; }
     public void setToolFlows(List<Map<String, Object>> v) { this.toolFlows = v == null ? new ArrayList<>() : v; }
+    public List<Long> getKnowledgeIds() { return knowledgeIds; }
+    public void setKnowledgeIds(List<Long> knowledgeIds) {
+        this.knowledgeIds = knowledgeIds == null ? new ArrayList<>() : knowledgeIds;
+    }
     public Long getSandboxId() { return sandboxId; }
     public void setSandboxId(Long sandboxId) { this.sandboxId = sandboxId; }
     public String getWorkspace() { return workspace; }
