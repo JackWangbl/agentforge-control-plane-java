@@ -9,9 +9,9 @@ spring:
   config:
     import: "optional:file:./.env[.properties]"
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/agentforge?characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=PREFERRED
-    username: ${DATABASE_USER:agentforge_app}
-    password: ${DATABASE_PASSWORD:}
+    # url: jdbc:mysql://127.0.0.1:3306/agentforge?characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=PREFERRED
+    # username: ${DATABASE_USER:agentforge_app}
+    # password: ${DATABASE_PASSWORD:}
     hikari:
       maximum-pool-size: 16
       pool-name: agentforge-pool
