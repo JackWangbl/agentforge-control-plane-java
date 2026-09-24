@@ -1,5 +1,28 @@
-.session-view {
+.session-view,
+.session-clear {
   padding: 5px 10px;
+}
+.session-ops {
+  white-space: nowrap;
+}
+.session-ops .btn + .btn {
+  margin-left: 6px;
+}
+.session-detail-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .page-head {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .page-actions {
+    width: 100%;
+  }
 }
 dialog#sessionModal {
   width: min(920px, 94vw);

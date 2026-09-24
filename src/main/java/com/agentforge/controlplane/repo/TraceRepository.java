@@ -4,11 +4,14 @@ import com.agentforge.controlplane.domain.Trace;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface TraceRepository extends JpaRepository<Trace, Long>, JpaSpecificationExecutor<Trace> {
     Optional<Trace> findByTraceId(String traceId);
+
+    void deleteBySessionIdIn(Collection<String> sessionIds);
 
     List<Trace> findBySessionIdOrderByStartedAtDesc(String sessionId);
 
