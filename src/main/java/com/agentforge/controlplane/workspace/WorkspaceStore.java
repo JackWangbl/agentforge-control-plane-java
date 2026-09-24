@@ -12,10 +12,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -26,6 +29,7 @@ public class WorkspaceStore {
     private static final Pattern UNSAFE = Pattern.compile("[^\\w\\u4e00-\\u9fff]+");
     private static final Pattern MULTI_DASH = Pattern.compile("-{2,}");
     private static final Pattern SESSION_SAFE = Pattern.compile("[^A-Za-z0-9._-]");
+    private static final Pattern FILE_TOKEN = Pattern.compile("[A-Za-z0-9._-]{1,120}");
 
     private final AppSettings settings;
 
@@ -212,6 +216,50 @@ public class WorkspaceStore {
             return copy;
         }
         return null;
+    }
+
+    /** 删掉这一条会话的 JSON，以及工作区里对应的链路文件。不动 agent.json 和长期记忆。 */
+    public void deleteSessionFiles(Agent agent, String sessionId, Collection<String> traceIds) {
+        Path root = workspacesRoot().normalize();
+        Path sessionFile = sessionPath(agent, sessionId).normalize();
+        Set<String> ids = new LinkedHashSet<>();
+        if (traceIds != null) {
+            ids.addAll(traceIds);
+        }
+        if (sessionFile.startsWith(root) && Files.isRegularFile(sessionFile)) {
+            try {
+                Map<String, Object> data = Jsons.MAPPER.readValue(
+                        Files.readString(sessionFile, StandardCharsets.UTF_8), new TypeReference<>() {});
+                for (Map<String, Object> trace : Jsons.mapList(data.get("traces"))) {
+                    String id = Jsons.text(trace.get("trace_id"));
+                    if (!id.isEmpty()) {
+                        ids.add(id);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                Files.deleteIfExists(sessionFile);
+            } catch (IOException ignored) {
+            }
+        }
+        Path traceDir = workspaceDir(agent).resolve("traces").normalize();
+        if (!traceDir.startsWith(root)) {
+            return;
+        }
+        for (String traceId : ids) {
+            if (traceId == null || !FILE_TOKEN.matcher(traceId).matches()) {
+                continue;
+            }
+            Path file = traceDir.resolve(traceId + ".json").normalize();
+            if (!file.startsWith(traceDir)) {
+                continue;
+            }
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException ignored) {
+            }
+        }
     }
 
     public void clearCheckpoint(Agent agent, String sessionId) {

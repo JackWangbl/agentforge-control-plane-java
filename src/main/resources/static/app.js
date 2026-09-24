@@ -110,7 +110,7 @@ const dt = value => new Date(value+'Z').toLocaleString('zh-CN',{month:'2-digit',
 const statusText = {completed:'已完成',running:'运行中',failed:'失败',ok:'正常',error:'异常',published:'已发布',draft:'草稿',queued:'排队中',passed:'通过',skipped:'跳过',cancelled:'已取消',paused:'已暂停'};
 const titles = {dashboard:'运行概览',memories:'记忆',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'Agent 编排',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
 const pageMeta = {
-  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
+  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索、审计并清除 Agent 会话记录。长期记忆不会被删除'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
 };
 let currentPage='dashboard', currentParam='';
 function pageTools(extra=''){
@@ -125,17 +125,30 @@ async function afterChange(page, message){
 }
 function head(page, action=''){const m=pageMeta[page];return `<div class="page-head"><div><div class="eyebrow">${m[0]}</div><h1>${m[1]}</h1><p>${m[2]}</p></div>${action}</div>`}
 function pill(s){return `<span class="pill ${s}">${statusText[s]||s}</span>`}
-async function dashboard(){const d=await api('/api/dashboard');const m=d.metrics;return `${head('sessions', pageTools()).replace('会话查询','运行概览').replace('检索和审计所有 Agent 会话记录','实时掌握 Agent 服务的运行状态与业务表现')}
+async function dashboard(){const d=await api('/api/dashboard');const m=d.metrics;return `${head('sessions', pageTools()).replace('会话查询','运行概览').replace('检索、审计并清除 Agent 会话记录。长期记忆不会被删除','实时掌握 Agent 服务的运行状态与业务表现')}
 <div class="visit-grid">
 ${metric('总访问次数',fmt(m.visitors_total||0),'累计','每次打开概览','#2367e8','次')}${metric('当日访问次数',fmt(m.visitors_today||0),'今天','北京时间','#16a56a','日')}
 </div><div class="metric-grid">
 ${metric('今日请求',fmt(m.requests),'↗ 12.6%','较昨日','#2367e8','↗')}${metric('成功率',m.success_rate+'%','↗ 1.2%','近 24 小时','#16a56a','✓')}${metric('平均延迟',(m.avg_latency_ms/1000).toFixed(2)+'s','↘ 8.3%','响应更快','#7457e8','⌁')}${metric('Token 消耗',fmt(m.tokens),'↗ 6.8%','今日累计','#e49b18','T')}
 </div><div class="dashboard-grid"><section class="panel"><div class="panel-title"><h3>请求趋势</h3><small>近 24 小时 · 每小时</small></div><div class="chart-wrap">${d.activity.map(v=>`<i class="bar" style="height:${v/3.8}px"></i>`).join('')}</div></section><section class="panel"><div class="panel-title"><h3>Agent 健康度</h3><small>${d.agents.length} 个在线</small></div><div class="agent-list">${d.agents.map((a,i)=>`<div class="agent-row"><div class="agent-icon">${a.name[0]}</div><div><b>${a.name}</b><small>${a.model_name} · ${a.version}</small><div class="progress"><i style="width:${a.success_rate}%"></i></div></div><span class="score">${a.success_rate}%</span></div>`).join('')}</div></section></div>${sessionTable(d.recent_sessions,true)}`}
 function metric(label,value,trend,sub,color,icon){return `<div class="metric-card" style="--accent:${color}"><div class="metric-label">${label}<span class="metric-icon">${icon}</span></div><div class="metric-value">${value}</div><div class="trend">${trend}<span>${sub}</span></div></div>`}
-function sessionTable(rows, dashboard=false){const body=rows.length?rows.map(x=>`<tr class="session-row" ${dashboard?'':`data-session-id="${escapeHtml(x.session_id)}" tabindex="0"`}><td class="mono">${escapeHtml(x.session_id)}</td><td><b>${escapeHtml(x.title)}</b><br><small style="color:#9aa3b0">${escapeHtml(x.channel)}</small></td><td>${escapeHtml(x.agent_name)}</td><td class="mono">${escapeHtml(x.user_id)}</td><td>${pill(x.status)}</td><td>${x.message_count}</td><td>${fmt(x.total_tokens)}</td><td>${(x.latency_ms/1000).toFixed(2)}s</td><td>${dt(x.updated_at||x.created_at)}</td>${dashboard?'':`<td><button type="button" class="btn ghost session-view" data-session-id="${escapeHtml(x.session_id)}" onclick="event.stopPropagation();openSessionDetail('${escapeHtml(x.session_id)}')">查看</button></td>`}</tr>`).join(''):`<tr><td class="session-empty" colspan="${dashboard?9:10}">暂无真实会话。请先在 Agent 调试台发起一次对话。</td></tr>`;return `<section class="panel wide-panel"><div class="panel-title"><h3>${dashboard?'最近会话':'真实会话记录'}</h3><small>${rows.length} 条记录</small></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Session ID</th><th>会话主题</th><th>Agent</th><th>用户</th><th>状态</th><th>消息</th><th>Token</th><th>耗时</th><th>时间</th>${dashboard?'':'<th>操作</th>'}</tr></thead><tbody>${body}</tbody></table></div></section>`}
-async function sessions(){const [rows,agents]=await Promise.all([api('/api/sessions'),api('/api/agents')]);return `${head('sessions', pageTools())}<section class="panel"><div class="table-tools"><div class="search"><input id="sessionQ" placeholder="搜索 Session ID、用户或消息内容"></div><select id="agentFilter" class="select"><option value="">全部 Agent</option>${agents.map(x=>`<option>${escapeHtml(x.name)}</option>`).join('')}</select><select id="statusFilter" class="select"><option value="">全部状态</option><option value="completed">已完成</option><option value="running">运行中</option><option value="failed">失败</option></select><button class="btn primary" id="doFilter">查询</button></div><div id="sessionResults">${sessionTable(rows).replace('<section class="panel wide-panel">','<section>')}</div></section>`}
+function attr(value){return escapeHtml(value).replaceAll('"','&quot;')}
+function sessionTable(rows, dashboard=false){
+  const ops=x=>{
+    const id=attr(x.session_id);
+    const clear=can('session:write')?`<button type="button" class="btn ghost danger session-clear" data-session-id="${id}">清除</button>`:'';
+    return `<td class="session-ops"><button type="button" class="btn ghost session-view" data-session-id="${id}">查看</button>${clear}</td>`;
+  };
+  const body=rows.length?rows.map(x=>`<tr class="session-row" ${dashboard?'':`data-session-id="${attr(x.session_id)}" tabindex="0"`}><td class="mono">${escapeHtml(x.session_id)}</td><td><b>${escapeHtml(x.title)}</b><br><small style="color:#9aa3b0">${escapeHtml(x.channel)}</small></td><td>${escapeHtml(x.agent_name)}</td><td class="mono">${escapeHtml(x.user_id)}</td><td>${pill(x.status)}</td><td>${x.message_count}</td><td>${fmt(x.total_tokens)}</td><td>${(x.latency_ms/1000).toFixed(2)}s</td><td>${dt(x.updated_at||x.created_at)}</td>${dashboard?'':ops(x)}</tr>`).join(''):`<tr><td class="session-empty" colspan="${dashboard?9:10}">暂无真实会话。请先在 Agent 调试台发起一次对话。</td></tr>`;
+  return `<section class="panel wide-panel"><div class="panel-title"><h3>${dashboard?'最近会话':'真实会话记录'}</h3><small>${rows.length} 条记录</small></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Session ID</th><th>会话主题</th><th>Agent</th><th>用户</th><th>状态</th><th>消息</th><th>Token</th><th>耗时</th><th>时间</th>${dashboard?'':'<th>操作</th>'}</tr></thead><tbody>${body}</tbody></table></div></section>`;
+}
+async function sessions(){
+  const [rows,agents]=await Promise.all([api('/api/sessions'),api('/api/agents')]);
+  const clear=can('session:write')?'<button class="btn ghost danger" type="button" id="clearSessions">清除会话记录</button>':'';
+  return `${head('sessions', pageTools(clear))}<section class="panel"><div class="table-tools"><div class="search"><input id="sessionQ" placeholder="搜索 Session ID、用户或消息内容"></div><select id="agentFilter" class="select"><option value="">全部 Agent</option>${agents.map(x=>`<option>${escapeHtml(x.name)}</option>`).join('')}</select><select id="statusFilter" class="select"><option value="">全部状态</option><option value="completed">已完成</option><option value="running">运行中</option><option value="failed">失败</option></select><button class="btn primary" id="doFilter">查询</button></div><div id="sessionResults">${sessionTable(rows).replace('<section class="panel wide-panel">','<section>')}</div></section>`;
+}
 
-function sessionDetailMarkup(data){const messages=(data.messages||[]).map(item=>`<article class="session-message ${item.role==='user'?'user':'assistant'}"><header><b>${item.role==='user'?'用户':escapeHtml(item.agent_name||data.agent_name)}</b><time>${dt(item.created_at)}</time></header><p>${escapeHtml(item.content).replace(/\n/g,'<br>')}</p></article>`).join('');const traces=(data.traces||[]).map(item=>`<div class="session-trace"><span class="mono">${escapeHtml(item.trace_id)}</span>${pill(item.status)}<span>${item.duration_ms} ms</span><span>${fmt((item.input_tokens||0)+(item.output_tokens||0))} Token</span></div>`).join('');return `<section class="session-detail"><div class="session-detail-head"><div><small>SESSION DETAIL</small><h3>${escapeHtml(data.title)}</h3><p class="mono">${escapeHtml(data.session_id)}</p></div><button type="button" class="close" id="closeSessionDetail" aria-label="关闭">×</button></div><div class="session-facts"><span><small>Agent</small><b>${escapeHtml(data.agent_name)}</b></span><span><small>用户</small><b>${escapeHtml(data.user_id)}</b></span><span><small>状态</small>${pill(data.status)}</span><span><small>Token</small><b>${fmt(data.total_tokens)}</b></span><span><small>总耗时</small><b>${data.latency_ms} ms</b></span></div><h4>真实消息记录 · ${(data.messages||[]).length}</h4><div class="session-messages">${messages||'<div class="session-detail-empty">该历史会话没有保存消息正文。</div>'}</div><h4>执行链路 · ${(data.traces||[]).length}</h4><div class="session-traces">${traces||'<div class="session-detail-empty">暂无关联链路。</div>'}</div></section>`}
+function sessionDetailMarkup(data){const messages=(data.messages||[]).map(item=>`<article class="session-message ${item.role==='user'?'user':'assistant'}"><header><b>${item.role==='user'?'用户':escapeHtml(item.agent_name||data.agent_name)}</b><time>${dt(item.created_at)}</time></header><p>${escapeHtml(item.content).replace(/\n/g,'<br>')}</p></article>`).join('');const traces=(data.traces||[]).map(item=>`<div class="session-trace"><span class="mono">${escapeHtml(item.trace_id)}</span>${pill(item.status)}<span>${item.duration_ms} ms</span><span>${fmt((item.input_tokens||0)+(item.output_tokens||0))} Token</span></div>`).join('');const clear=can('session:write')?`<button type="button" class="btn ghost danger" id="clearSessionDetail" data-session-id="${attr(data.session_id)}">清除这条记录</button>`:'';return `<section class="session-detail"><div class="session-detail-head"><div><small>SESSION DETAIL</small><h3>${escapeHtml(data.title)}</h3><p class="mono">${escapeHtml(data.session_id)}</p></div><div class="session-detail-actions">${clear}<button type="button" class="close" id="closeSessionDetail" aria-label="关闭">×</button></div></div><div class="session-facts"><span><small>Agent</small><b>${escapeHtml(data.agent_name)}</b></span><span><small>用户</small><b>${escapeHtml(data.user_id)}</b></span><span><small>状态</small>${pill(data.status)}</span><span><small>Token</small><b>${fmt(data.total_tokens)}</b></span><span><small>总耗时</small><b>${data.latency_ms} ms</b></span></div><h4>真实消息记录 · ${(data.messages||[]).length}</h4><div class="session-messages">${messages||'<div class="session-detail-empty">该历史会话没有保存消息正文。</div>'}</div><h4>执行链路 · ${(data.traces||[]).length}</h4><div class="session-traces">${traces||'<div class="session-detail-empty">暂无关联链路。</div>'}</div></section>`}
 function closeSessionDetail(){
   const modal=$('#sessionModal');
   const target=$('#sessionDetail');
@@ -155,6 +168,8 @@ async function openSessionDetail(sessionId){
     target.innerHTML=sessionDetailMarkup(data);
     const close=$('#closeSessionDetail');
     if(close) close.onclick=closeSessionDetail;
+    const clear=$('#clearSessionDetail');
+    if(clear) clear.onclick=()=>clearOneSession(clear.dataset.sessionId);
   }catch(e){target.innerHTML='<div class="empty">会话详情加载失败。</div>'}
 }
 
@@ -1154,7 +1169,7 @@ async function playground(selectedAgent=''){
   const http=isHttpBackedAgent(agent);
   const canSend=http||!!(agent&&agent.model_name);
   const peerMeta=http?agentRuntimeLabel(agent):playgroundModelLabel(agent);
-  return `<div class="pg-page">${head('playground', pageTools('<button class="btn ghost" type="button" id="resumeChat" hidden>从失败处继续</button><button class="btn ghost" type="button" id="clearChat">新开会话</button>'))}
+  return `<div class="pg-page">${head('playground', pageTools('<button class="btn ghost" type="button" id="resumeChat" hidden>从失败处继续</button><button class="btn ghost" type="button" id="clearChat">新开会话</button>'+(can('session:write')?'<button class="btn ghost danger" type="button" id="purgeChat">清除会话记录</button>':'')))}
 <div class="pg-controls">
   <label class="pg-field">智能体<select id="runAgent" class="select">${agents.map(x=>`<option value="${x.id}" ${String(x.id)===String(agent&&agent.id)?'selected':''}>${x.name}</option>`).join('')||'<option value="">暂无智能体</option>'}</select></label>
   <label class="pg-field">是否分流<select id="runExperiment" class="select"><option value="">不分流，使用所选智能体</option>${expOptions}</select></label>
@@ -2259,6 +2274,78 @@ function syncChatHeader(){
   syncBindHint();
 }
 function resetChat(){chatState.sessionId='';chatState.messages=[];chatState.spans=[];chatState.traceId='';chatState.latencyMs=0;chatState.mode='';chatState.checkpoint=null;persistChat();paintChat();paintTrace();paintExpHint(null);syncResumeButton();const state=$('#runState');if(state){state.className='pill draft';state.textContent='待发送'}}
+function forgetSessions(ids){
+  const gone=new Set(ids||[]);
+  if(!gone.size) return;
+  for(let i=sessionStorage.length-1;i>=0;i--){
+    const key=sessionStorage.key(i);
+    if(!key||!key.startsWith('pg_chat_')) continue;
+    try{
+      const saved=JSON.parse(sessionStorage.getItem(key)||'{}');
+      if(gone.has(saved.sessionId)) sessionStorage.removeItem(key);
+    }catch(e){}
+  }
+  if(gone.has(chatState.sessionId)){
+    chatState.sessionId='';
+    chatState.messages=[];
+    chatState.spans=[];
+    chatState.traceId='';
+    chatState.latencyMs=0;
+    chatState.checkpoint=null;
+  }
+}
+function sessionQuery(){
+  const p=new URLSearchParams();
+  const q=$('#sessionQ')&&$('#sessionQ').value.trim();
+  const agent=$('#agentFilter')&&$('#agentFilter').value;
+  const status=$('#statusFilter')&&$('#statusFilter').value;
+  if(q) p.set('q', q);
+  if(agent) p.set('agent_name', agent);
+  if(status) p.set('status', status);
+  return p;
+}
+async function reloadSessions(){
+  const rows=await api('/api/sessions?'+sessionQuery());
+  const box=$('#sessionResults');
+  if(box) box.innerHTML=sessionTable(rows).replace('<section class="panel wide-panel">','<section>');
+}
+async function clearOneSession(sessionId){
+  if(!sessionId) return;
+  if(!confirm('清除这条会话记录？消息、执行链路和工作区会话文件会删除，长期记忆会保留。此操作不能恢复。')) return;
+  try{
+    const r=await api('/api/sessions/'+encodeURIComponent(sessionId),{method:'DELETE'});
+    forgetSessions(r.session_ids||[sessionId]);
+    closeSessionDetail();
+    if(currentPage==='sessions') await reloadSessions();
+    if(currentPage==='playground') resetChat();
+    toast(r.message||'已清除会话记录');
+  }catch(e){toast(apiError(e)||'清除失败')}
+}
+async function clearVisibleSessions(){
+  const filtered=!!(sessionQuery().toString());
+  const text=filtered
+    ? '清除所有符合当前筛选条件的会话记录？列表每次最多显示 50 条，这次会删掉全部匹配记录。消息、执行链路和工作区会话文件会删除，长期记忆会保留。此操作不能恢复。'
+    : '清除全部会话记录？消息、执行链路和工作区会话文件会删除，长期记忆会保留。此操作不能恢复。';
+  if(!confirm(text)) return;
+  try{
+    const r=await api('/api/sessions?'+sessionQuery(),{method:'DELETE'});
+    forgetSessions(r.session_ids||[]);
+    closeSessionDetail();
+    await reloadSessions();
+    toast(r.message||'已清除会话记录');
+  }catch(e){toast(apiError(e)||'清除失败')}
+}
+async function purgePlaygroundChat(){
+  const id=chatState.sessionId;
+  if(!id){
+    if(!chatState.messages.length){toast('当前没有会话记录');return}
+    if(!confirm('当前对话还没有保存到服务器，只清空调试台里的显示？')) return;
+    resetChat();
+    toast('已清空调试台显示');
+    return;
+  }
+  await clearOneSession(id);
+}
 function paintExpHint(info){
   const el=$('#expHint'); if(!el) return;
   const exp=currentExperiment();
@@ -2364,7 +2451,7 @@ function bindPage(page){
   if(page==='knowledge') bindKnowledgeUpload();
   if(page==='evaluations') bindEvalPage();
   if(page==='experiments') bindExpPage();
-  if(page==='sessions'){const runFilter=async()=>{const p=new URLSearchParams();const q=$('#sessionQ').value.trim(),a=$('#agentFilter').value,s=$('#statusFilter').value;if(q)p.set('q',q);if(a)p.set('agent_name',a);if(s)p.set('status',s);const rows=await api('/api/sessions?'+p);$('#sessionResults').innerHTML=sessionTable(rows).replace('<section class="panel wide-panel">','<section>');closeSessionDetail()};$('#doFilter').onclick=runFilter;$('#sessionQ').onkeydown=e=>{if(e.key==='Enter')runFilter()};$('#sessionResults').onclick=e=>{const hit=e.target.closest('[data-session-id]');if(hit)openSessionDetail(hit.dataset.sessionId)}}if(page==='playground'){paintChat();paintTrace();syncPlaygroundMode();const form=$('#chatForm'),input=$('#runMessage');if(form)form.onsubmit=e=>{e.preventDefault();runPlayground()};if(input){input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runPlayground()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(120,input.scrollHeight)+'px'})}const agentSel=$('#runAgent');if(agentSel)agentSel.onchange=async()=>{if(String(chatState.agentId)!==agentSel.value){await restoreAgentChat(agentSel.value);paintChat();paintTrace()}syncPlaygroundMode()};const expSel=$('#runExperiment');if(expSel)expSel.onchange=applyExperimentChoice;const userKey=$('#runUserKey');if(userKey)userKey.onchange=()=>{chatState.experimentUserKey=userKey.value.trim()};syncExpUserField();paintExpHint(null);if($('#resumeChat'))$('#resumeChat').onclick=resumePlayground;syncResumeButton();if($('#clearChat'))$('#clearChat').onclick=resetChat;input&&input.focus()}if(page==='workflows') bindWorkflowCanvas()}
+  if(page==='sessions'){const runFilter=async()=>{closeSessionDetail();await reloadSessions()};$('#doFilter').onclick=runFilter;$('#sessionQ').onkeydown=e=>{if(e.key==='Enter')runFilter()};const clearAll=$('#clearSessions');if(clearAll)clearAll.onclick=clearVisibleSessions;$('#sessionResults').onclick=e=>{const clear=e.target.closest('.session-clear');if(clear){clearOneSession(clear.dataset.sessionId);return}const view=e.target.closest('.session-view');if(view){openSessionDetail(view.dataset.sessionId);return}const hit=e.target.closest('[data-session-id]');if(hit)openSessionDetail(hit.dataset.sessionId)}}if(page==='playground'){paintChat();paintTrace();syncPlaygroundMode();const form=$('#chatForm'),input=$('#runMessage');if(form)form.onsubmit=e=>{e.preventDefault();runPlayground()};if(input){input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runPlayground()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(120,input.scrollHeight)+'px'})}const agentSel=$('#runAgent');if(agentSel)agentSel.onchange=async()=>{if(String(chatState.agentId)!==agentSel.value){await restoreAgentChat(agentSel.value);paintChat();paintTrace()}syncPlaygroundMode()};const expSel=$('#runExperiment');if(expSel)expSel.onchange=applyExperimentChoice;const userKey=$('#runUserKey');if(userKey)userKey.onchange=()=>{chatState.experimentUserKey=userKey.value.trim()};syncExpUserField();paintExpHint(null);if($('#resumeChat'))$('#resumeChat').onclick=resumePlayground;syncResumeButton();if($('#clearChat'))$('#clearChat').onclick=resetChat;if($('#purgeChat'))$('#purgeChat').onclick=purgePlaygroundChat;input&&input.focus()}if(page==='workflows') bindWorkflowCanvas()}
 function syncExpUserField(){
   const wrap=$('#runUserWrap');
   if(!wrap) return;

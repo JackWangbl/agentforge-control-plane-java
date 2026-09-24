@@ -8,11 +8,11 @@ import com.agentforge.controlplane.domain.Trace;
 import com.agentforge.controlplane.repo.ChatMessageRepository;
 import com.agentforge.controlplane.repo.ConversationRepository;
 import com.agentforge.controlplane.repo.TraceRepository;
+import com.agentforge.controlplane.session.SessionRecordService;
 import com.agentforge.controlplane.util.Jsons;
-import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -30,13 +30,15 @@ public class SessionController {
     private final ChatMessageRepository messages;
     private final TraceRepository traces;
     private final ResourceDumper dumper;
+    private final SessionRecordService records;
 
     public SessionController(ConversationRepository conversations, ChatMessageRepository messages,
-                             TraceRepository traces, ResourceDumper dumper) {
+                             TraceRepository traces, ResourceDumper dumper, SessionRecordService records) {
         this.conversations = conversations;
         this.messages = messages;
         this.traces = traces;
         this.dumper = dumper;
+        this.records = records;
     }
 
     @RequirePermission("session:read")
@@ -49,37 +51,27 @@ public class SessionController {
                                           @RequestParam(required = false) String q,
                                           @RequestParam(defaultValue = "50") int limit) {
         int size = Math.min(Math.max(limit, 1), 200);
-        Specification<Conversation> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.or(cb.equal(root.get("tenantId"), user.getTenantId()), cb.isNull(root.get("tenantId"))));
-            if (agent_name != null && !agent_name.isBlank()) {
-                predicates.add(cb.equal(root.get("agentName"), agent_name));
-            }
-            if (user_id != null && !user_id.isBlank()) {
-                predicates.add(cb.like(root.get("userId"), "%" + user_id + "%"));
-            }
-            if (session_id != null && !session_id.isBlank()) {
-                predicates.add(cb.like(root.get("sessionId"), "%" + session_id + "%"));
-            }
-            if (status != null && !status.isBlank()) {
-                predicates.add(cb.equal(root.get("status"), status));
-            }
-            if (q != null && !q.isBlank()) {
-                String needle = "%" + q + "%";
-                List<String> matched = messages.findSessionIdsByKeyword(user.getTenantId(), q);
-                Predicate text = cb.or(
-                        cb.like(root.get("title"), needle),
-                        cb.like(root.get("userId"), needle),
-                        cb.like(root.get("sessionId"), needle));
-                if (!matched.isEmpty()) {
-                    text = cb.or(text, root.get("sessionId").in(matched));
-                }
-                predicates.add(text);
-            }
-            return cb.and(predicates.toArray(Predicate[]::new));
-        };
-        return conversations.findAll(spec, PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "updatedAt", "id")))
+        return conversations.findAll(
+                        records.specification(user, agent_name, user_id, session_id, status, q),
+                        PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "updatedAt", "id")))
                 .stream().map(row -> dumper.dump(row, user)).toList();
+    }
+
+    @RequirePermission("session:write")
+    @DeleteMapping("/api/sessions")
+    public Map<String, Object> clear(CurrentUser user,
+                                     @RequestParam(required = false) String agent_name,
+                                     @RequestParam(required = false) String user_id,
+                                     @RequestParam(required = false) String session_id,
+                                     @RequestParam(required = false) String status,
+                                     @RequestParam(required = false) String q) {
+        return records.clearMatching(user, agent_name, user_id, session_id, status, q);
+    }
+
+    @RequirePermission("session:write")
+    @DeleteMapping("/api/sessions/{sessionId}")
+    public Map<String, Object> clearOne(CurrentUser user, @PathVariable String sessionId) {
+        return records.clearOne(user, sessionId);
     }
 
     @RequirePermission("session:read")
