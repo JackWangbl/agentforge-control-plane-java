@@ -80,6 +80,18 @@ public class SchemaMigrator implements ApplicationRunner {
                 }
                 log.info("已为 conversations 表补齐 subject_key 列");
             }
+            if (!hasColumn(conn, "conversations", "workflow_id")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE conversations ADD COLUMN workflow_id BIGINT NULL");
+                }
+                log.info("已为 conversations 表补齐 workflow_id 列");
+            }
+            if (!hasColumn(conn, "conversations", "current_node_id")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE conversations ADD COLUMN current_node_id VARCHAR(40) NULL");
+                }
+                log.info("已为 conversations 表补齐 current_node_id 列");
+            }
             if (!hasTable(conn, "http_agents")) {
                 try (Statement stmt = conn.createStatement()) {
                     stmt.execute("""

@@ -88,6 +88,7 @@ public class SeedRunner implements ApplicationRunner {
         ensureIam();
         seedBuiltinTools();
         migrateOpencli();
+        ensureExampleOrchestrations();
     }
 
     private void seedIfEmpty() {
@@ -140,8 +141,13 @@ public class SeedRunner implements ApplicationRunner {
         Workflow wf = new Workflow();
         wf.setName("智能客服协作流");
         wf.setDescription("意图识别、检索和工单协作");
-        wf.setStatus("published");
-        wf.setGraph(Map.of("nodes", List.of(), "edges", List.of()));
+        wf.setStatus("draft");
+        wf.setGraph(Map.of(
+                "mode", "multi_agent",
+                "dispatch", "start",
+                "global_prompt", "",
+                "nodes", List.of(Map.of("id", "start", "type", "start", "label", "开始", "x", 72, "y", 200)),
+                "edges", List.of()));
         workflows.save(wf);
     }
 
@@ -275,5 +281,171 @@ public class SeedRunner implements ApplicationRunner {
             row.setPasswordHash(PasswordHasher.hash(password));
         }
         return users.save(row);
+    }
+
+    /**
+     * 给新用户准备三种编排模式的现成例子。已存在同名智能体 / 编排则跳过，不覆盖用户修改。
+     */
+    private void ensureExampleOrchestrations() {
+        Tenant def = tenants.findBySlug("default").orElse(null);
+        long tenantId = def == null ? 1L : def.getId();
+        String modelName = defaultModelName();
+
+        Agent sales = ensureExampleAgent(tenantId, "示例·售前顾问", "解答产品功能、套餐和报价", modelName,
+                "你是售前顾问。用简洁中文介绍产品能力、套餐差异和大致报价区间。不确定的承诺不要编造。");
+        Agent support = ensureExampleAgent(tenantId, "示例·售后专员", "处理退换货、故障和投诉", modelName,
+                "你是售后专员。先确认订单或现象，再给出可执行的退换货、检修或升级建议。语气冷静、有步骤。");
+        Agent boss = ensureExampleAgent(tenantId, "示例·主控策划", "旅行规划总控，按需调用子智能体", modelName,
+                "你是旅行规划主控。先理解用户需求，需要细节时调用子智能体工具，再汇总成完整方案。");
+        Agent trip = ensureExampleAgent(tenantId, "示例·行程规划", "安排目的地、日程和交通", modelName,
+                "你是行程规划师。只输出日程、景点和交通建议，不要谈预算细节。");
+        Agent budget = ensureExampleAgent(tenantId, "示例·预算核算", "估算旅行花费与节省建议", modelName,
+                "你是预算顾问。根据行程给出分项花费估算和可节省项，用人民币。");
+        Agent gather = ensureExampleAgent(tenantId, "示例·素材收集", "整理主题要点与参考资料", modelName,
+                "你是素材收集员。围绕主题列出关键事实、要点和可用角度，条目清晰。");
+        Agent writer = ensureExampleAgent(tenantId, "示例·文案撰写", "把要点写成可读短文", modelName,
+                "你是文案写手。根据上游素材写成 300 字左右的短文，标题另起一行。");
+        Agent editor = ensureExampleAgent(tenantId, "示例·校对润色", "检查事实、语气并给出终稿", modelName,
+                "你是校对编辑。检查事实、错别字和语气，输出终稿，并附三行修改说明。");
+
+        ensureExampleWorkflow(tenantId, "示例·场景移交｜智能客服",
+                "跟着练场景移交：发布后试「企业版一年多少钱」「订单坏了要退货」「转人工」。",
+                handoffExampleGraph(sales, support));
+        ensureExampleWorkflow(tenantId, "示例·主从 SubAgent｜旅行规划",
+                "跟着练主从模式：发布后试「帮我规划三天上海亲子游，预算五千」。看主控是否调用行程/预算子智能体。",
+                supervisorExampleGraph(boss, trip, budget));
+        ensureExampleWorkflow(tenantId, "示例·工作流｜内容生产",
+                "跟着练工作流：发布后试「写一篇介绍多智能体编排的短文」。会依次跑素材→文案→校对。",
+                pipelineExampleGraph(gather, writer, editor));
+    }
+
+    private String defaultModelName() {
+        return models.findAll().stream()
+                .filter(ModelConfig::isEnabled)
+                .map(ModelConfig::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .findFirst()
+                .orElse("Qwen-Max");
+    }
+
+    private Agent ensureExampleAgent(long tenantId, String name, String description, String modelName, String prompt) {
+        Agent row = agents.findByName(name).orElse(null);
+        if (row != null) {
+            return row;
+        }
+        row = new Agent();
+        row.setTenantId(tenantId);
+        row.setOwnerId(null);
+        row.setName(name);
+        row.setDescription(description);
+        row.setModelName(modelName);
+        row.setSystemPrompt(prompt);
+        row.setStatus("published");
+        row.setVersion("v1.0.0");
+        row.setSuccessRate(97.0);
+        return agents.save(row);
+    }
+
+    private void ensureExampleWorkflow(long tenantId, String name, String description, Map<String, Object> graph) {
+        Workflow row = workflows.findByName(name).orElse(null);
+        if (row == null) {
+            row = new Workflow();
+            row.setTenantId(tenantId);
+            row.setOwnerId(null);
+            row.setName(name);
+            row.setStatus("draft");
+        }
+        row.setDescription(description);
+        row.setGraph(graph);
+        workflows.save(row);
+    }
+
+    private static Map<String, Object> handoffExampleGraph(Agent sales, Agent support) {
+        return Map.of(
+                "mode", "multi_agent",
+                "pattern", "handoff",
+                "dispatch", "start",
+                "global_prompt", "你在一家 ToB SaaS 公司做客服。回答用简体中文，先给结论再补细节。",
+                "nodes", List.of(
+                        node("start", "start", "开始", 72, 240, null, "", "", ""),
+                        node("n_sales", "agent", sales.getName(), 340, 140, sales.getId(),
+                                "用户询问产品功能、套餐、价格、试用或对比竞品",
+                                "回答时可以举例说明，不要承诺未上线的功能。", ""),
+                        node("n_support", "agent", support.getName(), 340, 340, support.getId(),
+                                "用户反馈故障、退换货、发票、投诉或已有订单问题",
+                                "先复述问题，再给排查或处理步骤。", ""),
+                        node("j_human", "jump", "转人工", 620, 240, null, "", "",
+                                "用户明确要求转人工、找真人客服或升级投诉")),
+                "edges", List.of(
+                        edge("start", "n_sales"),
+                        edge("start", "n_support"),
+                        edge("n_sales", "n_support"),
+                        edge("j_human", "n_support")));
+    }
+
+    private static Map<String, Object> supervisorExampleGraph(Agent boss, Agent trip, Agent budget) {
+        return Map.of(
+                "mode", "multi_agent",
+                "pattern", "supervisor",
+                "dispatch", "start",
+                "global_prompt", "面向个人旅行用户，方案要可执行，费用用人民币。",
+                "nodes", List.of(
+                        node("start", "start", "开始", 72, 220, null, "", "", ""),
+                        node("n_boss", "agent", boss.getName(), 300, 220, boss.getId(),
+                                "统筹旅行需求，决定是否调用子智能体",
+                                "最终回复要包含行程概要和预算摘要。", ""),
+                        node("n_trip", "agent", trip.getName(), 560, 120, trip.getId(),
+                                "需要详细日程、景点顺序或交通安排时调用",
+                                "输出按天排列的行程表。", ""),
+                        node("n_budget", "agent", budget.getName(), 560, 320, budget.getId(),
+                                "需要估算总花费、分项预算或省钱建议时调用",
+                                "给出分项表格和合计。", "")),
+                "edges", List.of(
+                        edge("start", "n_boss"),
+                        edge("n_boss", "n_trip"),
+                        edge("n_boss", "n_budget")));
+    }
+
+    private static Map<String, Object> pipelineExampleGraph(Agent gather, Agent writer, Agent editor) {
+        return Map.of(
+                "mode", "multi_agent",
+                "pattern", "pipeline",
+                "dispatch", "start",
+                "global_prompt", "内容面向产品新人，语气专业但不堆术语。",
+                "nodes", List.of(
+                        node("start", "start", "开始", 72, 220, null, "", "", ""),
+                        node("n_gather", "agent", gather.getName(), 280, 220, gather.getId(),
+                                "收集主题相关要点与素材",
+                                "只输出要点列表，不要写完整文章。", ""),
+                        node("n_writer", "agent", writer.getName(), 500, 220, writer.getId(),
+                                "根据素材写成短文",
+                                "根据上游要点写成完整短文。", ""),
+                        node("n_editor", "agent", editor.getName(), 720, 220, editor.getId(),
+                                "校对并输出终稿",
+                                "在终稿后附修改说明。", "")),
+                "edges", List.of(
+                        edge("start", "n_gather"),
+                        edge("n_gather", "n_writer"),
+                        edge("n_writer", "n_editor")));
+    }
+
+    private static Map<String, Object> node(String id, String type, String label, int x, int y,
+                                           Long agentId, String scenario, String prompt, String condition) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", id);
+        item.put("type", type);
+        item.put("label", label);
+        item.put("x", x);
+        item.put("y", y);
+        item.put("agent_id", agentId == null ? "" : agentId);
+        item.put("agent", "agent".equals(type) ? label : "");
+        item.put("scenario", scenario);
+        item.put("prompt", prompt);
+        item.put("condition", condition);
+        return item;
+    }
+
+    private static Map<String, Object> edge(String source, String target) {
+        return Map.of("source", source, "target", target);
     }
 }

@@ -158,7 +158,7 @@ public class DockerSandboxRunner {
                 "--env", "HOME=/workspace",
                 "--env", "TMPDIR=/tmp",
                 "--env", "PYTHONDONTWRITEBYTECODE=1",
-                "--mount", "type=bind,src=" + resolved + ",dst=/workspace,rw",
+                "--mount", "type=bind,src=" + resolved + ",dst=/workspace",
                 "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m",
                 image));
         command.addAll(inner);

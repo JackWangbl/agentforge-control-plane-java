@@ -70,7 +70,11 @@ public class AgentScopeRuntime implements ChatTurnRunner {
         String lastUser = lastUserContent(history);
         CurrentUser caller = CurrentUserHolder.get();
         String credential = resolveCredential(model);
-        List<ToolSpec> specs = tools.agentTools(agent);
+        List<ToolSpec> specs = new ArrayList<>(tools.agentTools(agent));
+        List<ToolOverlay.Extra> overlayTools = ToolOverlay.current();
+        for (ToolOverlay.Extra extra : overlayTools) {
+            specs.add(extra.spec());
+        }
         if (credential.isBlank()) {
             String extra = "当前模型没有密钥，这是预览回复。已绑定的 Skill 和 MCP 工具会在配置密钥后由模型调用。";
             List<Map<String, Object>> spans = new ArrayList<>();
@@ -131,12 +135,12 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                         sessionId, runId, usage, lastUser);
             }
             OpenAIChatModel chatModel = buildModel(model, credential);
-            Toolkit toolkit = buildToolkit(agent, caller, specs, traces);
+            Toolkit toolkit = buildToolkit(agent, caller, specs, traces, overlayTools);
             int maxIters = specs.stream().map(ToolSpec::name)
                     .anyMatch(name -> name.startsWith("browser_") || name.startsWith("opencli_")) ? 8 : 4;
             ReActAgent react = ReActAgent.builder()
                     .name(agent.getName())
-                    .sysPrompt(tools.buildSystemPrompt(agent))
+                    .sysPrompt(PromptOverlay.apply(tools.buildSystemPrompt(agent)))
                     .model(chatModel)
                     .toolkit(toolkit)
                     .maxIters(maxIters)
@@ -239,17 +243,32 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                 "detail", text);
     }
 
-    private Toolkit buildToolkit(Agent agent, CurrentUser caller, List<ToolSpec> specs, List<Map<String, Object>> traces) {
+    private Toolkit buildToolkit(Agent agent, CurrentUser caller, List<ToolSpec> specs,
+                                 List<Map<String, Object>> traces, List<ToolOverlay.Extra> overlayTools) {
+        Map<String, java.util.function.Function<Map<String, Object>, String>> overlayExecutors = new LinkedHashMap<>();
+        if (overlayTools != null) {
+            for (ToolOverlay.Extra extra : overlayTools) {
+                overlayExecutors.put(extra.spec().name(), extra.executor());
+            }
+        }
         Toolkit toolkit = new Toolkit();
         for (ToolSpec spec : specs) {
             toolkit.registerAgentTool(new DelegatingTool(spec, args -> {
                 long started = System.nanoTime();
-                boolean allowed = tools.agentAllowsTool(agent, spec.name());
-                String output = CurrentUserHolder.call(caller, () -> allowed
-                        ? tools.executeTool(spec.name(), args, agent)
-                        : Jsons.json(Map.of("error", "Agent 未绑定工具 " + spec.name())));
+                java.util.function.Function<Map<String, Object>, String> overlay = overlayExecutors.get(spec.name());
+                boolean allowed = overlay != null || tools.agentAllowsTool(agent, spec.name());
+                String output = CurrentUserHolder.call(caller, () -> {
+                    if (overlay != null) {
+                        return overlay.apply(args == null ? Map.of() : args);
+                    }
+                    return allowed
+                            ? tools.executeTool(spec.name(), args, agent)
+                            : Jsons.json(Map.of("error", "Agent 未绑定工具 " + spec.name()));
+                });
                 int duration = Math.max(1, (int) ((System.nanoTime() - started) / 1_000_000));
-                traces.add(debugSpan("mcp." + spec.name(), "调用工具 " + spec.name(), "tool",
+                String spanName = ToolOverlay.isOverlayTool(spec.name()) ? "subagent." + spec.name() : "mcp." + spec.name();
+                String spanTitle = ToolOverlay.isOverlayTool(spec.name()) ? "调用子智能体 " + spec.name() : "调用工具 " + spec.name();
+                traces.add(debugSpan(spanName, spanTitle, "tool",
                         allowed ? "ok" : "error", duration, output));
                 if (allowed && FlowRuntime.isFlowTool(spec.name())) {
                     traces.addAll(FlowRuntime.flowStepSpans(spec.name(), output));

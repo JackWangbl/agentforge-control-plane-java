@@ -108,9 +108,9 @@ const api = async (path, options={}) => {
 const fmt = n => n >= 1000000 ? (n/1000000).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : n;
 const dt = value => new Date(value+'Z').toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 const statusText = {completed:'已完成',running:'运行中',failed:'失败',ok:'正常',error:'异常',published:'已发布',draft:'草稿',queued:'排队中',passed:'通过',skipped:'跳过',cancelled:'已取消',paused:'已暂停'};
-const titles = {dashboard:'运行概览',memories:'记忆',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'Agent 编排',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
+const titles = {dashboard:'运行概览',memories:'记忆',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'多智能体',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
 const pageMeta = {
-  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['ORCHESTRATION','Agent 编排','通过拖拽组合多 Agent 协作流程'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
+  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['MULTI AGENT','多智能体','三种模式可打开「示例·」编排跟着练：场景移交、主从 SubAgent、工作流'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
 };
 let currentPage='dashboard', currentParam='';
 function pageTools(extra=''){
@@ -135,7 +135,20 @@ function metric(label,value,trend,sub,color,icon){return `<div class="metric-car
 function sessionTable(rows, dashboard=false){const body=rows.length?rows.map(x=>`<tr class="session-row" ${dashboard?'':`data-session-id="${escapeHtml(x.session_id)}" tabindex="0"`}><td class="mono">${escapeHtml(x.session_id)}</td><td><b>${escapeHtml(x.title)}</b><br><small style="color:#9aa3b0">${escapeHtml(x.channel)}</small></td><td>${escapeHtml(x.agent_name)}</td><td class="mono">${escapeHtml(x.user_id)}</td><td>${pill(x.status)}</td><td>${x.message_count}</td><td>${fmt(x.total_tokens)}</td><td>${(x.latency_ms/1000).toFixed(2)}s</td><td>${dt(x.updated_at||x.created_at)}</td>${dashboard?'':`<td><button type="button" class="btn ghost session-view" data-session-id="${escapeHtml(x.session_id)}" onclick="event.stopPropagation();openSessionDetail('${escapeHtml(x.session_id)}')">查看</button></td>`}</tr>`).join(''):`<tr><td class="session-empty" colspan="${dashboard?9:10}">暂无真实会话。请先在 Agent 调试台发起一次对话。</td></tr>`;return `<section class="panel wide-panel"><div class="panel-title"><h3>${dashboard?'最近会话':'真实会话记录'}</h3><small>${rows.length} 条记录</small></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Session ID</th><th>会话主题</th><th>Agent</th><th>用户</th><th>状态</th><th>消息</th><th>Token</th><th>耗时</th><th>时间</th>${dashboard?'':'<th>操作</th>'}</tr></thead><tbody>${body}</tbody></table></div></section>`}
 async function sessions(){const [rows,agents]=await Promise.all([api('/api/sessions'),api('/api/agents')]);return `${head('sessions', pageTools())}<section class="panel"><div class="table-tools"><div class="search"><input id="sessionQ" placeholder="搜索 Session ID、用户或消息内容"></div><select id="agentFilter" class="select"><option value="">全部 Agent</option>${agents.map(x=>`<option>${escapeHtml(x.name)}</option>`).join('')}</select><select id="statusFilter" class="select"><option value="">全部状态</option><option value="completed">已完成</option><option value="running">运行中</option><option value="failed">失败</option></select><button class="btn primary" id="doFilter">查询</button></div><div id="sessionResults">${sessionTable(rows).replace('<section class="panel wide-panel">','<section>')}</div></section>`}
 
-function sessionDetailMarkup(data){const messages=(data.messages||[]).map(item=>`<article class="session-message ${item.role==='user'?'user':'assistant'}"><header><b>${item.role==='user'?'用户':escapeHtml(item.agent_name||data.agent_name)}</b><time>${dt(item.created_at)}</time></header><p>${escapeHtml(item.content).replace(/\n/g,'<br>')}</p></article>`).join('');const traces=(data.traces||[]).map(item=>`<div class="session-trace"><span class="mono">${escapeHtml(item.trace_id)}</span>${pill(item.status)}<span>${item.duration_ms} ms</span><span>${fmt((item.input_tokens||0)+(item.output_tokens||0))} Token</span></div>`).join('');return `<section class="session-detail"><div class="session-detail-head"><div><small>SESSION DETAIL</small><h3>${escapeHtml(data.title)}</h3><p class="mono">${escapeHtml(data.session_id)}</p></div><button type="button" class="close" id="closeSessionDetail" aria-label="关闭">×</button></div><div class="session-facts"><span><small>Agent</small><b>${escapeHtml(data.agent_name)}</b></span><span><small>用户</small><b>${escapeHtml(data.user_id)}</b></span><span><small>状态</small>${pill(data.status)}</span><span><small>Token</small><b>${fmt(data.total_tokens)}</b></span><span><small>总耗时</small><b>${data.latency_ms} ms</b></span></div><h4>真实消息记录 · ${(data.messages||[]).length}</h4><div class="session-messages">${messages||'<div class="session-detail-empty">该历史会话没有保存消息正文。</div>'}</div><h4>执行链路 · ${(data.traces||[]).length}</h4><div class="session-traces">${traces||'<div class="session-detail-empty">暂无关联链路。</div>'}</div></section>`}
+function traceStepsMarkup(spans, emptyText='这次请求没有保存执行步骤。'){
+  const rows=Array.isArray(spans)?spans:[];
+  if(!rows.length) return `<div class="trace-empty compact"><b>暂无步骤</b><p>${escapeHtml(emptyText)}</p></div>`;
+  return rows.map(span=>{
+    const status=['ok','error','skip'].includes(span.status)?span.status:'ok';
+    const title=span.title||span.name||'执行步骤';
+    return `<div class="trace-step ${status}"><i class="trace-dot"></i><div class="trace-card"><div class="trace-card-top"><b>${escapeHtml(title)}</b>${span.duration_ms?`<span>${Number(span.duration_ms)||0} ms</span>`:''}</div>${span.detail?`<p>${escapeHtml(span.detail)}</p>`:''}</div></div>`;
+  }).join('');
+}
+function sessionTraceMarkup(item){
+  const tokens=(item.input_tokens||0)+(item.output_tokens||0);
+  return `<details class="session-trace"><summary><span class="mono">${escapeHtml(item.trace_id)}</span>${pill(item.status)}<span>${Number(item.duration_ms)||0} ms</span><span>${fmt(tokens)} Token</span><b>查看步骤</b></summary><div class="session-trace-steps">${traceStepsMarkup(item.spans)}</div></details>`;
+}
+function sessionDetailMarkup(data){const messages=(data.messages||[]).map(item=>`<article class="session-message ${item.role==='user'?'user':'assistant'}"><header><b>${item.role==='user'?'用户':escapeHtml(item.agent_name||data.agent_name)}</b><time>${dt(item.created_at)}</time></header><p>${escapeHtml(item.content).replace(/\n/g,'<br>')}</p></article>`).join('');const traces=(data.traces||[]).map(sessionTraceMarkup).join('');return `<section class="session-detail"><div class="session-detail-head"><div><small>SESSION DETAIL</small><h3>${escapeHtml(data.title)}</h3><p class="mono">${escapeHtml(data.session_id)}</p></div><button type="button" class="close" id="closeSessionDetail" aria-label="关闭">×</button></div><div class="session-facts"><span><small>Agent</small><b>${escapeHtml(data.agent_name)}</b></span><span><small>用户</small><b>${escapeHtml(data.user_id)}</b></span><span><small>状态</small>${pill(data.status)}</span><span><small>Token</small><b>${fmt(data.total_tokens)}</b></span><span><small>总耗时</small><b>${data.latency_ms} ms</b></span></div><h4>真实消息记录 · ${(data.messages||[]).length}</h4><div class="session-messages">${messages||'<div class="session-detail-empty">该历史会话没有保存消息正文。</div>'}</div><h4>执行链路 · ${(data.traces||[]).length}</h4><div class="session-traces">${traces||'<div class="session-detail-empty">暂无关联链路。</div>'}</div></section>`}
 function closeSessionDetail(){
   const modal=$('#sessionModal');
   const target=$('#sessionDetail');
@@ -1187,115 +1200,322 @@ async function playground(selectedAgent=''){
 </div>
 </div>`
 }
-const WF_KINDS = {
-  start: {icon:'▶', title:'开始节点', hint:'流程入口'},
-  agent: {icon:'◇', title:'Agent 节点', hint:'AgentScope Agent'},
-  mcp: {icon:'⚙', title:'MCP 工具', hint:'调用 MCP 工具'},
-  condition: {icon:'⌘', title:'条件路由', hint:'按条件分流'},
-  parallel: {icon:'◫', title:'并行分支', hint:'并行执行'},
-  end: {icon:'■', title:'结束节点', hint:'流程结束'}
-};
-const wfState = {id:null, name:'', status:'draft', description:'', nodes:[], edges:[], selected:null, agents:[], mcp:[], skills:[], linking:null, dirty:false};
+const wfState = {id:null, name:'', status:'draft', description:'', pattern:'handoff', dispatch:'start', globalPrompt:'', nodes:[], edges:[], selected:'start', agents:[], linking:null, dirty:false, panel:'config', sessionId:'', messages:[], activeNodeId:'', sending:false, pendingFocus:'', view:'builder', appSessionId:'', appMessages:[], appSending:false};
+function wfNormalizePattern(value){
+  return value==='supervisor'||value==='pipeline'?value:'handoff';
+}
+function wfPatternLabel(value){
+  const p = wfNormalizePattern(value);
+  if(p==='supervisor') return '主从 / SubAgent';
+  if(p==='pipeline') return '工作流串行';
+  return '场景移交';
+}
+function wfMainNodeId(){
+  if(wfState.pattern!=='supervisor') return '';
+  const start = wfState.nodes.find(n=>n.type==='start');
+  if(!start) return '';
+  const mains = wfState.edges.filter(e=>e.source===start.id).map(e=>wfState.nodes.find(n=>n.id===e.target)).filter(n=>n&&n.type==='agent');
+  return mains.length===1?mains[0].id:'';
+}
 let wfDrag = null;
+let wfLink = null;
 let wfUid = 0;
 let wfGlobalsBound = false;
-function wfKindOf(type){
-  if(WF_KINDS[type]) return type;
-  return {'开始节点':'start','Agent 节点':'agent','MCP 工具':'mcp','条件路由':'condition','并行分支':'parallel','结束节点':'end'}[type] || 'agent';
+function wfStartNode(){
+  return {id:'start', type:'start', label:'开始', x:72, y:200, agent_id:'', agent:'', scenario:'', prompt:'', condition:''};
+}
+function wfNodeWidth(n){return n.type==='start'?150:n.type==='jump'?180:200}
+function wfAgentOf(id){return wfState.agents.find(a=>String(a.id)===String(id))}
+function wfLabel(n){
+  if(!n) return '';
+  if(n.type==='agent'){
+    const agent = wfAgentOf(n.agent_id);
+    return agent?agent.name:(n.agent||n.label||'智能体');
+  }
+  return n.label|| (n.type==='jump'?'全局跳转':'开始');
 }
 function loadWfRow(row){
-  const g = (row && row.graph) || {nodes:[], edges:[]};
-  const nodes = (g.nodes||[]).map((n,i)=>{
-    const type = wfKindOf(n.type);
-    return {
-      id: String(n.id || ('n'+i)),
+  const same = !!(row && wfState.id===row.id);
+  const g = (row && row.graph) || {};
+  const nodes = [];
+  (g.nodes||[]).forEach((n,i)=>{
+    const type = n.type==='condition'?'jump':n.type;
+    if(type!=='start' && type!=='agent' && type!=='jump') return;
+    nodes.push({
+      id:String(n.id||('n'+i)),
       type,
-      label: n.label || WF_KINDS[type].title,
-      x: Number.isFinite(n.x) ? n.x : 40 + i*170,
-      y: Number.isFinite(n.y) ? n.y : (i%2 ? 120 : 210),
-      agent: n.agent || (type==='agent' ? (n.label||'') : ''),
-      mcp: n.mcp || '',
-      note: n.note || '',
-      policy: n.policy || 'retry'
-    };
+      label:n.label||'',
+      x:Number.isFinite(n.x)?n.x:80+nodes.length*30,
+      y:Number.isFinite(n.y)?n.y:180,
+      agent_id:n.agent_id==null?'':String(n.agent_id),
+      agent:n.agent||'',
+      scenario:n.scenario||'',
+      prompt:n.prompt||'',
+      condition:n.condition||''
+    });
   });
+  if(!nodes.some(n=>n.type==='start')) nodes.unshift(wfStartNode());
   wfUid = nodes.reduce((max,n)=>{
     const num = Number(String(n.id).replace(/\D/g,''));
-    return Number.isFinite(num) ? Math.max(max, num) : max;
+    return Number.isFinite(num)?Math.max(max,num):max;
   }, 0);
-  wfState.id = row ? row.id : null;
-  wfState.name = row ? row.name : '未命名流程';
-  wfState.status = row ? row.status : 'draft';
-  wfState.description = row ? (row.description||'') : '';
+  wfState.id = row?row.id:null;
+  wfState.name = row?row.name:'未命名编排';
+  wfState.status = row?row.status:'draft';
+  wfState.description = row?(row.description||''):'';
+  wfState.pattern = wfNormalizePattern(g.pattern);
+  wfState.dispatch = g.dispatch==='last'?'last':'start';
+  wfState.globalPrompt = g.global_prompt||'';
   wfState.nodes = nodes;
   wfState.edges = (g.edges||[]).map(e=>({source:String(e.source), target:String(e.target)}));
-  wfState.selected = nodes[0] ? nodes[0].id : null;
+  wfState.selected = nodes.some(n=>n.id===wfState.selected)?wfState.selected:'start';
   wfState.linking = null;
   wfState.dirty = false;
+  if(!same){
+    wfState.panel = 'config';
+    wfState.sessionId = '';
+    wfState.messages = [];
+    wfState.activeNodeId = '';
+    wfState.pendingFocus = '';
+    wfState.view = 'builder';
+    wfState.appSessionId = '';
+    wfState.appMessages = [];
+    wfState.appSending = false;
+  }
 }
 function selectedWfNode(){return wfState.nodes.find(n=>n.id===wfState.selected)}
+function wfEdgeKind(edge){
+  const a = wfState.nodes.find(n=>n.id===edge.source);
+  if(!a) return 'agent';
+  return a.type==='jump'?'jump':a.type==='start'?'start':'agent';
+}
 function wfEdgeMarkup(){
-  return wfState.edges.map(edge=>{
+  const markers = `<defs>
+    <marker id="wfArrowStart" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2367e8"/></marker>
+    <marker id="wfArrowAgent" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#8aa4d4"/></marker>
+    <marker id="wfArrowJump" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#e49b18"/></marker>
+  </defs>`;
+  return markers+wfState.edges.map(edge=>{
     const a = wfState.nodes.find(n=>n.id===edge.source);
     const b = wfState.nodes.find(n=>n.id===edge.target);
     if(!a||!b) return '';
-    const x1=a.x+150, y1=a.y+28, x2=b.x, y2=b.y+28, mx=(x1+x2)/2;
-    return `<path d="M${x1} ${y1} C${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" fill="none" stroke="#8aa4d4" stroke-width="2"/>`;
+    const x1=a.x+wfNodeWidth(a), y1=a.y+28, x2=b.x, y2=b.y+28, mx=(x1+x2)/2;
+    const kind = wfEdgeKind(edge);
+    const color = kind==='jump'?'#e49b18':kind==='start'?'#2367e8':'#8aa4d4';
+    const dash = kind==='jump'?'6 4':'';
+    const midX = (x1+x2)/2, midY = (y1+y2)/2;
+    const marker = kind==='jump'?'wfArrowJump':kind==='start'?'wfArrowStart':'wfArrowAgent';
+    return `<path d="M${x1} ${y1} C${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" fill="none" stroke="${color}" stroke-width="2" marker-end="url(#${marker})" ${dash?`stroke-dasharray="${dash}"`:''}/><g class="ma-edge-cut" data-from="${edge.source}" data-to="${edge.target}" transform="translate(${midX} ${midY})"><title>点击断开连线</title><circle r="9" fill="#fff" stroke="${color}"/><text x="0" y="4" text-anchor="middle">×</text></g>`;
   }).join('');
+}
+function wfNodeCard(n){
+  const title = wfLabel(n);
+  const mainId = wfMainNodeId();
+  let sub = '把用户交给后面的智能体';
+  if(n.type==='agent'){
+    if(wfState.pattern==='supervisor' && n.id===mainId) sub = '主智能体 · 可调用下游 SubAgent';
+    else if(wfState.pattern==='supervisor' && mainId && wfState.edges.some(e=>e.source===mainId&&e.target===n.id)) sub = (n.scenario?n.scenario:'未写适用场景')+' · SubAgent';
+    else if(wfState.pattern==='pipeline') sub = n.scenario?n.scenario:'工作流步骤';
+    else sub = n.scenario?n.scenario:'未写适用场景';
+  }
+  if(n.type==='jump') sub = n.condition?n.condition:'未写跳转条件';
+  if(n.type==='start'){
+    if(wfState.pattern==='supervisor') sub = '只连一个主智能体';
+    else if(wfState.pattern==='pipeline') sub = '工作流入口';
+    else sub = wfState.dispatch==='last'?'接着上次回复的节点':'每句都重新分发';
+  }
+  const ports = `${n.type==='agent'?'<i class="wf-port in" data-port="in" data-id="'+n.id+'" title="连接目标"></i>':''}<button type="button" class="wf-port out" data-port="out" data-id="${n.id}" aria-label="从${escapeHtml(title)}开始连接" title="拖动连接，或点击后再点目标"></button>`;
+  const del = n.type==='start'?'':`<button type="button" class="ma-del" data-del="${n.id}" aria-label="删除节点">×</button>`;
+  const badge = (n.type==='agent' && n.id===mainId)?'<em class="ma-badge">主</em>':'';
+  const on = n.id===wfState.selected?' active':'';
+  const live = n.id===wfState.activeNodeId?' routing':'';
+  const role = (n.type==='agent' && n.id===mainId)?' ma-main':'';
+  const subRole = (n.type==='agent' && wfState.pattern==='supervisor' && mainId && n.id!==mainId && wfState.edges.some(e=>e.source===mainId&&e.target===n.id))?' ma-sub':'';
+  const linking = n.id===wfState.linking?' linking':'';
+  const target = wfState.linking && n.type==='agent' && n.id!==wfState.linking?' connect-target':'';
+  const disabled = wfState.linking && !target && !linking?' connect-disabled':'';
+  return `<div class="node ma-node ma-${n.type}${role}${subRole}${on}${live}${linking}${target}${disabled}" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px">${del}${ports}${badge}<b>${escapeHtml(title)}</b><small>${escapeHtml(sub)}</small></div>`;
 }
 function paintWorkflow(){
   const canvas = $('#canvas');
   if(!canvas) return;
-  const hint = wfState.linking ? '点击目标节点左侧圆点完成连线 · ' : '拖左侧组件到画布，或点节点右侧圆点连线 · ';
-  const nodes = wfState.nodes.map(n=>{
-    const kind = WF_KINDS[n.type] || WF_KINDS.agent;
-    return `<div class="node ${n.id===wfState.selected?'active':''}" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px"><i class="wf-port in" data-port="in" data-id="${n.id}"></i><b>${escapeHtml(n.label)}</b><small>${kind.hint}</small><i class="wf-port out" data-port="out" data-id="${n.id}"></i></div>`;
-  }).join('');
-  canvas.innerHTML = `<span class="canvas-note">${hint}${escapeHtml(wfState.name||'未命名流程')}${wfState.dirty?' · 未保存':''}</span><svg class="wf-edges" viewBox="0 0 2400 1200" preserveAspectRatio="none">${wfEdgeMarkup()}</svg>${nodes}`;
+  const hint = wfState.linking ? '正在连接：点击高亮的目标智能体，按 Esc 取消 · ' : wfLink ? '拖到目标智能体后松开 · ' : '连接模块：拖动右侧连接点，或点一下起点再点目标 · ';
+  canvas.innerHTML = `<span class="canvas-note">${hint}${escapeHtml(wfState.name||'未命名编排')}${wfState.dirty?' · 未保存':''}</span><svg class="wf-edges" viewBox="0 0 2400 1400">${wfEdgeMarkup()}</svg>${wfState.nodes.map(wfNodeCard).join('')}`;
+  document.querySelectorAll('.ma-agent[data-agent-id]').forEach(el=>{
+    el.classList.toggle('used', wfState.nodes.some(n=>n.type==='agent' && String(n.agent_id)===el.dataset.agentId));
+  });
+  const count = $('#wfRelCount');
+  if(count){
+    const rel = wfState.pattern==='supervisor'?'条主从关系':wfState.pattern==='pipeline'?'条流水线': '条移交';
+    count.textContent = wfState.edges.length+' '+rel+' · '+wfPatternLabel(wfState.pattern);
+  }
   paintInspector();
+}
+function skillLine(agent){
+  if(!agent) return '这个智能体已经不在列表里';
+  const skills = (agent.bound_skills||[]).map(x=>x.name);
+  const mcps = (agent.bound_mcps||[]).map(x=>x.name);
+  const knowledge = (agent.bound_knowledge||[]).map(x=>x.name);
+  const bits = [];
+  if(skills.length) bits.push('Skill '+skills.join('、'));
+  if(mcps.length) bits.push('MCP '+mcps.join('、'));
+  if(knowledge.length) bits.push('知识库 '+knowledge.join('、'));
+  return bits.join(' · ')||'还没有绑定技能或知识库';
+}
+function outgoingOf(id){
+  return wfState.edges.filter(e=>e.source===id).map(e=>wfState.nodes.find(n=>n.id===e.target)).filter(Boolean);
+}
+function wfConnectionPicker(n){
+  const linked = new Set(wfState.edges.filter(e=>e.source===n.id).map(e=>e.target));
+  const targets = wfState.nodes.filter(x=>x.type==='agent' && x.id!==n.id && !linked.has(x.id));
+  if(!targets.length) return '<p class="wf-empty-hint">没有其他可连接的智能体</p>';
+  return `<div class="wf-connect-picker"><select id="wfAddTarget" class="select"><option value="">选择下游智能体</option>${targets.map(t=>`<option value="${t.id}">${escapeHtml(wfLabel(t))}</option>`).join('')}</select><button type="button" class="btn primary" id="wfAddEdge">添加连接</button></div>`;
+}
+function bindWfConnectionPicker(n){
+  const select = $('#wfAddTarget');
+  const button = $('#wfAddEdge');
+  if(!select || !button) return;
+  const add = ()=>{
+    if(!select.value){toast('请先选择下游智能体'); return}
+    connectWf(n.id, select.value);
+  };
+  button.onclick = add;
+  select.onkeydown = e=>{if(e.key==='Enter'){e.preventDefault(); add()}};
+}
+function wfExampleTipHtml(){
+  if(!(wfState.name||'').startsWith('示例·')) return '';
+  return `<div class="ma-example-tip"><b>正在看示例 · ${escapeHtml(wfPatternLabel(wfState.pattern))}</b><p>${escapeHtml(wfState.description||'发布后到调试里按提示语试一轮。')}</p></div>`;
 }
 function paintInspector(){
   const box = $('#wfInspector');
   if(!box) return;
+  if(wfState.panel==='debug'){paintDebug(box); return}
+  const tip = wfExampleTipHtml();
   const n = selectedWfNode();
   if(!n){
-    box.innerHTML = '<h3>节点配置</h3><p class="wf-empty-hint">从左侧拖入节点，或点击画布上的节点进行配置。</p>';
+    box.innerHTML = '<h3>节点配置</h3><p class="wf-empty-hint">从左侧把智能体拖到画布上。连线表示什么情况下把对话交给谁。</p>';
+    if(tip) box.insertAdjacentHTML('afterbegin', tip);
     return;
   }
-  const agents = `<option value="">未绑定</option>` + wfState.agents.map(a=>`<option value="${escapeHtml(a.name)}" ${a.name===n.agent?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
-  const mcps = `<option value="">未绑定</option>` + wfState.mcp.map(a=>`<option value="${escapeHtml(a.name)}" ${a.name===n.mcp?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
-  box.innerHTML = `<h3>节点配置</h3>
-    <label>节点名称</label><input id="wfNodeLabel" value="${escapeHtml(n.label)}">
-    ${n.type==='agent'?`<label>绑定 Agent</label><select id="wfNodeAgent" class="select" style="width:100%">${agents}</select>`:''}
-    ${n.type==='mcp'?`<label>绑定 MCP</label><select id="wfNodeMcp" class="select" style="width:100%">${mcps}</select>`:''}
-    <label>失败策略</label>
-    <select id="wfNodePolicy" class="select" style="width:100%">
-      <option value="retry" ${n.policy==='retry'?'selected':''}>重试 2 次</option>
-      <option value="abort" ${n.policy==='abort'?'selected':''}>中断流程</option>
-      <option value="skip" ${n.policy==='skip'?'selected':''}>跳过继续</option>
-    </select>
-    <label>节点说明</label><textarea id="wfNodeNote">${escapeHtml(n.note)}</textarea>
-    <p class="wf-empty-hint">点节点右侧圆点，再点另一节点左侧圆点即可连线。</p>
-    <div class="wf-insp-actions"><button type="button" class="btn ghost danger" id="wfDelNode">删除节点</button></div>`;
-  const bind = (sel, fn)=>{const el=$(sel); if(el) el.oninput = el.onchange = fn};
-  bind('#wfNodeLabel', e=>{n.label=e.target.value; wfState.dirty=true; const title=$(`.node[data-id="${n.id}"] b`); if(title) title.textContent=n.label});
-  bind('#wfNodeAgent', e=>{n.agent=e.target.value; wfState.dirty=true});
-  bind('#wfNodeMcp', e=>{n.mcp=e.target.value; wfState.dirty=true});
-  bind('#wfNodePolicy', e=>{n.policy=e.target.value; wfState.dirty=true});
-  bind('#wfNodeNote', e=>{n.note=e.target.value; wfState.dirty=true});
-  if($('#wfDelNode')) $('#wfDelNode').onclick=()=>deleteWfNode(n.id);
+  if(n.type==='start'){
+    const patternHint = wfState.pattern==='supervisor'
+      ? '主从模式：开始只连一个主智能体；主智能体连出去的节点会变成可调用的 SubAgent 工具。'
+      : wfState.pattern==='pipeline'
+        ? '工作流模式：按连线顺序依次执行；若一步有多个下游，会按适用场景分支。'
+        : '场景移交：开始连出去的智能体是第一层候选人。全局跳转优先级更高，最多 5 条。';
+    box.innerHTML = `<h3>开始节点</h3>
+      <label>编排模式</label>
+      <label class="ma-radio"><input type="radio" name="wfPattern" value="handoff" ${wfState.pattern==='handoff'?'checked':''}>场景移交</label>
+      <label class="ma-radio"><input type="radio" name="wfPattern" value="supervisor" ${wfState.pattern==='supervisor'?'checked':''}>主从 / SubAgent</label>
+      <label class="ma-radio"><input type="radio" name="wfPattern" value="pipeline" ${wfState.pattern==='pipeline'?'checked':''}>工作流串行</label>
+      <p class="wf-empty-hint">${patternHint}</p>
+      ${wfState.pattern==='handoff'?`<label>新一轮分发</label>
+      <label class="ma-radio"><input type="radio" name="wfDispatch" value="last" ${wfState.dispatch==='last'?'checked':''}>上一次回复的节点接着聊</label>
+      <label class="ma-radio"><input type="radio" name="wfDispatch" value="start" ${wfState.dispatch==='start'?'checked':''}>每一句都从开始节点重新分发</label>`:''}
+      <label>添加连接</label>${wfConnectionPicker(n)}
+      <div class="ma-rel">${outgoingOf(n.id).map(t=>`<div>${wfState.pattern==='supervisor'?'主智能体':'下一步'} ${escapeHtml(wfLabel(t))} <button type="button" class="btn ghost ma-cut" data-from="${n.id}" data-to="${t.id}">断开</button></div>`).join('')||'<span>还没有连出智能体</span>'}</div>`;
+    box.querySelectorAll('input[name="wfPattern"]').forEach(el=>el.onchange=()=>{wfState.pattern=wfNormalizePattern(el.value); wfState.dirty=true; paintWorkflow()});
+    box.querySelectorAll('input[name="wfDispatch"]').forEach(el=>el.onchange=()=>{wfState.dispatch=el.value; wfState.dirty=true; paintWorkflow()});
+    bindWfConnectionPicker(n);
+  }else if(n.type==='jump'){
+    const targets = wfState.nodes.filter(x=>x.type==='agent');
+    box.innerHTML = `<h3>全局跳转</h3>
+      <label>跳转条件</label><textarea id="wfCondition" placeholder="例如：用户说要转人工">${escapeHtml(n.condition)}</textarea>
+      <label>交给</label>
+      <select id="wfJumpTarget" class="select" style="width:100%"><option value="">选择智能体</option>${targets.map(t=>`<option value="${t.id}" ${outgoingOf(n.id).some(x=>x.id===t.id)?'selected':''}>${escapeHtml(wfLabel(t))}</option>`).join('')}</select>
+      <p class="wf-empty-hint">用户原话一旦符合条件，就立刻交给目标，不再看适用场景。一张画布最多 5 条。</p>
+      <div class="wf-insp-actions"><button type="button" class="btn ghost danger" id="wfDelNode">删除</button></div>`;
+    const cond = $('#wfCondition');
+    if(cond) cond.oninput=()=>{n.condition=cond.value; n.label=cond.value.slice(0,18)||'全局跳转'; wfState.dirty=true; const small=$(`.node[data-id="${n.id}"] small`); if(small) small.textContent=cond.value||'未写跳转条件'};
+    const sel = $('#wfJumpTarget');
+    if(sel) sel.onchange=()=>{
+      wfState.edges = wfState.edges.filter(e=>e.source!==n.id);
+      if(sel.value) wfState.edges.push({source:n.id, target:sel.value});
+      wfState.dirty=true; paintWorkflow();
+    };
+    if($('#wfDelNode')) $('#wfDelNode').onclick=()=>deleteWfNode(n.id);
+  }else{
+    const agent = wfAgentOf(n.agent_id);
+    const mainId = wfMainNodeId();
+    const isMain = wfState.pattern==='supervisor' && n.id===mainId;
+    const isSub = wfState.pattern==='supervisor' && mainId && n.id!==mainId && wfState.edges.some(e=>e.source===mainId&&e.target===n.id);
+    const roleHint = isMain?'主智能体：下游节点会注册成 SubAgent 工具，由你决定何时调用。'
+      : isSub?'SubAgent：适用场景会写入工具说明，供主智能体选择。'
+      : wfState.pattern==='pipeline'?'工作流步骤：上游输出会作为本步输入。':'适用场景用于上游判断要不要把对话交过来。';
+    const relLabel = isMain?'挂载 SubAgent':wfState.pattern==='pipeline'?'下一步':'移交给';
+    box.innerHTML = `<h3>${escapeHtml(wfLabel(n))}${isMain?' <span class="pill">主</span>':isSub?' <span class="pill">Sub</span>':''}</h3>
+      <p class="wf-empty-hint">${escapeHtml(agent?(agent.model_name||'未绑定模型')+' · '+skillLine(agent):'智能体已删除')}</p>
+      <p class="wf-empty-hint">${roleHint}</p>
+      <label>适用场景</label><textarea id="wfScenario" placeholder="${isSub?'例如：搜集竞品资料、整理引用':'上游根据这段描述决定要不要把对话交过来'}">${escapeHtml(n.scenario)}</textarea>
+      <label>节点提示词</label><textarea id="wfPrompt" placeholder="留空则只用该智能体自己的系统提示词">${escapeHtml(n.prompt)}</textarea>
+      <label>${relLabel}</label>
+      ${wfConnectionPicker(n)}
+      <div class="ma-rel">${outgoingOf(n.id).map(t=>`<div>${escapeHtml(wfLabel(t))} <button type="button" class="btn ghost ma-cut" data-from="${n.id}" data-to="${t.id}">断开</button></div>`).join('')||`<span>${isMain?'还没有子智能体':'还没有下游'}</span>`}</div>
+      <div class="wf-insp-actions"><button type="button" class="btn ghost" id="wfFocus">只测这个节点</button><button type="button" class="btn ghost danger" id="wfDelNode">删除</button></div>`;
+    const scenario = $('#wfScenario');
+    if(scenario) scenario.oninput=()=>{n.scenario=scenario.value; wfState.dirty=true; const small=$(`.node[data-id="${n.id}"] small`); if(small) small.textContent=scenario.value||'未写适用场景'};
+    const prompt = $('#wfPrompt');
+    if(prompt) prompt.oninput=()=>{n.prompt=prompt.value; wfState.dirty=true};
+    bindWfConnectionPicker(n);
+    if($('#wfDelNode')) $('#wfDelNode').onclick=()=>deleteWfNode(n.id);
+    if($('#wfFocus')) $('#wfFocus').onclick=()=>debugWorkflow(n.id);
+  }
+  if(tip) box.insertAdjacentHTML('afterbegin', tip);
+  box.querySelectorAll('.ma-cut').forEach(btn=>btn.onclick=()=>{
+    wfState.edges = wfState.edges.filter(e=>!(e.source===btn.dataset.from && e.target===btn.dataset.to));
+    wfState.dirty=true; paintWorkflow();
+  });
+}
+function paintDebug(box){
+  const lines = wfState.messages.map(item=>{
+    if(item.role==='user') return `<article class="ma-msg mine"><b>你</b><p>${escapeHtml(item.content)}</p></article>`;
+    const route = item.route?`<small>${escapeHtml(item.route.detail||'')}${item.route.fallback?'':''}</small>`:'';
+    const trace=item.traceId?`<details class="ma-trace"><summary>执行链路 · ${(item.spans||[]).length} 步${item.latencyMs?' · '+(Number(item.latencyMs)||0)+' ms':''}</summary><small class="mono">${escapeHtml(item.traceId)}</small><div class="ma-trace-steps">${traceStepsMarkup(item.spans)}</div></details>`:'';
+    return `<article class="ma-msg"><b>${escapeHtml(item.agent||'编排')}</b>${route}<p>${escapeHtml(item.content)}</p>${trace}</article>`;
+  }).join('');
+  const modeHint = wfState.pattern==='supervisor'?'主智能体会按需调用 SubAgent。':wfState.pattern==='pipeline'?'会按连线顺序跑完整条工作流。':'看这一句交给了谁。';
+  box.innerHTML = `${wfExampleTipHtml()}<h3>调试 · ${escapeHtml(wfPatternLabel(wfState.pattern))}</h3>
+    <p class="wf-empty-hint">${wfState.status==='published'?'对这条已发布的编排说话。'+modeHint:'请先发布，再调试。'}${wfState.pendingFocus?' 下一句从「'+escapeHtml(wfLabel(wfState.nodes.find(n=>n.id===wfState.pendingFocus)))+'」开始。':''}</p>
+    <div class="ma-log" id="wfLog">${lines||'<p class="wf-empty-hint">还没有消息</p>'}</div>
+    <textarea id="wfDebugInput" placeholder="输入一句话" ${wfState.status==='published'?'':'disabled'}></textarea>
+    <div class="wf-insp-actions">
+      <button type="button" class="btn ghost" id="wfBackConfig">返回配置</button>
+      <button type="button" class="btn ghost" id="wfNewSession">新开会话</button>
+      <button type="button" class="btn primary" id="wfSend" ${wfState.status==='published'?'':'disabled'}>发送</button>
+    </div>`;
+  const log = $('#wfLog');
+  if(log) log.scrollTop = log.scrollHeight;
+  if($('#wfBackConfig')) $('#wfBackConfig').onclick=()=>{wfState.panel='config'; paintInspector()};
+  if($('#wfNewSession')) $('#wfNewSession').onclick=()=>{wfState.sessionId=''; wfState.messages=[]; wfState.activeNodeId=''; paintWorkflow()};
+  if($('#wfSend')) $('#wfSend').onclick=()=>debugWorkflow('');
+  const input = $('#wfDebugInput');
+  if(input) input.onkeydown=e=>{if(e.key==='Enter' && !e.shiftKey){e.preventDefault(); debugWorkflow('')}};
 }
 function deleteWfNode(id){
+  const node = wfState.nodes.find(n=>n.id===id);
+  if(!node || node.type==='start') return;
   wfState.nodes = wfState.nodes.filter(n=>n.id!==id);
   wfState.edges = wfState.edges.filter(e=>e.source!==id && e.target!==id);
-  wfState.selected = wfState.nodes[0] ? wfState.nodes[0].id : null;
+  wfState.selected = 'start';
   wfState.dirty = true;
   paintWorkflow();
 }
-function addWfNode(kind, x, y){
-  const meta = WF_KINDS[kind] || WF_KINDS.agent;
+function addWfNode(kind, x, y, agentId){
+  if(kind==='jump'){
+    if(wfState.nodes.filter(n=>n.type==='jump').length>=5){toast('全局跳转条件最多 5 个'); return}
+    wfUid += 1;
+    const node = {id:'j'+wfUid, type:'jump', label:'全局跳转', x:Math.max(20,x-90), y:Math.max(48,y-28), agent_id:'', agent:'', scenario:'', prompt:'', condition:''};
+    wfState.nodes.push(node);
+    wfState.selected = node.id;
+    wfState.dirty = true;
+    paintWorkflow();
+    return;
+  }
+  const agent = wfAgentOf(agentId);
+  if(!agent){toast('请从左侧拖入已有智能体'); return}
+  if(wfState.nodes.some(n=>n.type==='agent' && String(n.agent_id)===String(agent.id))){toast('这个智能体已经在画布上'); return}
   wfUid += 1;
-  const node = {id:'n'+wfUid, type:kind, label:meta.title, x:Math.max(20, x-75), y:Math.max(40, y-25), agent:'', mcp:'', note:'', policy:'retry'};
+  const node = {id:'n'+wfUid, type:'agent', label:agent.name, x:Math.max(20,x-100), y:Math.max(48,y-28), agent_id:String(agent.id), agent:agent.name, scenario:agent.description||'', prompt:'', condition:''};
   wfState.nodes.push(node);
   wfState.selected = node.id;
   wfState.dirty = true;
@@ -1303,9 +1523,28 @@ function addWfNode(kind, x, y){
 }
 function connectWf(from, to){
   if(!from || !to || from===to) return;
-  if(wfState.edges.some(e=>e.source===from && e.target===to)) {wfState.linking=null; paintWorkflow(); return}
+  const a = wfState.nodes.find(n=>n.id===from);
+  const b = wfState.nodes.find(n=>n.id===to);
+  if(!a || !b || b.type!=='agent') {toast('请把线拖到智能体卡片上'); wfState.linking=null; wfLink=null; paintWorkflow(); return}
+  if(a.type==='jump') wfState.edges = wfState.edges.filter(e=>e.source!==from);
+  if(a.type==='start' && wfState.pattern==='supervisor'){
+    wfState.edges = wfState.edges.filter(e=>e.source!==from);
+  }
+  if(wfState.pattern==='supervisor' && a.type==='agent'){
+    const mainId = wfMainNodeId();
+    if(mainId && a.id!==mainId){
+      toast('主从模式下，请从主智能体连到子智能体');
+      wfState.linking=null; wfLink=null; paintWorkflow(); return;
+    }
+    if(mainId && a.id===mainId && outgoingOf(a.id).length>=8){
+      toast('主智能体最多挂 8 个子智能体');
+      wfState.linking=null; wfLink=null; paintWorkflow(); return;
+    }
+  }
+  if(wfState.edges.some(e=>e.source===from && e.target===to)) {wfState.linking=null; wfLink=null; paintWorkflow(); return}
   wfState.edges.push({source:from, target:to});
   wfState.linking = null;
+  wfLink = null;
   wfState.dirty = true;
   paintWorkflow();
 }
@@ -1316,36 +1555,186 @@ function canvasPoint(e, canvas){
 function refreshWfEdges(){
   const svg = $('#canvas .wf-edges');
   if(svg) svg.innerHTML = wfEdgeMarkup();
+  paintLinkLine();
+}
+function paintLinkLine(){
+  const svg = $('#canvas .wf-edges');
+  if(!svg) return;
+  let line = svg.querySelector('#wfLinkLine');
+  if(!wfLink){ if(line) line.remove(); return; }
+  const a = wfState.nodes.find(n=>n.id===wfLink.from);
+  if(!a){ if(line) line.remove(); return; }
+  const x1 = a.x+wfNodeWidth(a), y1 = a.y+28, x2 = wfLink.x, y2 = wfLink.y, mx = (x1+x2)/2;
+  if(!line){
+    line = document.createElementNS('http://www.w3.org/2000/svg','path');
+    line.id = 'wfLinkLine';
+    line.setAttribute('fill','none');
+    line.setAttribute('stroke','#2367e8');
+    line.setAttribute('stroke-width','2');
+    line.setAttribute('stroke-dasharray','5 4');
+    svg.appendChild(line);
+  }
+  line.setAttribute('d', `M${x1} ${y1} C${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`);
+}
+function wfGraph(){
+  return {
+    mode:'multi_agent',
+    pattern:wfNormalizePattern(wfState.pattern),
+    dispatch:wfState.dispatch==='last'?'last':'start',
+    global_prompt:wfState.globalPrompt||'',
+    nodes:wfState.nodes.map(n=>({
+      id:n.id, type:n.type, label:wfLabel(n), x:n.x, y:n.y,
+      agent_id:n.agent_id?Number(n.agent_id):'',
+      agent:n.agent||'', scenario:n.scenario||'', prompt:n.prompt||'', condition:n.condition||''
+    })),
+    edges:wfState.edges
+  };
 }
 async function saveWorkflow(publish){
-  const graph = {nodes:wfState.nodes, edges:wfState.edges};
-  const status = publish ? 'published' : 'draft';
+  if(!can('workflow:write')){toast('没有编辑编排的权限'); return}
+  const name = ($('#wfName')&&$('#wfName').value.trim()) || wfState.name || ('多智能体 '+Date.now());
+  wfState.name = name;
+  const graph = wfGraph();
+  const nextStatus = publish?'published':'draft';
   try{
     if(!wfState.id){
-      const row = await api('/api/workflows', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:wfState.name||('新流程 '+Date.now()), description:wfState.description||'', status, graph})});
+      const row = await api('/api/workflows', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name, description:wfState.description||'', status:nextStatus, graph})});
       wfState.id = row.id;
-      wfState.name = row.name;
     }else{
-      await api('/api/workflows/'+wfState.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({graph, status})});
+      await api('/api/workflows/'+wfState.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name, description:wfState.description||'', graph, status:nextStatus})});
     }
-    wfState.status = status;
+    wfState.status = nextStatus;
     wfState.dirty = false;
-    await afterChange('workflows', publish?'工作流已发布':'草稿已保存');
-  }catch(e){toast('保存失败，请稍后重试')}
+    if(publish) wfState.view = 'app';
+    await afterChange('workflows', publish?'编排已发布':'草稿已保存');
+  }catch(e){toast(apiError(e)||'保存失败')}
 }
 async function createWorkflow(){
-  const name = '新流程 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(!can('workflow:write')){toast('没有编辑编排的权限'); return}
+  const name = '多智能体 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const graph = {mode:'multi_agent', pattern:'handoff', dispatch:'start', global_prompt:'', nodes:[wfStartNode()], edges:[]};
   try{
-    const row = await api('/api/workflows', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name, description:'', status:'draft', graph:{nodes:[], edges:[]}})});
+    const row = await api('/api/workflows', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name, description:'', status:'draft', graph})});
+    wfState.sessionId='';
+    wfState.messages=[];
+    wfState.view='builder';
     wfState.id = row.id;
-    await afterChange('workflows', '已创建空白流程');
-  }catch(e){toast('创建失败，名称可能重复')}
+    await afterChange('workflows', '已创建空白编排');
+  }catch(e){toast(apiError(e)||'创建失败，名称可能重复')}
+}
+async function debugWorkflow(focusId){
+  if(wfState.status!=='published'){toast('请先发布再调试'); return}
+  if(!wfState.id){toast('请先保存'); return}
+  if(focusId){
+    wfState.pendingFocus = focusId;
+    wfState.panel = 'debug';
+    paintInspector();
+    const node = wfState.nodes.find(n=>n.id===focusId);
+    toast('下一句从「'+(node?wfLabel(node):'该节点')+'」开始');
+    const box = $('#wfDebugInput');
+    if(box) box.focus();
+    return;
+  }
+  const input = $('#wfDebugInput');
+  const message = input?input.value.trim():'';
+  if(!message){toast('请输入要发送的内容'); wfState.panel='debug'; paintInspector(); return}
+  if(wfState.sending) return;
+  const focus = wfState.pendingFocus||'';
+  wfState.pendingFocus = '';
+  wfState.panel = 'debug';
+  wfState.sending = true;
+  wfState.messages.push({role:'user', content:message});
+  paintInspector();
+  try{
+    const body = {message, session_id:wfState.sessionId||''};
+    if(focus) body.focus_node_id = focus;
+    const data = await api('/api/workflows/'+wfState.id+'/debug', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    wfState.sessionId = data.session_id||wfState.sessionId;
+    wfState.activeNodeId = data.node_id||'';
+    wfState.messages.push({role:'assistant', content:data.reply||data.response||'', agent:data.agent||data.node_label||'', route:data.route||null, traceId:data.trace_id||'', spans:Array.isArray(data.spans)?data.spans:[], latencyMs:data.latency_ms||0});
+  }catch(e){
+    wfState.messages.push({role:'assistant', content:apiError(e)||'调试失败', agent:'编排', route:null});
+  }finally{
+    wfState.sending = false;
+    paintWorkflow();
+  }
+}
+function workflowAppMarkup(){
+  const endpoint = `/api/workflows/${wfState.id}/invoke`;
+  const fullEndpoint = location.origin+endpoint;
+  const messages = wfState.appMessages.map(item=>{
+    const trace=item.role==='assistant'&&item.traceId?`<details class="wf-app-trace"><summary><span>查看执行链路</span><b>${(item.spans||[]).length} 步${item.latencyMs?' · '+(Number(item.latencyMs)||0)+' ms':''}</b></summary><div class="wf-app-trace-id mono">${escapeHtml(item.traceId)}</div><div class="wf-app-trace-steps">${traceStepsMarkup(item.spans, item.traceError||'链路已记录，但当前账号没有查看详情的权限。')}</div></details>`:'';
+    return `<div class="wf-app-message ${item.role==='user'?'user':'assistant'}"><small>${item.role==='user'?'你':escapeHtml(wfState.name||'多智能体应用')}</small><p>${escapeHtml(item.content)}</p>${trace}</div>`;
+  }).join('');
+  const curl = `curl -X POST '${fullEndpoint}' \\\n  -H 'Authorization: Bearer <登录令牌>' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"message":"你好","session_id":"user-001"}'`;
+  return `<section class="wf-app-shell">
+    <div class="wf-app-main">
+      <header class="wf-app-header"><span class="wf-app-logo">✦</span><div><h2>${escapeHtml(wfState.name||'多智能体应用')}</h2><p>${escapeHtml(wfState.description||'已发布的多智能体对话应用')}</p></div><span class="wf-app-live"><i></i>运行中</span></header>
+      <div class="wf-app-chat" id="wfAppLog">${messages||`<div class="wf-app-welcome"><span>✦</span><h3>有什么可以帮你？</h3><p>消息会由多智能体应用自动选择合适的能力处理。</p></div>`}</div>
+      <form class="wf-app-composer" id="wfAppForm"><textarea id="wfAppInput" placeholder="输入消息，Enter 发送，Shift + Enter 换行" ${wfState.appSending?'disabled':''}></textarea><button type="submit" class="btn primary" ${wfState.appSending?'disabled':''}>${wfState.appSending?'处理中…':'发送'}</button></form>
+    </div>
+    <aside class="wf-deploy-panel">
+      <div class="wf-deploy-title"><span>✓</span><div><b>应用已发布</b><small>画布不会对调用方展示</small></div></div>
+      <label>正式调用地址</label><div class="wf-endpoint"><code>POST ${escapeHtml(endpoint)}</code><button type="button" id="wfCopyEndpoint" data-copy="${escapeHtml(fullEndpoint)}">复制</button></div>
+      <label>请求示例</label><pre id="wfCurlExample">${escapeHtml(curl)}</pre><button type="button" class="btn ghost wf-copy-curl" id="wfCopyCurl">复制示例</button>
+      <div class="wf-api-note"><b>调用说明</b><p>请求使用当前平台登录令牌鉴权。相同的 <code>session_id</code> 会延续上下文；留空则自动新建会话。</p></div>
+      <button type="button" class="btn ghost" id="wfAppNewSession">新建测试会话</button>
+    </aside>
+  </section>`;
+}
+async function invokeWorkflowApp(){
+  const input = $('#wfAppInput');
+  const message = input?input.value.trim():'';
+  if(!message || wfState.appSending) return;
+  wfState.appMessages.push({role:'user', content:message});
+  wfState.appSending = true;
+  await render('workflows');
+  try{
+    const data = await api('/api/workflows/'+wfState.id+'/invoke', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message, session_id:wfState.appSessionId||''})});
+    wfState.appSessionId = data.session_id||wfState.appSessionId;
+    let trace=null;
+    let traceError='';
+    if(data.trace_id){
+      try{trace=await api('/api/traces/'+encodeURIComponent(data.trace_id))}
+      catch(e){traceError=apiError(e)||'无法读取执行链路'}
+    }
+    wfState.appMessages.push({role:'assistant', content:data.reply||data.response||'没有返回内容', traceId:data.trace_id||'', spans:trace&&Array.isArray(trace.spans)?trace.spans:[], latencyMs:data.latency_ms||0, traceError});
+  }catch(e){
+    wfState.appMessages.push({role:'assistant', content:apiError(e)||'调用失败'});
+  }finally{
+    wfState.appSending = false;
+    await render('workflows');
+  }
+}
+function bindWorkflowApp(){
+  const form = $('#wfAppForm');
+  const input = $('#wfAppInput');
+  if(form) form.onsubmit=e=>{e.preventDefault(); invokeWorkflowApp()};
+  if(input){
+    input.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); invokeWorkflowApp()}};
+    if(!wfState.appSending) input.focus();
+  }
+  const log = $('#wfAppLog');
+  if(log) log.scrollTop=log.scrollHeight;
+  const copy = async text=>{try{await navigator.clipboard.writeText(text); toast('已复制')}catch(e){toast('复制失败，请手动复制')}};
+  if($('#wfCopyEndpoint')) $('#wfCopyEndpoint').onclick=e=>copy(e.currentTarget.dataset.copy||'');
+  if($('#wfCopyCurl')) $('#wfCopyCurl').onclick=()=>copy($('#wfCurlExample')?.textContent||'');
+  if($('#wfAppNewSession')) $('#wfAppNewSession').onclick=()=>{wfState.appSessionId=''; wfState.appMessages=[]; render('workflows')};
 }
 function ensureWfGlobals(){
   if(wfGlobalsBound) return;
   wfGlobalsBound = true;
   window.addEventListener('mousemove', e=>{
-    if(!wfDrag || !$('#canvas')) return;
+    const canvas = $('#canvas');
+    if(wfLink && canvas){
+      const p = canvasPoint(e, canvas);
+      wfLink.x = p.x;
+      wfLink.y = p.y;
+      if(Math.hypot(e.clientX-wfLink.sx, e.clientY-wfLink.sy)>4) wfLink.moved = true;
+      paintLinkLine();
+      return;
+    }
+    if(!wfDrag || !canvas) return;
     const n = wfState.nodes.find(x=>x.id===wfDrag.id);
     if(!n) return;
     n.x = Math.max(8, e.clientX - wfDrag.ox);
@@ -1356,40 +1745,94 @@ function ensureWfGlobals(){
     if(el){el.style.left=n.x+'px'; el.style.top=n.y+'px'}
     refreshWfEdges();
   });
-  window.addEventListener('mouseup', ()=>{wfDrag=null});
+  window.addEventListener('mouseup', e=>{
+    if(wfLink){
+      const from = wfLink.from;
+      const moved = wfLink.moved;
+      const hit = document.elementFromPoint(e.clientX, e.clientY);
+      const nodeEl = hit && hit.closest ? hit.closest('.node') : null;
+      if(nodeEl && nodeEl.dataset.id && nodeEl.dataset.id!==from) connectWf(from, nodeEl.dataset.id);
+      else if(!moved){wfLink=null; wfState.linking=from; paintWorkflow()}
+      else {wfLink=null; wfState.linking=null; paintWorkflow()}
+    }
+    wfDrag = null;
+  });
   window.addEventListener('keydown', e=>{
+    if(e.key==='Escape' && (wfState.linking || wfLink)){
+      wfState.linking = null;
+      wfLink = null;
+      paintWorkflow();
+      return;
+    }
     if((e.key!=='Delete' && e.key!=='Backspace') || !$('#canvas')) return;
     const tag = document.activeElement && document.activeElement.tagName;
     if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT') return;
     if(wfState.selected){e.preventDefault(); deleteWfNode(wfState.selected)}
   });
 }
+function syncWfFields(){
+  const name = $('#wfName');
+  if(name && document.activeElement!==name) name.value = wfState.name||'';
+  const prompt = $('#wfGlobalPrompt');
+  if(prompt && document.activeElement!==prompt) prompt.value = wfState.globalPrompt||'';
+  const status = $('#wfStatus');
+  if(status){status.className='pill '+(wfState.status||'draft'); status.textContent=wfState.status==='published'?'已发布':'草稿'}
+}
 function bindWorkflowCanvas(){
   const canvas = $('#canvas');
-  if(!canvas) return;
   ensureWfGlobals();
+  syncWfFields();
+  if($('#wfOpenApp')) $('#wfOpenApp').onclick=()=>{wfState.view='app'; render('workflows')};
+  if($('#wfEditGraph')) $('#wfEditGraph').onclick=()=>{wfState.view='builder'; render('workflows')};
+  if($('#wfSelect')) $('#wfSelect').onchange=async()=>{
+    const id = Number($('#wfSelect').value);
+    if(wfState.dirty && !confirm('当前编排还有未保存的修改，确定切换吗？')){$('#wfSelect').value=wfState.id||''; return}
+    const rows = await api('/api/workflows');
+    const row = rows.find(x=>x.id===id);
+    if(row){loadWfRow(row); await render('workflows')}
+  };
+  if(!canvas){bindWorkflowApp(); return}
   paintWorkflow();
-  document.querySelectorAll('.draggable').forEach(el=>{
+  document.querySelectorAll('.ma-agent, .ma-jump').forEach(el=>{
     el.addEventListener('dragstart', e=>{
-      e.dataTransfer.setData('text/plain', el.dataset.kind);
+      e.dataTransfer.setData('text/plain', el.dataset.kind==='jump'?'jump':'agent:'+el.dataset.agentId);
       e.dataTransfer.effectAllowed = 'copy';
     });
-    el.addEventListener('dblclick', ()=>addWfNode(el.dataset.kind, 80+wfState.nodes.length*24, 160));
+    el.addEventListener('dblclick', ()=>addWfNode(el.dataset.kind==='jump'?'jump':'agent', 220+wfState.nodes.length*16, 180, el.dataset.agentId));
   });
   canvas.addEventListener('dragover', e=>e.preventDefault());
   canvas.addEventListener('drop', e=>{
     e.preventDefault();
-    const kind = wfKindOf(e.dataTransfer.getData('text/plain'));
+    const raw = e.dataTransfer.getData('text/plain')||'';
     const p = canvasPoint(e, canvas);
-    addWfNode(kind, p.x, p.y);
+    if(raw==='jump') addWfNode('jump', p.x, p.y);
+    else if(raw.startsWith('agent:')) addWfNode('agent', p.x, p.y, raw.slice(6));
   });
   canvas.addEventListener('mousedown', e=>{
-    const port = e.target.closest('.wf-port');
-    if(port){
+    const del = e.target.closest('.ma-del');
+    if(del){
       e.preventDefault();
-      const id = port.dataset.id;
-      if(port.dataset.port==='in' && wfState.linking) connectWf(wfState.linking, id);
-      else if(port.dataset.port==='out'){wfState.linking=id; paintWorkflow()}
+      e.stopPropagation();
+      deleteWfNode(del.dataset.del);
+      return;
+    }
+    const cut = e.target.closest('.ma-edge-cut');
+    if(cut){
+      e.preventDefault();
+      e.stopPropagation();
+      wfState.edges = wfState.edges.filter(edge=>!(edge.source===cut.dataset.from && edge.target===cut.dataset.to));
+      wfState.dirty = true;
+      paintWorkflow();
+      return;
+    }
+    const port = e.target.closest('.wf-port');
+    if(port && port.dataset.port==='out'){
+      e.preventDefault();
+      e.stopPropagation();
+      const p = canvasPoint(e, canvas);
+      wfState.linking = null;
+      wfLink = {from:port.dataset.id, x:p.x, y:p.y, sx:e.clientX, sy:e.clientY, moved:false};
+      paintLinkLine();
       return;
     }
     const nodeEl = e.target.closest('.node');
@@ -1400,38 +1843,116 @@ function bindWorkflowCanvas(){
     const id = nodeEl.dataset.id;
     const n = wfState.nodes.find(x=>x.id===id);
     if(!n) return;
+    if(wfState.linking){
+      e.preventDefault();
+      e.stopPropagation();
+      if(id===wfState.linking){wfState.linking=null; paintWorkflow()}
+      else connectWf(wfState.linking, id);
+      return;
+    }
     wfState.selected = id;
     document.querySelectorAll('#canvas .node').forEach(el=>el.classList.toggle('active', el.dataset.id===id));
-    paintInspector();
+    if(wfState.panel!=='debug') paintInspector();
     wfDrag = {id, ox:e.clientX-n.x, oy:e.clientY-n.y, moved:false};
     e.preventDefault();
+  });
+  canvas.addEventListener('click', e=>{
+    const port = e.target.closest('.wf-port.out');
+    if(!port || e.detail!==0) return;
+    wfState.linking = port.dataset.id;
+    paintWorkflow();
   });
   if($('#wfSave')) $('#wfSave').onclick=()=>saveWorkflow(false);
   if($('#wfPublish')) $('#wfPublish').onclick=()=>saveWorkflow(true);
   if($('#wfNew')) $('#wfNew').onclick=createWorkflow;
-  if($('#wfSelect')) $('#wfSelect').onchange=async()=>{
-    const id = Number($('#wfSelect').value);
-    const rows = await api('/api/workflows');
-    const row = rows.find(x=>x.id===id);
-    if(row){loadWfRow(row); paintWorkflow()}
-  };
+  if($('#wfDebug')) $('#wfDebug').onclick=()=>{wfState.panel='debug'; paintInspector()};
+  if($('#wfName')) $('#wfName').oninput=e=>{wfState.name=e.target.value; wfState.dirty=true};
+  if($('#wfGlobalPrompt')) $('#wfGlobalPrompt').oninput=e=>{wfState.globalPrompt=e.target.value; wfState.dirty=true};
+  document.querySelectorAll('.ma-pattern[data-pattern]').forEach(btn=>{
+    btn.onclick=()=>{
+      const next = wfNormalizePattern(btn.dataset.pattern);
+      if(next===wfState.pattern) return;
+      wfState.pattern = next;
+      wfState.dirty = true;
+      paintWorkflow();
+      document.querySelectorAll('.ma-pattern[data-pattern]').forEach(el=>el.classList.toggle('on', el.dataset.pattern===next));
+    };
+  });
+  document.querySelectorAll('.ma-open-example').forEach(btn=>{
+    btn.onclick=()=>openWfExample(btn.dataset.name);
+  });
+}
+const WF_EXAMPLES = [
+  {
+    key:'handoff',
+    name:'示例·场景移交｜智能客服',
+    title:'场景移交',
+    summary:'一句话交给售前或售后；说「转人工」会跳到售后。',
+    steps:['打开本示例看画布连线','点发布','调试里依次试三句测试话'],
+    tries:['企业版一年大概多少钱？','我的订单坏了，想退货','转人工']
+  },
+  {
+    key:'supervisor',
+    name:'示例·主从 SubAgent｜旅行规划',
+    title:'主从 / SubAgent',
+    summary:'主控策划接需求，需要时调用行程、预算两个子智能体再汇总。',
+    steps:['打开本示例，确认开始只连主控','点发布','调试里发一句旅行需求，看链路里的子智能体调用'],
+    tries:['帮我规划三天上海亲子游，预算五千左右']
+  },
+  {
+    key:'pipeline',
+    name:'示例·工作流｜内容生产',
+    title:'工作流串行',
+    summary:'素材收集 → 文案撰写 → 校对润色，一步接一步。',
+    steps:['打开本示例看从左到右的箭头','点发布','调试里给一个写作主题，等三步跑完'],
+    tries:['写一篇介绍多智能体编排的短文']
+  }
+];
+function wfExampleMarkup(rows){
+  return WF_EXAMPLES.map(ex=>{
+    const row = rows.find(r=>r.name===ex.name);
+    const ready = !!row;
+    return `<article class="ma-example" data-example="${ex.key}">
+      <b>${escapeHtml(ex.title)}</b>
+      <small>${escapeHtml(ex.summary)}</small>
+      <ol>${ex.steps.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol>
+      <p class="ma-try">试一试：${ex.tries.map(t=>`「${escapeHtml(t)}」`).join(' ')}</p>
+      <button type="button" class="btn ${ready?'primary':'ghost'} ma-open-example" data-name="${escapeHtml(ex.name)}" ${ready?'':'disabled'}>${ready?'打开示例':'示例未就绪'}</button>
+    </article>`;
+  }).join('');
+}
+async function openWfExample(name){
+  if(wfState.dirty && !confirm('当前编排还有未保存的修改，确定切换到示例吗？')) return;
+  const rows = await api('/api/workflows');
+  const row = rows.find(x=>x.name===name);
+  if(!row){toast('还没有找到该示例，请重启服务后再试'); return}
+  loadWfRow(row);
+  wfState.view = 'builder';
+  wfState.panel = 'config';
+  await render('workflows');
+  toast('已打开「'+name+'」。看完画布后点发布，再去调试。');
 }
 async function workflows(){
-  const [rows, agents, mcp, skills] = await Promise.all([api('/api/workflows'), api('/api/agents'), api('/api/mcp'), api('/api/skills')]);
+  const [rows, agents] = await Promise.all([api('/api/workflows'), api('/api/agents')]);
   wfState.agents = agents;
-  wfState.mcp = mcp;
-  wfState.skills = skills;
   const current = rows.find(x=>x.id===wfState.id) || rows[0];
   loadWfRow(current || null);
-  const kinds = Object.entries(WF_KINDS);
+  const writable = can('workflow:write');
   const options = rows.map(x=>`<option value="${x.id}" ${x.id===wfState.id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
+  const agentItems = agents.length?agents.map(a=>`<div class="draggable ma-agent" draggable="true" data-kind="agent" data-agent-id="${a.id}"><span class="drag-icon">◇</span><span><b>${escapeHtml(a.name)}</b><small>${escapeHtml(a.model_name||'未绑定模型')}</small></span></div>`).join(''):'<p class="wf-empty-hint">还没有智能体。先在 Agent 管理里创建一个。</p>';
+  const viewingApp = wfState.view==='app' && wfState.status==='published';
+  const patternTips = wfState.pattern==='supervisor'
+    ? '主从：开始→主智能体；主智能体→子智能体（变成工具）。'
+    : wfState.pattern==='pipeline'
+      ? '工作流：按箭头顺序执行，一步多下游时按场景分支。'
+      : '场景移交：按适用场景把对话交给某个智能体。';
+  const builder = `<div class="designer ma-designer"><aside class="palette"><h3>跟着练</h3><div class="ma-example-list">${wfExampleMarkup(rows)}</div><h3 class="ma-gap">编排模式</h3><div class="ma-pattern-list"><button type="button" class="ma-pattern ${wfState.pattern==='handoff'?'on':''}" data-pattern="handoff">场景移交</button><button type="button" class="ma-pattern ${wfState.pattern==='supervisor'?'on':''}" data-pattern="supervisor">主从 / SubAgent</button><button type="button" class="ma-pattern ${wfState.pattern==='pipeline'?'on':''}" data-pattern="pipeline">工作流串行</button></div><p class="wf-empty-hint">${patternTips}</p><h3 class="ma-gap">智能体</h3>${agentItems}<h3 class="ma-gap">全局跳转</h3><div class="draggable ma-jump" draggable="true" data-kind="jump"><span class="drag-icon">↪</span>全局跳转条件</div><p class="wf-empty-hint">最多 5 条，优先级高于适用场景。</p><h3 class="ma-gap">全局人设</h3><textarea id="wfGlobalPrompt" placeholder="会加在每个智能体的系统提示词前面">${escapeHtml(wfState.globalPrompt||'')}</textarea><h3 class="ma-gap">关系</h3><small id="wfRelCount" style="color:#8994a4">${wfState.edges.length} 条 · ${escapeHtml(wfPatternLabel(wfState.pattern))}</small></aside><div class="canvas" id="canvas"></div><aside class="inspector" id="wfInspector"></aside></div>`;
   return `${head('workflows', `<div class="wf-toolbar">
-    <select id="wfSelect" class="select"${rows.length?'':' disabled'}>${options||'<option>暂无流程</option>'}</select>
-    <button class="btn ghost" type="button" id="wfNew">＋ 新建流程</button>
-    <button class="btn ghost" type="button" onclick="refreshPage()">刷新</button>
-    <button class="btn ghost" type="button" id="wfSave">保存草稿</button>
-    <button class="btn primary" type="button" id="wfPublish">发布流程</button>
-  </div>`)}<div class="designer"><aside class="palette"><h3>节点组件</h3>${kinds.map(([k,v])=>`<div class="draggable" draggable="true" data-kind="${k}"><span class="drag-icon">${v.icon}</span>${v.title}</div>`).join('')}<h3 style="margin-top:25px">已用资源</h3><small style="color:#8994a4;line-height:1.8">${agents.length} 个 Agent<br>${skills.length} 个 Skill<br>${mcp.length} 个 MCP 工具</small></aside><div class="canvas" id="canvas"></div><aside class="inspector" id="wfInspector"></aside></div>`;
+    <select id="wfSelect" class="select"${rows.length?'':' disabled'}>${options||'<option>暂无编排</option>'}</select>
+    ${viewingApp?`<strong class="wf-app-toolbar-name">${escapeHtml(wfState.name||'')}</strong>`:`<input id="wfName" value="${escapeHtml(wfState.name||'')}" ${writable?'':'disabled'}>`}
+    <span class="pill ${wfState.status||'draft'}" id="wfStatus">${wfState.status==='published'?'已发布':'草稿'}</span>
+    ${viewingApp?`<button class="btn ghost" type="button" id="wfEditGraph">← 返回编排</button>`:`<button class="btn ghost" type="button" id="wfNew" ${writable?'':'disabled'}>＋ 新建</button><button class="btn ghost" type="button" id="wfSave" ${writable?'':'disabled'}>保存草稿</button><button class="btn primary" type="button" id="wfPublish" ${writable?'':'disabled'}>发布</button><button class="btn ghost" type="button" id="wfDebug">调试</button>${wfState.status==='published'?'<button class="btn ghost" type="button" id="wfOpenApp">打开应用 →</button>':''}`}
+  </div>`)}${viewingApp?workflowAppMarkup():builder}`;
 }
 const forms={
   agents:[['name','Agent 名称','合同审核助手'],['description','功能说明','说明 Agent 的业务职责'],['model_name','使用模型','Qwen-Max'],['version','初始版本','v1.0.0'],['system_prompt','系统提示词','你是一名专业的企业助手']],
@@ -2361,6 +2882,7 @@ async function resumePlayground(){
 function bindPage(page){
   evalStopPoll();
   if(page==='memories') bindMemories();
+  if(page==='workflows') bindWorkflowCanvas();
   if(page==='knowledge') bindKnowledgeUpload();
   if(page==='evaluations') bindEvalPage();
   if(page==='experiments') bindExpPage();
@@ -2572,6 +3094,7 @@ async function render(page,param=''){
     else if(page==='evaluations')html=await evaluations();
     else if(page==='experiments')html=await experiments();
     else if(page==='playground')html=await playground(param);
+    else if(page==='workflows')html=await workflows();
     else if(page==='roles')html=await iam();
     else if(page==='knowledge')html=await knowledgePage();
     else if(page==='vectors')html=await vectorStorePage();

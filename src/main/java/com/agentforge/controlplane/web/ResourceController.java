@@ -6,6 +6,7 @@ import com.agentforge.controlplane.access.RequirePermission;
 import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.access.ResourceKind;
 import com.agentforge.controlplane.agent.AgentScopeRuntime;
+import com.agentforge.controlplane.agent.MultiAgentGraphs;
 import com.agentforge.controlplane.agent.BindingValidator;
 import com.agentforge.controlplane.agent.BoundAgentRuntime;
 import com.agentforge.controlplane.agent.ChatReply;
@@ -216,6 +217,7 @@ public class ResourceController {
         row.setDescription(payload.description());
         row.setStatus(payload.status());
         row.setGraph(payload.graph());
+        ensureWorkflowPublishable(user, row);
         access.stampOwner(row, user);
         workflows.save(row);
         return dumper.dump(row, user);
@@ -426,6 +428,9 @@ public class ResourceController {
         }
         Object row = access.resolveForEdit(user, Permissions.kindOf(resource), itemId);
         applyUpdate(user, resource, row, payload);
+        if (row instanceof Workflow workflow) {
+            ensureWorkflowPublishable(user, workflow);
+        }
         persist(resource, row);
         if (row instanceof Skill skill) {
             tools.persistSkillMarkdown(skill);
@@ -836,6 +841,20 @@ public class ResourceController {
             throw ApiException.unprocessable("模型用途只能是 chat、embedding 或 rerank");
         }
         return value;
+    }
+
+    private void ensureWorkflowPublishable(CurrentUser user, Workflow row) {
+        if (row == null || !"published".equals(row.getStatus())) {
+            return;
+        }
+        MultiAgentGraphs.requirePublishable(MultiAgentGraphs.read(row.getGraph()), agentId -> {
+            try {
+                access.getRow(user, ResourceKind.AGENT, agentId);
+                return true;
+            } catch (RuntimeException ex) {
+                return false;
+            }
+        });
     }
 
     private static void applyWorkflow(Workflow row, Map<String, Object> payload) {

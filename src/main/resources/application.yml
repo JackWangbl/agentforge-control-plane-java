@@ -13,7 +13,8 @@ spring:
     # username: ${DATABASE_USER:agentforge_app}
     # password: ${DATABASE_PASSWORD:}
     hikari:
-      maximum-pool-size: 16
+      maximum-pool-size: 2
+      minimum-idle: 0
       pool-name: agentforge-pool
       keepalive-time: 30000
       max-lifetime: 600000

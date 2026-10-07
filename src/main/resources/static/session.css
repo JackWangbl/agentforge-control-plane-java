@@ -126,15 +126,40 @@ dialog#sessionModal::backdrop {
 }
 
 .session-trace {
-  align-items: center;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 7px;
-  display: grid;
   font-size: 10px;
+  overflow: hidden;
+}
+
+.session-trace summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
   gap: 10px;
-  grid-template-columns: minmax(180px, 1fr) 80px 90px 90px;
+  grid-template-columns: minmax(150px, 1fr) 80px 70px 80px 72px;
+  list-style: none;
   padding: 9px 11px;
+}
+
+.session-trace summary::-webkit-details-marker {
+  display: none;
+}
+
+.session-trace summary b {
+  color: var(--blue);
+  font-size: 10px;
+  text-align: right;
+}
+
+.session-trace[open] summary {
+  background: #f7faff;
+  border-bottom: 1px solid var(--line);
+}
+
+.session-trace-steps {
+  padding: 14px;
 }
 
 .session-detail-empty {
@@ -156,11 +181,12 @@ dialog#sessionModal::backdrop {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .session-trace {
-    grid-template-columns: 1fr 70px;
+  .session-trace summary {
+    grid-template-columns: 1fr 70px 68px;
   }
 
-  .session-trace > *:nth-child(n + 3) {
+  .session-trace summary > *:nth-child(3),
+  .session-trace summary > *:nth-child(4) {
     display: none;
   }
 }

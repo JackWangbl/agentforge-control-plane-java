@@ -161,6 +161,14 @@ public final class ApiDtos {
         }
     }
 
+    public record WorkflowInvoke(
+            @NotBlank @Size(max = 20000) String message,
+            @Size(max = 120) String session_id) {
+        public WorkflowInvoke {
+            session_id = session_id == null ? "" : session_id;
+        }
+    }
+
     public record AgentCopy(@Size(max = 80) String name) {}
 
     public record AgentRename(@NotBlank @Size(min = 2, max = 80) String name) {}

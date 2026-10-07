@@ -43,6 +43,14 @@ public class Conversation extends TenantOwnedEntity {
     @Column(name = "subject_key", length = 120)
     private String subjectKey;
 
+    /** 多智能体编排。空值表示这条会话来自单个智能体。 */
+    @Column(name = "workflow_id")
+    private Long workflowId;
+
+    /** 编排里当前接手的节点。 */
+    @Column(name = "current_node_id", length = 40)
+    private String currentNodeId;
+
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
     public String getUserId() { return userId; }
@@ -65,4 +73,8 @@ public class Conversation extends TenantOwnedEntity {
     public void setChannel(String channel) { this.channel = channel; }
     public String getSubjectKey() { return subjectKey; }
     public void setSubjectKey(String subjectKey) { this.subjectKey = subjectKey; }
+    public Long getWorkflowId() { return workflowId; }
+    public void setWorkflowId(Long workflowId) { this.workflowId = workflowId; }
+    public String getCurrentNodeId() { return currentNodeId; }
+    public void setCurrentNodeId(String currentNodeId) { this.currentNodeId = currentNodeId; }
 }
