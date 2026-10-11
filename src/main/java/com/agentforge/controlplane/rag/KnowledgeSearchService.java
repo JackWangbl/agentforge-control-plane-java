@@ -30,12 +30,14 @@ public class KnowledgeSearchService {
     private final EmbeddingClient embeddings;
     private final MilvusVectorStore milvus;
     private final HttpRerankClient rerankClient;
+    private final GraphRagService graphRag;
     private final DocumentCleaner cleaner = new DocumentCleaner();
 
     public KnowledgeSearchService(KnowledgeBaseRepository bases, KnowledgeDocumentRepository documents,
                                   ModelConfigRepository models, VectorStoreRepository vectorStores,
                                   KnowledgeAccess access, EmbeddingClient embeddings,
-                                  MilvusVectorStore milvus, HttpRerankClient rerankClient) {
+                                  MilvusVectorStore milvus, HttpRerankClient rerankClient,
+                                  GraphRagService graphRag) {
         this.bases = bases;
         this.documents = documents;
         this.models = models;
@@ -44,6 +46,7 @@ public class KnowledgeSearchService {
         this.embeddings = embeddings;
         this.milvus = milvus;
         this.rerankClient = rerankClient;
+        this.graphRag = graphRag;
     }
 
     public boolean hasReadyDocuments(Agent agent) {
@@ -95,7 +98,7 @@ public class KnowledgeSearchService {
         List<String> errors = new ArrayList<>();
         for (KnowledgeBase base : visible) {
             try {
-                hits.addAll(searchBase(base, query, false).hits());
+                hits.addAll(searchBase(base, query).hits());
             } catch (RagCallException e) {
                 errors.add(base.getName() + "：" + e.getMessage());
             }
@@ -127,19 +130,27 @@ public class KnowledgeSearchService {
     }
 
     public Map<String, Object> debugSearch(KnowledgeBase base, String query) {
-        SearchPack pack = searchBase(base, query, true);
+        SearchPack pack = searchBase(base, query);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("vector_store", pack.vectorStore());
-        body.put("retriever", "dense+bm25");
+        body.put("retriever", pack.retriever());
         body.put("reranker", pack.reranker());
         body.put("hits", pack.hits().stream().map(HitView::toMap).toList());
         return body;
     }
 
-    private SearchPack searchBase(KnowledgeBase base, String query, boolean debug) {
+    private SearchPack searchBase(KnowledgeBase base, String query) {
         List<KnowledgeDocument> ready = documents.findByKnowledgeIdAndStatus(base.getId(), "ready");
+        String retriever = base.graphRag() ? "graphrag" : "dense+bm25";
         if (ready.isEmpty()) {
-            return new SearchPack(vectorName(base), rerankName(base), List.of());
+            return new SearchPack(vectorName(base), rerankName(base), retriever, List.of());
+        }
+        String normalized = cleaner.clean(query == null ? "" : query, "text/plain").text();
+        if (normalized.isBlank()) {
+            normalized = query == null ? "" : query.strip();
+        }
+        if (base.graphRag()) {
+            return searchGraph(base, ready, normalized);
         }
         ModelConfig model = models.findById(base.getEmbeddingModelId())
                 .filter(row -> row.isEnabled() && "embedding".equals(row.getPurpose()))
@@ -148,10 +159,6 @@ public class KnowledgeSearchService {
                 .orElseThrow(() -> new RagCallException("向量数据库不存在", true));
         if (!store.isEnabled()) {
             throw new RagCallException("向量数据库已停用", true);
-        }
-        String normalized = cleaner.clean(query == null ? "" : query, "text/plain").text();
-        if (normalized.isBlank()) {
-            normalized = query == null ? "" : query.strip();
         }
         float[] vector = embeddings.embed(model, List.of(normalized)).get(0);
         String filter = filter(base, ready);
@@ -189,10 +196,32 @@ public class KnowledgeSearchService {
                 }
             }
         }
-        if (!debug) {
-            return new SearchPack(store.getName(), reranker, views);
+        return new SearchPack(store.getName(), reranker, "dense+bm25", views);
+    }
+
+    private SearchPack searchGraph(KnowledgeBase base, List<KnowledgeDocument> ready, String query) {
+        Map<Long, String> filenames = new LinkedHashMap<>();
+        for (KnowledgeDocument document : ready) {
+            filenames.put(document.getId(), document.getFilename());
         }
-        return new SearchPack(store.getName(), reranker, views);
+        List<GraphRagService.Hit> found = graphRag.search(base, query);
+        String retriever = found.isEmpty() ? "graphrag" : "graphrag-" + found.get(0).mode();
+        int topK = Math.max(1, Math.min(10, base.getTopK()));
+        List<HitView> views = new ArrayList<>();
+        int rank = 1;
+        for (GraphRagService.Hit hit : found) {
+            if (views.size() >= topK) {
+                break;
+            }
+            String filename = filenames.getOrDefault(hit.documentId(), "");
+            String body = hit.content() == null ? "" : hit.content();
+            String extra = hit.context() == null ? "" : hit.context();
+            String context = extra.isBlank() || extra.equals(body) ? body : body + "\n" + extra;
+            double score = "local".equals(hit.mode()) ? 0.9 : 0.5;
+            views.add(new HitView(base.getName(), filename, hit.heading(), body, context, rank, 0f, null, score - rank * 0.01));
+            rank++;
+        }
+        return new SearchPack(vectorName(base), "none", retriever, views);
     }
 
     private static HitView view(KnowledgeBase base, List<KnowledgeDocument> ready, MilvusVectorStore.Hit hit,
@@ -235,7 +264,7 @@ public class KnowledgeSearchService {
         return models.findById(base.getRerankModelId()).map(ModelConfig::getName).orElse("none");
     }
 
-    private record SearchPack(String vectorStore, String reranker, List<HitView> hits) {}
+    private record SearchPack(String vectorStore, String reranker, String retriever, List<HitView> hits) {}
 
     public record HitView(String baseName, String filename, String heading, String content, String context, int rank,
                           float rrfScore, Double rerankScore, double sortScore) {

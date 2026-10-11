@@ -68,6 +68,15 @@ public class Agent extends TenantOwnedEntity {
     @Column(name = "success_rate", nullable = false)
     private double successRate = 0;
 
+    /** 正式调用使用的发布版。为空表示还没有发布过。 */
+    @Column(name = "published_release_id")
+    private Long publishedReleaseId;
+
+    /** A2A 名片里可以手改的名称、说明、版本和能力。调用地址不放在这里。 */
+    @Convert(converter = JsonConverters.MapConverter.class)
+    @Column(name = "a2a_card", columnDefinition = "json")
+    private Map<String, Object> a2aCard = new java.util.LinkedHashMap<>();
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }
@@ -102,4 +111,10 @@ public class Agent extends TenantOwnedEntity {
     public void setWorkspace(String workspace) { this.workspace = workspace; }
     public double getSuccessRate() { return successRate; }
     public void setSuccessRate(double successRate) { this.successRate = successRate; }
+    public Long getPublishedReleaseId() { return publishedReleaseId; }
+    public void setPublishedReleaseId(Long publishedReleaseId) { this.publishedReleaseId = publishedReleaseId; }
+    public Map<String, Object> getA2aCard() { return a2aCard == null ? Map.of() : a2aCard; }
+    public void setA2aCard(Map<String, Object> a2aCard) {
+        this.a2aCard = a2aCard == null ? new java.util.LinkedHashMap<>() : a2aCard;
+    }
 }

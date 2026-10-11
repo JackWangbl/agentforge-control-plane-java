@@ -54,9 +54,16 @@ public final class FlowRuntime {
         if (agent == null || agent.getToolFlows() == null) {
             return List.of();
         }
+        return normalizeFlows(agent.getToolFlows());
+    }
+
+    public static List<Map<String, Object>> normalizeFlows(List<Map<String, Object>> raw) {
         List<Map<String, Object>> flows = new ArrayList<>();
         List<String> seen = new ArrayList<>();
-        for (Map<String, Object> item : agent.getToolFlows()) {
+        if (raw == null) {
+            return flows;
+        }
+        for (Map<String, Object> item : raw) {
             if (item == null) {
                 continue;
             }
@@ -78,11 +85,15 @@ public final class FlowRuntime {
     }
 
     public static Map<String, Object> findAgentFlow(Agent agent, String toolName) {
+        return findFlow(agentFlows(agent), toolName);
+    }
+
+    public static Map<String, Object> findFlow(List<Map<String, Object>> flows, String toolName) {
         if (!isFlowTool(toolName)) {
             return null;
         }
         String wanted = toolName.substring(FLOW_TOOL_PREFIX.length());
-        for (Map<String, Object> flow : agentFlows(agent)) {
+        for (Map<String, Object> flow : flows == null ? List.<Map<String, Object>>of() : flows) {
             if (wanted.equals(flow.get("name"))) {
                 return flow;
             }
@@ -106,8 +117,12 @@ public final class FlowRuntime {
 
     /** 每条链路对模型暴露成一个函数工具。 */
     public static List<Map<String, Object>> flowToolSpecs(Agent agent) {
+        return flowToolSpecs(agentFlows(agent));
+    }
+
+    public static List<Map<String, Object>> flowToolSpecs(List<Map<String, Object>> flows) {
         List<Map<String, Object>> tools = new ArrayList<>();
-        for (Map<String, Object> flow : agentFlows(agent)) {
+        for (Map<String, Object> flow : flows == null ? List.<Map<String, Object>>of() : flows) {
             String chain = chainOf(flow);
             String description = text(flow.get("description")).strip();
             String summary = "按固定顺序执行 " + chain + "，一次调用完成整条链路，不要再单独调用其中的工具。";
@@ -125,8 +140,11 @@ public final class FlowRuntime {
 
     /** 拼进系统提示的链路说明，让模型知道该调链路而不是拆开调工具。 */
     public static String flowPromptHint(Agent agent) {
-        List<Map<String, Object>> flows = agentFlows(agent);
-        if (flows.isEmpty()) {
+        return flowPromptHint(agentFlows(agent));
+    }
+
+    public static String flowPromptHint(List<Map<String, Object>> flows) {
+        if (flows == null || flows.isEmpty()) {
             return "";
         }
         StringBuilder out = new StringBuilder("以下固定链路已经编排好，需要时调用链路本身，平台会保证顺序和参数传递：");

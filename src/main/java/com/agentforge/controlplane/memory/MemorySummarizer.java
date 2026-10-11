@@ -17,6 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -110,12 +111,14 @@ public class MemorySummarizer {
         String credential = AgentScopeRuntime.resolveCredential(model);
         String url = AgentScopeRuntime.modelEndpoint(model) + "/chat/completions";
         try {
-            String body = json.writeValueAsString(Map.of(
-                    "model", model.getModelId(),
-                    "temperature", 0,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", INSTRUCTION),
-                            Map.of("role", "user", "content", userPrompt))));
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("model", model.getModelId());
+            payload.put("temperature", 0);
+            payload.put("messages", List.of(
+                    Map.of("role", "system", "content", INSTRUCTION),
+                    Map.of("role", "user", "content", userPrompt)));
+            AgentScopeRuntime.putJsonResponseFormat(payload, model);
+            String body = json.writeValueAsString(payload);
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(30))
                     .header("Content-Type", "application/json")

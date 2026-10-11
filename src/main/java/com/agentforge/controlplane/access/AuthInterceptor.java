@@ -38,6 +38,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
         request.setAttribute(ATTRIBUTE, user);
         CurrentUserHolder.set(user);
+        RequestAuthorization.set(request.getHeader("Authorization"), request.getHeader("X-Tenant-Id"));
         return true;
     }
 
@@ -45,6 +46,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
                                 Object handler, Exception ex) {
         CurrentUserHolder.clear();
+        RequestAuthorization.clear();
     }
 
     private static boolean isPublic(HandlerMethod method) {

@@ -3,6 +3,7 @@ package com.agentforge.controlplane.agent;
 import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.domain.AgentRelease;
 import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.SandboxPolicy;
@@ -178,7 +179,7 @@ public class ToolRuntime {
 
     public boolean agentAllowsTool(Agent agent, String toolName) {
         if (FlowRuntime.isFlowTool(toolName)) {
-            return FlowRuntime.findAgentFlow(agent, toolName) != null;
+            return findFlow(agent, toolName) != null;
         }
         if (toolName != null && toolName.startsWith("sandbox_") && selectedSandbox(agent) != null) {
             return true;
@@ -192,6 +193,10 @@ public class ToolRuntime {
         if ("remember".equals(toolName) || "forget".equals(toolName) || "list_memories".equals(toolName)) {
             return true;
         }
+        Map<String, Object> pinned = activeSnapshot(agent);
+        if (pinned != null) {
+            return AgentReleasePins.toolByName(pinned, toolName) != null;
+        }
         for (McpServer row : selectedMcps(agent)) {
             for (Map<String, Object> tool : listMcpTools(row)) {
                 if (toolName != null && toolName.equals(tool.get("name"))) {
@@ -204,6 +209,18 @@ public class ToolRuntime {
 
     /** 这一轮模型能看到的全部工具：MCP + 沙箱 + 链路。HTTP 接入的 Agent 不走本平台工具。 */
     public List<ToolSpec> agentTools(Agent agent) {
+        if (httpAgents.isHttpBacked(agent)) {
+            return List.of();
+        }
+        Map<String, Object> pinned = activeSnapshot(agent);
+        if (pinned != null) {
+            return pinnedAgentTools(agent, pinned);
+        }
+        return liveAgentTools(agent);
+    }
+
+    /** 按当前草稿读取工具，发布时用来抄一份清单。不受发布版上下文影响。 */
+    public List<ToolSpec> liveAgentTools(Agent agent) {
         if (httpAgents.isHttpBacked(agent)) {
             return List.of();
         }
@@ -260,7 +277,7 @@ public class ToolRuntime {
                     "列出当前用户自己的长期记忆。不能查看别人的记忆。",
                     ToolSpec.objectSchema(Map.of("keyword", ToolSpec.stringParam("可选，按关键词过滤")))));
         }
-        for (Map<String, Object> spec : FlowRuntime.flowToolSpecs(agent)) {
+        for (Map<String, Object> spec : FlowRuntime.flowToolSpecs(FlowRuntime.agentFlows(agent))) {
             String name = String.valueOf(spec.get("name"));
             if (seen.contains(name)) {
                 continue;
@@ -272,6 +289,132 @@ public class ToolRuntime {
             tools.add(new ToolSpec(name, Jsons.text(spec.get("description")), schema));
         }
         return tools;
+    }
+
+    private Map<String, Object> activeSnapshot(Agent agent) {
+        AgentRelease release = ReleaseContext.current();
+        if (release == null || agent == null || agent.getId() == null || !agent.getId().equals(release.getAgentId())) {
+            return null;
+        }
+        return AgentReleasePins.readSnapshot(release.getSnapshotJson());
+    }
+
+    private Map<String, Object> findFlow(Agent agent, String toolName) {
+        Map<String, Object> pinned = activeSnapshot(agent);
+        if (pinned != null) {
+            return FlowRuntime.findFlow(AgentReleasePins.flows(pinned), toolName);
+        }
+        return FlowRuntime.findAgentFlow(agent, toolName);
+    }
+
+    private List<ToolSpec> pinnedAgentTools(Agent agent, Map<String, Object> snapshot) {
+        List<ToolSpec> tools = new ArrayList<>();
+        List<String> seen = new ArrayList<>();
+        for (Map<String, Object> spec : AgentReleasePins.tools(snapshot)) {
+            String name = Jsons.text(spec.get("name"));
+            if (name.isBlank() || seen.contains(name)) {
+                continue;
+            }
+            seen.add(name);
+            Object parameters = spec.get("parameters");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> schema = parameters instanceof Map<?, ?> map
+                    ? (Map<String, Object>) map : ToolSpec.emptySchema();
+            tools.add(new ToolSpec(name, Jsons.text(spec.get("description")), schema));
+        }
+        appendSandboxKnowledgeMemory(agent, tools, seen);
+        for (Map<String, Object> spec : FlowRuntime.flowToolSpecs(AgentReleasePins.flows(snapshot))) {
+            addSpec(tools, seen, spec);
+        }
+        return tools;
+    }
+
+    private void appendSandboxKnowledgeMemory(Agent agent, List<ToolSpec> tools, List<String> seen) {
+        if (selectedSandbox(agent) != null) {
+            for (Map<String, Object> spec : SandboxRuntime.sandboxToolSpecs()) {
+                addSpec(tools, seen, spec);
+            }
+        }
+        if (knowledge.hasReadyDocuments(agent) && !seen.contains("search_documents")) {
+            seen.add("search_documents");
+            tools.add(new ToolSpec("search_documents",
+                    "在当前 Agent 绑定的知识库中检索用户上传的文档原文。回答文档中的事实、数字、条款或流程前必须先调用。",
+                    ToolSpec.objectSchema(Map.of("query", ToolSpec.stringParam("要检索的问题或关键词")), "query")));
+        }
+        if (!seen.contains("remember")) {
+            seen.add("remember");
+            tools.add(new ToolSpec("remember",
+                    "立刻写下用户刚刚明确要求记住的一句话。普通事实会在本轮结束后自动总结，不要把闲聊写进来。",
+                    ToolSpec.objectSchema(Map.of(
+                            "content", ToolSpec.stringParam("要记住的事实，最多 500 字"),
+                            "kind", ToolSpec.stringParam("preference、profile、decision、correction 之一，可空")),
+                            "content")));
+            seen.add("forget");
+            tools.add(new ToolSpec("forget",
+                    "按关键词删除当前用户自己的长期记忆。只有用户明确说忘掉时才调用。",
+                    ToolSpec.objectSchema(Map.of("keyword", ToolSpec.stringParam("要忘掉的原文或关键词")), "keyword")));
+            seen.add("list_memories");
+            tools.add(new ToolSpec("list_memories",
+                    "列出当前用户自己的长期记忆。不能查看别人的记忆。",
+                    ToolSpec.objectSchema(Map.of("keyword", ToolSpec.stringParam("可选，按关键词过滤")))));
+        }
+    }
+
+    private static void addSpec(List<ToolSpec> tools, List<String> seen, Map<String, Object> spec) {
+        String name = String.valueOf(spec.get("name"));
+        if (seen.contains(name)) {
+            return;
+        }
+        seen.add(name);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> schema = spec.get("parameters") instanceof Map<?, ?> map
+                ? (Map<String, Object>) map : ToolSpec.emptySchema();
+        tools.add(new ToolSpec(name, Jsons.text(spec.get("description")), schema));
+    }
+
+    private String pinnedToolHint(Agent agent, Map<String, Object> snapshot) {
+        String hint = AgentReleasePins.toolHint(snapshot);
+        if (selectedSandbox(agent) == null) {
+            return hint;
+        }
+        List<String> names = new ArrayList<>();
+        SandboxRuntime.sandboxToolSpecs().forEach(spec -> names.add(String.valueOf(spec.get("name"))));
+        if (names.isEmpty()) {
+            return hint;
+        }
+        String extra = "你还可以调用沙箱工具：" + String.join("、", names) + "。";
+        return hint.isBlank() ? extra : hint + "\n" + extra;
+    }
+
+    /** 发布版钉住的工具如果已经对不上现在的 MCP，就不要真的发出去。 */
+    private String contractBlock(Agent agent, String name) {
+        if (name == null || AgentReleasePins.unpinnedTool(name)) {
+            return null;
+        }
+        Map<String, Object> snapshot = activeSnapshot(agent);
+        AgentRelease release = ReleaseContext.current();
+        if (snapshot == null || release == null) {
+            return null;
+        }
+        Map<String, Object> pinned = AgentReleasePins.toolByName(snapshot, name);
+        if (pinned == null) {
+            return "工具「" + name + "」不在发布版 " + release.getRevision() + " 里。当前任务不会调用发布之后新增的工具。";
+        }
+        Map<String, Object> live = null;
+        for (ToolSpec spec : liveAgentTools(agent)) {
+            if (name.equals(spec.name())) {
+                live = Map.of(
+                        "name", spec.name(),
+                        "description", spec.description() == null ? "" : spec.description(),
+                        "parameters", spec.parameters() == null ? ToolSpec.emptySchema() : spec.parameters());
+                break;
+            }
+        }
+        if (live == null || AgentReleasePins.breaking(pinned, live)) {
+            return "工具「" + name + "」的调用方式已经变了，当前任务还钉在发布版 "
+                    + release.getRevision() + "。请重新发布该智能体后再用。";
+        }
+        return null;
     }
 
     public String skillInstruction(Skill row) {
@@ -351,16 +494,19 @@ public class ToolRuntime {
         if (httpAgents.isHttpBacked(agent)) {
             return agent.getSystemPrompt() == null ? "" : agent.getSystemPrompt().strip();
         }
-        String base = agent.getSystemPrompt().strip();
+        Map<String, Object> pinned = activeSnapshot(agent);
+        String base = pinned != null ? AgentReleasePins.systemPrompt(pinned) : agent.getSystemPrompt().strip();
         if (base.isEmpty()) {
             String duty = agent.getDescription() == null || agent.getDescription().isBlank()
                     ? "你是一名专业的企业助手。" : agent.getDescription();
             base = "你是" + agent.getName() + "。" + duty;
         }
         List<String> extras = new ArrayList<>();
-        String skillsBlock = skillPromptBlock(agent);
-        String hint = mcpToolHint(agent);
-        String flows = FlowRuntime.flowPromptHint(agent);
+        String skillsBlock = pinned != null ? AgentReleasePins.skillBlock(pinned) : skillPromptBlock(agent);
+        String hint = pinned != null ? pinnedToolHint(agent, pinned) : mcpToolHint(agent);
+        String flows = pinned != null
+                ? FlowRuntime.flowPromptHint(AgentReleasePins.flows(pinned))
+                : FlowRuntime.flowPromptHint(agent);
         if (!skillsBlock.isBlank()) {
             extras.add(skillsBlock);
         }
@@ -403,6 +549,10 @@ public class ToolRuntime {
 
     public String executeTool(String name, Map<String, Object> arguments, Agent agent) {
         Map<String, Object> args = arguments == null ? Map.of() : arguments;
+        String blocked = contractBlock(agent, name);
+        if (blocked != null) {
+            return blocked;
+        }
         ExecutionContext context = ExecutionContext.get();
         if (agent != null && (context == null
                 || context.getAgentId() != (agent.getId() == null ? 0L : agent.getId())
@@ -421,7 +571,7 @@ public class ToolRuntime {
             if (agent == null) {
                 return Jsons.json(Map.of("error", "缺少 Agent 上下文，无法执行链路"));
             }
-            Map<String, Object> flow = FlowRuntime.findAgentFlow(agent, name);
+            Map<String, Object> flow = findFlow(agent, name);
             if (flow == null) {
                 return Jsons.json(Map.of("error", "当前 Agent 未定义链路 " + name));
             }

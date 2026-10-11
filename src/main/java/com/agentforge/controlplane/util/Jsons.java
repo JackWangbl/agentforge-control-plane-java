@@ -27,6 +27,17 @@ public final class Jsons {
         }
     }
 
+    public static Object read(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return MAPPER.readValue(json, Object.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public static Map<String, Object> map(String json) {
         if (json == null || json.isBlank()) {
             return Map.of();

@@ -9,6 +9,7 @@ import com.agentforge.controlplane.domain.KnowledgeDocument;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.VectorStore;
 import com.agentforge.controlplane.rag.DocumentExtractor;
+import com.agentforge.controlplane.rag.GraphRagService;
 import com.agentforge.controlplane.rag.KnowledgeAccess;
 import com.agentforge.controlplane.rag.KnowledgeIndexService;
 import com.agentforge.controlplane.rag.KnowledgeSearchService;
@@ -38,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 @RestController
 public class KnowledgeController {
@@ -52,12 +54,13 @@ public class KnowledgeController {
     private final KnowledgeIndexService index;
     private final KnowledgeSearchService search;
     private final MilvusVectorStore milvus;
+    private final GraphRagService graphRag;
 
     public KnowledgeController(ResourceAccessService access, VectorStoreRepository vectorStores,
                                KnowledgeBaseRepository bases, KnowledgeAccess knowledgeAccess,
                                KnowledgeDocumentRepository documents, ModelConfigRepository models,
                                AgentRepository agents, KnowledgeIndexService index, KnowledgeSearchService search,
-                               MilvusVectorStore milvus) {
+                               MilvusVectorStore milvus, GraphRagService graphRag) {
         this.access = access;
         this.vectorStores = vectorStores;
         this.bases = bases;
@@ -68,6 +71,7 @@ public class KnowledgeController {
         this.index = index;
         this.search = search;
         this.milvus = milvus;
+        this.graphRag = graphRag;
     }
 
     @RequirePermission({"tenant:admin", "vector:read"})
@@ -166,6 +170,7 @@ public class KnowledgeController {
         row.setVisibility(KnowledgeAccess.normalizeVisibility(text(payload.get("visibility"), "private")));
         row.setVectorStoreId(knowledgeAccess.defaultVectorStore(user.getTenantId()).getId());
         applyBaseLinks(user, row, payload, true);
+        applyRetrieval(user, row, payload, true);
         applyBaseKnobs(row, payload);
         access.stampOwner(row, user);
         KnowledgeBase saved = bases.save(row);
@@ -180,6 +185,8 @@ public class KnowledgeController {
         Long oldModel = row.getEmbeddingModelId();
         Long oldStore = row.getVectorStoreId();
         Integer oldDim = row.getEmbeddingDimension();
+        String oldMode = row.getRetrievalMode();
+        Long oldGraphModel = row.getGraphModelId();
         if (payload.containsKey("name")) {
             String name = requiredName(payload.get("name"));
             ensureBaseName(user.getTenantId(), name, row.getId());
@@ -192,8 +199,10 @@ public class KnowledgeController {
             row.setVisibility(KnowledgeAccess.normalizeVisibility(text(payload.get("visibility"), row.getVisibility())));
         }
         applyBaseLinks(user, row, payload, false);
+        applyRetrieval(user, row, payload, false);
         applyBaseKnobs(row, payload);
         boolean rebuild = !oldModel.equals(row.getEmbeddingModelId()) || !oldStore.equals(row.getVectorStoreId());
+        boolean graphChanged = !oldMode.equals(row.getRetrievalMode()) || !Objects.equals(oldGraphModel, row.getGraphModelId());
         if (rebuild) {
             row.setEmbeddingDimension(null);
             ModelConfig model = models.findById(row.getEmbeddingModelId()).orElse(null);
@@ -202,6 +211,9 @@ public class KnowledgeController {
             }
         }
         bases.save(row);
+        if (!row.graphRag() && "graphrag".equals(oldMode)) {
+            graphRag.deleteKnowledge(row.getId());
+        }
         if (rebuild) {
             VectorStore store = vectorStores.findById(row.getVectorStoreId()).orElse(null);
             if (store != null) {
@@ -215,6 +227,8 @@ public class KnowledgeController {
                 document.setContentHash("");
                 documents.save(document);
             }
+            index.enqueueAll(row.getId(), true);
+        } else if (graphChanged && row.graphRag()) {
             index.enqueueAll(row.getId(), true);
         }
         return dumpBase(user, row);
@@ -252,6 +266,7 @@ public class KnowledgeController {
             }
         }
         knowledgeAccess.deleteMembers(row.getId());
+        graphRag.deleteKnowledge(row.getId());
         bases.delete(row);
         return Map.of("deleted", true);
     }
@@ -371,6 +386,7 @@ public class KnowledgeController {
             }
         }
         deleteFile(document);
+        graphRag.deleteDocument(document.getId());
         documents.delete(document);
         return Map.of("deleted", true);
     }
@@ -439,6 +455,30 @@ public class KnowledgeController {
         }
     }
 
+    private void applyRetrieval(CurrentUser user, KnowledgeBase row, Map<String, Object> payload, boolean creating) {
+        if (!creating && !payload.containsKey("retrieval_mode") && !payload.containsKey("graph_model_id")) {
+            return;
+        }
+        String mode = text(payload.get("retrieval_mode"), creating ? "hybrid" : row.getRetrievalMode());
+        if (!"hybrid".equals(mode) && !"graphrag".equals(mode)) {
+            throw ApiException.unprocessable("检索方式只能是混合检索或 GraphRAG");
+        }
+        if ("graphrag".equals(mode)) {
+            Long graphModelId = payload.containsKey("graph_model_id")
+                    ? Jsons.asLong(payload.get("graph_model_id")) : row.getGraphModelId();
+            ModelConfig model = graphModelId == null ? null : models.findById(graphModelId).orElse(null);
+            if (model == null || !user.getTenantId().equals(model.getTenantId())
+                    || !model.isEnabled() || !"chat".equals(model.getPurpose())) {
+                throw ApiException.unprocessable("GraphRAG 需要本租户已启用的对话模型");
+            }
+            row.setRetrievalMode("graphrag");
+            row.setGraphModelId(graphModelId);
+            return;
+        }
+        row.setRetrievalMode("hybrid");
+        row.setGraphModelId(null);
+    }
+
     private static void applyBaseKnobs(KnowledgeBase row, Map<String, Object> payload) {
         if (payload.containsKey("enabled")) {
             row.setEnabled(bool(payload.get("enabled"), row.isEnabled()));
@@ -480,6 +520,8 @@ public class KnowledgeController {
         data.put("embedding_model_id", row.getEmbeddingModelId());
         data.put("vector_store_id", row.getVectorStoreId());
         data.put("rerank_model_id", row.getRerankModelId());
+        data.put("retrieval_mode", row.getRetrievalMode());
+        data.put("graph_model_id", row.getGraphModelId());
         data.put("embedding_dimension", row.getEmbeddingDimension());
         data.put("enabled", row.isEnabled());
         data.put("top_k", row.getTopK());
@@ -490,6 +532,7 @@ public class KnowledgeController {
         data.put("embedding_model", models.findById(row.getEmbeddingModelId()).map(ModelConfig::getName).orElse(""));
         data.put("vector_store_name", vectorStores.findById(row.getVectorStoreId()).map(VectorStore::getName).orElse(""));
         data.put("rerank_name", row.getRerankModelId() == null ? "" : models.findById(row.getRerankModelId()).map(ModelConfig::getName).orElse(""));
+        data.put("graph_model", row.getGraphModelId() == null ? "" : models.findById(row.getGraphModelId()).map(ModelConfig::getName).orElse(""));
         return data;
     }
 

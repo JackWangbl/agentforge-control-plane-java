@@ -146,6 +146,44 @@ public class SchemaMigrator implements ApplicationRunner {
                 }
                 log.info("已为 model_configs 表补齐 purpose 列");
             }
+            if (!hasColumn(conn, "model_configs", "json_output")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE model_configs ADD COLUMN json_output TINYINT(1) NOT NULL DEFAULT 0");
+                }
+                log.info("已为 model_configs 表补齐 json_output 列");
+            }
+            if (!hasTable(conn, "agent_releases")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE agent_releases (
+                              id BIGINT NOT NULL AUTO_INCREMENT,
+                              tenant_id BIGINT NOT NULL,
+                              agent_id BIGINT NOT NULL,
+                              revision INT NOT NULL,
+                              fingerprint VARCHAR(64) NOT NULL,
+                              snapshot_json LONGTEXT NOT NULL,
+                              created_at DATETIME(6) NOT NULL,
+                              updated_at DATETIME(6) NOT NULL,
+                              PRIMARY KEY (id),
+                              UNIQUE KEY uk_agent_releases_agent_rev (agent_id, revision),
+                              KEY idx_agent_releases_agent (agent_id)
+                            )
+                            """);
+                }
+                log.info("已创建 agent_releases 表");
+            }
+            if (!hasColumn(conn, "agents", "published_release_id")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE agents ADD COLUMN published_release_id BIGINT NULL");
+                }
+                log.info("已为 agents 表补齐 published_release_id 列");
+            }
+            if (!hasColumn(conn, "agents", "a2a_card")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE agents ADD COLUMN a2a_card JSON NULL");
+                }
+                log.info("已为 agents 表补齐 a2a_card 列");
+            }
             createKnowledgeTables(conn);
         }
     }
@@ -319,6 +357,39 @@ public class SchemaMigrator implements ApplicationRunner {
                     """);
         }
         backfillRerankModels(conn);
+        if (!hasColumn(conn, "knowledge_bases", "retrieval_mode")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE knowledge_bases ADD COLUMN retrieval_mode VARCHAR(20) NOT NULL DEFAULT 'hybrid'");
+            }
+            log.info("已为 knowledge_bases 表补齐 retrieval_mode");
+        }
+        if (!hasColumn(conn, "knowledge_bases", "graph_model_id")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE knowledge_bases ADD COLUMN graph_model_id BIGINT NULL");
+            }
+            log.info("已为 knowledge_bases 表补齐 graph_model_id");
+        }
+        if (!hasTable(conn, "kg_document_graphs")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("""
+                        CREATE TABLE kg_document_graphs (
+                          id BIGINT NOT NULL AUTO_INCREMENT,
+                          knowledge_id BIGINT NOT NULL,
+                          document_id BIGINT NOT NULL,
+                          generation BIGINT NOT NULL DEFAULT 0,
+                          summary TEXT NULL,
+                          entities_json LONGTEXT NULL,
+                          relations_json LONGTEXT NULL,
+                          created_at DATETIME(6) NOT NULL,
+                          updated_at DATETIME(6) NOT NULL,
+                          PRIMARY KEY (id),
+                          UNIQUE KEY uk_kg_document (document_id),
+                          KEY idx_kg_knowledge (knowledge_id)
+                        )
+                        """);
+            }
+            log.info("已创建 kg_document_graphs 表");
+        }
     }
 
     private void backfillRerankModels(Connection conn) throws Exception {

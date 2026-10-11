@@ -4,6 +4,8 @@ import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.access.ResourceKind;
+import com.agentforge.controlplane.agent.A2aAddresses;
+import com.agentforge.controlplane.agent.AgentReleaseService;
 import com.agentforge.controlplane.agent.AgentScopeRuntime;
 import com.agentforge.controlplane.agent.HttpAgentRuntime;
 import com.agentforge.controlplane.agent.ToolRuntime;
@@ -60,16 +62,18 @@ public class ResourceDumper {
     private final KnowledgeBaseRepository knowledgeBases;
     private final KnowledgeDocumentRepository knowledgeDocuments;
     private final KnowledgeAccess knowledgeAccess;
+    private final AgentReleaseService releases;
 
     public ResourceDumper(ResourceAccessService access, ToolRuntime tools, SandboxRuntime sandbox,
                           KnowledgeBaseRepository knowledgeBases, KnowledgeDocumentRepository knowledgeDocuments,
-                          KnowledgeAccess knowledgeAccess) {
+                          KnowledgeAccess knowledgeAccess, AgentReleaseService releases) {
         this.access = access;
         this.tools = tools;
         this.sandbox = sandbox;
         this.knowledgeBases = knowledgeBases;
         this.knowledgeDocuments = knowledgeDocuments;
         this.knowledgeAccess = knowledgeAccess;
+        this.releases = releases;
     }
 
     public Map<String, Object> dump(Object row) {
@@ -135,6 +139,9 @@ public class ResourceDumper {
             data.put("runtime", tools.selectedHttpAgents(agent).isEmpty() ? "local" : "http");
             data.put("system_prompt", agent.getSystemPrompt());
             data.put("invoke_path", "/api/agents/" + agent.getId() + "/invoke");
+            data.put("a2a_card", agent.getA2aCard());
+            data.put("a2a_card_path", A2aAddresses.cardPath(agent.getId()));
+            data.put("a2a_endpoint", A2aAddresses.rpcPath(agent.getId()));
             List<Map<String, Object>> boundSkills = new ArrayList<>();
             for (Skill skill : tools.selectedSkills(agent)) {
                 boundSkills.add(Map.of("id", skill.getId(), "name", skill.getName()));
@@ -175,6 +182,9 @@ public class ResourceDumper {
             data.put("knowledge_ids", agent.getKnowledgeIds());
             data.put("bound_knowledge", boundKnowledge);
             data.put("workspace", agent.getWorkspace() == null ? "" : agent.getWorkspace());
+            AgentReleaseService.View release = releases.view(agent);
+            data.put("release_revision", release.revision());
+            data.put("release_drift", release.drift());
             SandboxPolicy box = tools.selectedSandbox(agent);
             data.put("sandbox_name", box == null ? "" : box.getName());
         }

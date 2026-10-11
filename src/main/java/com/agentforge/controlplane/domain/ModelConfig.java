@@ -39,6 +39,10 @@ public class ModelConfig extends TenantOwnedEntity {
     @Column(name = "purpose", length = 20, nullable = false)
     private String purpose = "chat";
 
+    /** 对话模型打开后，chat/completions 使用 response_format=json_object。向量和重排序忽略此开关。 */
+    @Column(name = "json_output", nullable = false)
+    private boolean jsonOutput = false;
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getProvider() { return provider; }
@@ -57,4 +61,11 @@ public class ModelConfig extends TenantOwnedEntity {
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public String getPurpose() { return purpose == null || purpose.isBlank() ? "chat" : purpose; }
     public void setPurpose(String purpose) { this.purpose = purpose == null || purpose.isBlank() ? "chat" : purpose; }
+    public boolean isJsonOutput() { return jsonOutput; }
+    public void setJsonOutput(boolean jsonOutput) { this.jsonOutput = jsonOutput; }
+
+    /** 只有对话模型打开开关时，请求才强制 JSON 对象。 */
+    public boolean wantsJsonObject() {
+        return jsonOutput && "chat".equals(getPurpose());
+    }
 }

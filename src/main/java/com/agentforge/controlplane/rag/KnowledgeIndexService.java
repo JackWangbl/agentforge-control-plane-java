@@ -41,6 +41,7 @@ public class KnowledgeIndexService {
     private final ChunkStrategySelector selector = new ChunkStrategySelector();
     private final EmbeddingClient embeddings;
     private final MilvusVectorStore milvus;
+    private final GraphRagService graphs;
     private final AppSettings settings;
     private final TransactionTemplate tx;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
@@ -51,14 +52,15 @@ public class KnowledgeIndexService {
 
     public KnowledgeIndexService(KnowledgeBaseRepository bases, KnowledgeDocumentRepository documents,
                                  ModelConfigRepository models, VectorStoreRepository vectorStores,
-                                 EmbeddingClient embeddings, MilvusVectorStore milvus, AppSettings settings,
-                                 PlatformTransactionManager transactions) {
+                                 EmbeddingClient embeddings, MilvusVectorStore milvus, GraphRagService graphs,
+                                 AppSettings settings, PlatformTransactionManager transactions) {
         this.bases = bases;
         this.documents = documents;
         this.models = models;
         this.vectorStores = vectorStores;
         this.embeddings = embeddings;
         this.milvus = milvus;
+        this.graphs = graphs;
         this.settings = settings;
         this.tx = new TransactionTemplate(transactions);
     }
@@ -128,12 +130,14 @@ public class KnowledgeIndexService {
                 fail(document, "向量数据库不存在、已停用或类型不是 milvus");
                 return List.of();
             }
+            boolean graphReady = !base.graphRag() || graphs.ready(document);
             boolean same = !force
                     && hash.equals(document.getContentHash())
                     && model.getModelId().equals(document.getEmbeddingModel())
                     && chunks.strategy().equals(document.getStrategy())
                     && store.getId().equals(document.getIndexedVectorStoreId())
-                    && document.getGeneration() > 0;
+                    && document.getGeneration() > 0
+                    && graphReady;
             document.setCleanSummary(cleaned.summary());
             document.setProfile(chunks.profile());
             document.setStrategy(chunks.strategy());
@@ -169,6 +173,9 @@ public class KnowledgeIndexService {
             }
             milvus.insert(store, tenantId, base.getId(), rows);
             milvus.deleteOlderGeneration(store, tenantId, base.getId(), document.getId(), generation);
+            if (base.graphRag()) {
+                graphs.build(base, document, generation, chunks.chunks());
+            }
             if (base.getEmbeddingDimension() == null) {
                 base.setEmbeddingDimension(dimension);
                 bases.save(base);

@@ -2,6 +2,7 @@ package com.agentforge.controlplane.seed;
 
 import com.agentforge.controlplane.access.AuthService;
 import com.agentforge.controlplane.access.PasswordHasher;
+import com.agentforge.controlplane.agent.AgentReleaseService;
 import com.agentforge.controlplane.agent.ToolRuntime;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.McpServer;
@@ -64,11 +65,12 @@ public class SeedRunner implements ApplicationRunner {
     private final SandboxPolicyRepository sandboxes;
     private final WorkflowRepository workflows;
     private final OpenCliEndpointRepository opencli;
+    private final AgentReleaseService releases;
 
     public SeedRunner(TenantRepository tenants, RoleRepository roles, UserRepository users, AgentRepository agents,
                       McpServerRepository mcps, SkillRepository skills, ModelConfigRepository models,
                       SandboxPolicyRepository sandboxes, WorkflowRepository workflows,
-                      OpenCliEndpointRepository opencli) {
+                      OpenCliEndpointRepository opencli, AgentReleaseService releases) {
         this.tenants = tenants;
         this.roles = roles;
         this.users = users;
@@ -79,6 +81,7 @@ public class SeedRunner implements ApplicationRunner {
         this.sandboxes = sandboxes;
         this.workflows = workflows;
         this.opencli = opencli;
+        this.releases = releases;
     }
 
     @Override
@@ -89,6 +92,7 @@ public class SeedRunner implements ApplicationRunner {
         seedBuiltinTools();
         migrateOpencli();
         ensureExampleOrchestrations();
+        releases.backfillMissing();
     }
 
     private void seedIfEmpty() {

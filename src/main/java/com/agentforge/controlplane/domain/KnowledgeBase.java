@@ -41,6 +41,13 @@ public class KnowledgeBase extends TenantOwnedEntity {
     @Column(name = "score_threshold", nullable = false)
     private double scoreThreshold = 0.3;
 
+    /** hybrid：向量 + BM25。graphrag：实体关系图 + 文档社区摘要。 */
+    @Column(name = "retrieval_mode", length = 20, nullable = false)
+    private String retrievalMode = "hybrid";
+
+    @Column(name = "graph_model_id")
+    private Long graphModelId;
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description == null ? "" : description; }
@@ -63,4 +70,9 @@ public class KnowledgeBase extends TenantOwnedEntity {
     public void setCandidateK(int candidateK) { this.candidateK = candidateK; }
     public double getScoreThreshold() { return scoreThreshold; }
     public void setScoreThreshold(double scoreThreshold) { this.scoreThreshold = scoreThreshold; }
+    public String getRetrievalMode() { return retrievalMode == null || retrievalMode.isBlank() ? "hybrid" : retrievalMode; }
+    public void setRetrievalMode(String retrievalMode) { this.retrievalMode = retrievalMode == null || retrievalMode.isBlank() ? "hybrid" : retrievalMode; }
+    public Long getGraphModelId() { return graphModelId; }
+    public void setGraphModelId(Long graphModelId) { this.graphModelId = graphModelId; }
+    public boolean graphRag() { return "graphrag".equals(getRetrievalMode()); }
 }

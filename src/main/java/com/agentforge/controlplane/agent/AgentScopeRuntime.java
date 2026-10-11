@@ -15,6 +15,7 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.message.UserMessage;
+import io.agentscope.core.formatter.ResponseFormat;
 import io.agentscope.core.model.ChatUsage;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.tool.Toolkit;
@@ -140,12 +141,12 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                     .anyMatch(name -> name.startsWith("browser_") || name.startsWith("opencli_")) ? 8 : 4;
             ReActAgent react = ReActAgent.builder()
                     .name(agent.getName())
-                    .sysPrompt(PromptOverlay.apply(tools.buildSystemPrompt(agent)))
+                    .sysPrompt(withJsonInstruction(fillUserInput(PromptOverlay.apply(tools.buildSystemPrompt(agent)), lastUser), model))
                     .model(chatModel)
                     .toolkit(toolkit)
                     .maxIters(maxIters)
                     .enablePendingToolRecovery(true)
-                    .generateOptions(GenerateOptions.builder().temperature(model.getTemperature()).build())
+                    .generateOptions(chatOptions(model))
                     .build();
             List<Msg> msgs = toMsgs(working);
             Msg result = react.call(msgs, RuntimeContext.builder()
@@ -267,7 +268,9 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                 });
                 int duration = Math.max(1, (int) ((System.nanoTime() - started) / 1_000_000));
                 String spanName = ToolOverlay.isOverlayTool(spec.name()) ? "subagent." + spec.name() : "mcp." + spec.name();
-                String spanTitle = ToolOverlay.isOverlayTool(spec.name()) ? "调用子智能体 " + spec.name() : "调用工具 " + spec.name();
+                String spanTitle = ToolOverlay.isOverlayTool(spec.name())
+                        ? "通过 A2A 调用子智能体 " + spec.name()
+                        : "调用工具 " + spec.name();
                 traces.add(debugSpan(spanName, spanTitle, "tool",
                         allowed ? "ok" : "error", duration, output));
                 if (allowed && FlowRuntime.isFlowTool(spec.name())) {
@@ -285,8 +288,38 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                 .modelName(model.getModelId())
                 .baseUrl(modelEndpoint(model))
                 .stream(false)
-                .generateOptions(GenerateOptions.builder().temperature(model.getTemperature()).build())
+                .generateOptions(chatOptions(model))
                 .build();
+    }
+
+    static GenerateOptions chatOptions(ModelConfig model) {
+        GenerateOptions.Builder builder = GenerateOptions.builder().temperature(model.getTemperature());
+        if (model.wantsJsonObject()) {
+            builder.responseFormat(ResponseFormat.jsonObject());
+        }
+        return builder.build();
+    }
+
+    /** 直接拼 chat/completions 请求体时，打开开关就带上 json_object。 */
+    public static void putJsonResponseFormat(Map<String, Object> body, ModelConfig model) {
+        if (model != null && model.wantsJsonObject()) {
+            body.put("response_format", Map.of("type", "json_object"));
+        }
+    }
+
+    static String fillUserInput(String prompt, String userText) {
+        if (prompt == null || !prompt.contains("{{user_input}}")) {
+            return prompt;
+        }
+        return prompt.replace("{{user_input}}", userText == null ? "" : userText);
+    }
+
+    private static String withJsonInstruction(String prompt, ModelConfig model) {
+        if (model == null || !model.wantsJsonObject()) {
+            return prompt;
+        }
+        String base = prompt == null ? "" : prompt;
+        return base + "\n\n回复必须是一个 JSON 对象。不要输出 Markdown、代码围栏或解释。";
     }
 
     private int runPending(Agent agent, CurrentUser caller, List<Map<String, Object>> pending, List<String> doneIds,

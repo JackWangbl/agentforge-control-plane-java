@@ -60,6 +60,17 @@
       <artifactId>agentscope-extensions-model-dashscope</artifactId>
       <version>${agentscope.version}</version>
     </dependency>
+    <!-- 智能体之间按 A2A 互相调用。不用 Spring Boot starter，避免它占用根路径。 -->
+    <dependency>
+      <groupId>io.agentscope</groupId>
+      <artifactId>agentscope-extensions-a2a-client</artifactId>
+      <version>${agentscope.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.agentscope</groupId>
+      <artifactId>agentscope-extensions-a2a-server</artifactId>
+      <version>${agentscope.version}</version>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.pdfbox</groupId>

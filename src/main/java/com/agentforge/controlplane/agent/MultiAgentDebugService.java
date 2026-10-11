@@ -4,6 +4,7 @@ import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.access.ResourceKind;
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.domain.AgentRelease;
 import com.agentforge.controlplane.domain.Conversation;
 import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.ModelConfig;
@@ -27,6 +28,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -44,12 +46,16 @@ public class MultiAgentDebugService {
     private final HttpAgentRuntime httpAgents;
     private final MemoryService memories;
     private final MemorySummarizer summarizer;
+    private final AgentReleaseService releases;
+    private final A2aGateway a2a;
+    private final ThreadLocal<Boolean> usePublishedRelease = ThreadLocal.withInitial(() -> Boolean.FALSE);
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
     private final ObjectMapper json = new ObjectMapper();
 
     public MultiAgentDebugService(ResourceAccessService access, PlaygroundService playground,
                                   ConversationRepository conversations, ModelConfigRepository models,
-                                  HttpAgentRuntime httpAgents, MemoryService memories, MemorySummarizer summarizer) {
+                                  HttpAgentRuntime httpAgents, MemoryService memories, MemorySummarizer summarizer,
+                                  AgentReleaseService releases, A2aGateway a2a) {
         this.access = access;
         this.playground = playground;
         this.conversations = conversations;
@@ -57,18 +63,20 @@ public class MultiAgentDebugService {
         this.httpAgents = httpAgents;
         this.memories = memories;
         this.summarizer = summarizer;
+        this.releases = releases;
+        this.a2a = a2a;
     }
 
     @Transactional
     public Map<String, Object> debug(CurrentUser user, Long workflowId, String message, String sessionId, String focusNodeId) {
         return run(user, workflowId, message, sessionId, focusNodeId,
-                "POST /api/workflows/" + workflowId + "/debug");
+                "POST /api/workflows/" + workflowId + "/debug", false);
     }
 
     @Transactional
     public Map<String, Object> invoke(CurrentUser user, Long workflowId, String message, String sessionId) {
         Map<String, Object> result = run(user, workflowId, message, sessionId, "",
-                "POST /api/workflows/" + workflowId + "/invoke");
+                "POST /api/workflows/" + workflowId + "/invoke", true);
         return Jsons.ordered(
                 "workflow_id", result.get("workflow_id"),
                 "reply", result.get("reply"),
@@ -98,7 +106,18 @@ public class MultiAgentDebugService {
     }
 
     private Map<String, Object> run(CurrentUser user, Long workflowId, String message, String sessionId,
-                                    String focusNodeId, String endpoint) {
+                                    String focusNodeId, String endpoint, boolean pinRelease) {
+        Boolean previous = usePublishedRelease.get();
+        usePublishedRelease.set(pinRelease);
+        try {
+            return runPinned(user, workflowId, message, sessionId, focusNodeId, endpoint);
+        } finally {
+            usePublishedRelease.set(previous);
+        }
+    }
+
+    private Map<String, Object> runPinned(CurrentUser user, Long workflowId, String message, String sessionId,
+                                          String focusNodeId, String endpoint) {
         Workflow workflow = access.getRow(user, ResourceKind.WORKFLOW, workflowId);
         if (!"published".equals(workflow.getStatus())) {
             throw ApiException.conflict("请先发布这条编排，再开始调用");
@@ -262,11 +281,37 @@ public class MultiAgentDebugService {
 
         Instant started = Instant.now();
         ModelConfig model = resolveModel(user, agent);
+        Agent speaker = agent;
+        ModelConfig speakerModel = model;
         List<Map<String, Object>> history = memories.shortTermHistory(user, null, sid);
         history.add(Map.of("role", "user", "content", message));
         ChatReply reply = ToolOverlay.call(extras, () -> PromptOverlay.call(graph.globalPrompt(), nodePrompt,
-                () -> playground.generate(agent, model, history, sid, false, false)));
-        return persistReply(user, workflow, agent, model, landed, message, sid, conversation, endpoint,
+                () -> generatePinned(agent, model, history, sid, false, false)));
+        if (useSubs && !calledSubagent(reply)) {
+            String category = SupervisorDispatch.categoryOf(reply.reply());
+            MultiAgentGraphs.Node target = SupervisorDispatch.match(category, subs);
+            if (target != null) {
+                ChatReply subReply = runOneSub(user, graph, target, message, "分类结果：" + category + "。请处理用户原话。", sid);
+                List<Map<String, Object>> spans = new ArrayList<>();
+                if (reply.spans() != null) {
+                    spans.addAll(reply.spans());
+                }
+                boolean failed = subReply.reply() != null && subReply.reply().startsWith("子智能体调用失败");
+                spans.add(AgentScopeRuntime.debugSpan("route.category", "按分类流转", "llm", failed ? "error" : "ok", 1,
+                        "分类「" + category + "」交给「" + MultiAgentGraphs.labelOf(target) + "」"));
+                if (subReply.spans() != null) {
+                    spans.addAll(subReply.spans());
+                }
+                String text = subReply.reply() == null || subReply.reply().isBlank() ? reply.reply() : subReply.reply();
+                reply = new ChatReply(text, "error".equals(subReply.mode()) ? "error" : reply.mode(), spans,
+                        reply.usage(), reply.traceId());
+                landed = target;
+                speaker = access.getRow(user, ResourceKind.AGENT, target.agentId());
+                speakerModel = resolveModel(user, speaker);
+                detail = "分类「" + category + "」交给「" + MultiAgentGraphs.labelOf(target) + "」";
+            }
+        }
+        return persistReply(user, workflow, speaker, speakerModel, landed, message, sid, conversation, endpoint,
                 started, reply, routeSpans, Jsons.ordered(
                         "pattern", MultiAgentGraphs.PATTERN_SUPERVISOR,
                         "jump", jumpHit,
@@ -350,7 +395,7 @@ public class MultiAgentDebugService {
             final MultiAgentGraphs.Node stepNode = cursor;
             final String stepPrompt = stepNode.prompt();
             ChatReply reply = ToolOverlay.nest(() -> PromptOverlay.call(graph.globalPrompt(), stepPrompt,
-                    () -> playground.generate(agent, model, history, stepSession, false, false)));
+                    () -> generatePinned(agent, model, history, stepSession, false, false)));
             routeSpans.add(AgentScopeRuntime.debugSpan("pipeline.step", "步骤 " + steps + " · " + MultiAgentGraphs.labelOf(stepNode),
                     "agent", "error".equals(reply.mode()) ? "error" : "ok", 1, clip(reply.reply(), 200)));
             if (reply.spans() != null) {
@@ -424,25 +469,9 @@ public class MultiAgentDebugService {
             MultiAgentGraphs.Node target = sub;
             extras.add(new ToolOverlay.Extra(spec, args -> {
                 String task = Jsons.text(args.get("task")).strip();
-                if (task.isBlank()) {
-                    task = userMessage;
-                }
-                try {
-                    Agent subAgent = access.getRow(user, ResourceKind.AGENT, target.agentId());
-                    ModelConfig model = resolveModel(user, subAgent);
-                    String prompt = "你是编排中的子智能体「" + MultiAgentGraphs.labelOf(target) + "」。"
-                            + "只完成交给你的专项任务，不要替主智能体做最终汇总。"
-                            + (target.prompt().isBlank() ? "" : "\n\n" + target.prompt());
-                    List<Map<String, Object>> history = List.of(Map.of("role", "user", "content",
-                            "用户原话：\n" + clip(userMessage, 600) + "\n\n主智能体交给你的任务：\n" + clip(task, 1500)));
-                    String subSession = sid + "::sub::" + target.id();
-                    ChatReply reply = ToolOverlay.nest(() -> PromptOverlay.call(graph.globalPrompt(), prompt,
-                            () -> playground.generate(subAgent, model, history, subSession, false, false)));
-                    String text = reply.reply() == null ? "" : reply.reply().strip();
-                    return text.isBlank() ? "子智能体没有返回内容" : text;
-                } catch (RuntimeException ex) {
-                    return "子智能体调用失败：" + (ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
-                }
+                ChatReply reply = runOneSub(user, graph, target, userMessage, task, sid);
+                String text = reply.reply() == null ? "" : reply.reply().strip();
+                return text.isBlank() ? "子智能体没有返回内容" : text;
             }));
         }
         return extras;
@@ -450,15 +479,60 @@ public class MultiAgentDebugService {
 
     private static String supervisorHint(List<MultiAgentGraphs.Node> subs) {
         StringBuilder out = new StringBuilder();
-        out.append("你是主智能体（Supervisor）。遇到需要专项处理的问题时，先调用对应的子智能体工具，再根据工具返回汇总给用户。");
+        out.append("你是主智能体。需要专项处理时可以调用下面的子智能体工具。");
+        out.append("如果你的回复是带 category 的分类结果，平台会按分类自动把用户原话交给名称或适用场景对得上的那一个子智能体。");
+        out.append("分类是待确认时，说明还缺什么信息，不要调用子智能体。");
         out.append("可用子智能体：\n");
         for (MultiAgentGraphs.Node sub : subs) {
             out.append("- ").append(MultiAgentGraphs.subToolName(sub)).append(" → ")
                     .append(MultiAgentGraphs.labelOf(sub)).append("：")
                     .append(clip(sub.scenario(), 120)).append('\n');
         }
-        out.append("简单寒暄或你能直接回答的问题，不必调用子智能体。");
         return out.toString();
+    }
+
+    private static boolean calledSubagent(ChatReply reply) {
+        if (reply == null || reply.spans() == null) {
+            return false;
+        }
+        for (Map<String, Object> span : reply.spans()) {
+            if (Jsons.text(span.get("name")).startsWith("subagent.")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private ChatReply runOneSub(CurrentUser user, MultiAgentGraphs.Graph graph, MultiAgentGraphs.Node target,
+                                String userMessage, String task, String sid) {
+        String job = task == null || task.isBlank() ? (userMessage == null ? "" : userMessage) : task.strip();
+        try {
+            Agent subAgent = access.getRow(user, ResourceKind.AGENT, target.agentId());
+            String prompt = "你是编排中的子智能体「" + MultiAgentGraphs.labelOf(target) + "」。"
+                    + "只完成交给你的专项任务，不要替主智能体做最终汇总。"
+                    + (target.prompt().isBlank() ? "" : "\n\n" + target.prompt());
+            String text = "用户原话：\n" + clip(userMessage, 600) + "\n\n主智能体交给你的任务：\n" + clip(job, 1500);
+            String subSession = sid + "::sub::" + target.id();
+            boolean pin = Boolean.TRUE.equals(usePublishedRelease.get());
+            ChatReply reply = a2a.call(subAgent, text, subSession, graph.globalPrompt(), prompt, pin);
+            if (reply.reply() == null || reply.reply().isBlank()) {
+                return new ChatReply("子智能体没有返回内容", reply.mode(), reply.spans(), reply.usage(), reply.traceId());
+            }
+            return reply;
+        } catch (RuntimeException ex) {
+            String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+            return new ChatReply("子智能体调用失败：" + reason, "error", List.of(), Map.of(), "");
+        }
+    }
+
+    private ChatReply generatePinned(Agent agent, ModelConfig model, List<Map<String, Object>> history, String sid,
+                                    boolean resume, boolean forceRerun) {
+        if (!Boolean.TRUE.equals(usePublishedRelease.get()) || httpAgents.isHttpBacked(agent)) {
+            return playground.generate(agent, model, history, sid, resume, forceRerun);
+        }
+        AgentRelease release = releases.ensurePublished(agent);
+        ModelConfig pinnedModel = releases.resolveModel(release, model);
+        return ReleaseContext.call(release, () -> playground.generate(agent, pinnedModel, history, sid, resume, forceRerun));
     }
 
     private Map<String, Object> answerAndPersist(CurrentUser user, Workflow workflow, MultiAgentGraphs.Graph graph,
@@ -471,7 +545,7 @@ public class MultiAgentDebugService {
         history.add(Map.of("role", "user", "content", message));
         Instant started = Instant.now();
         ChatReply reply = PromptOverlay.call(graph.globalPrompt(), landed.prompt(),
-                () -> playground.generate(agent, model, history, sid, false, false));
+                () -> generatePinned(agent, model, history, sid, false, false));
         return persistReply(user, workflow, agent, model, landed, message, sid, conversation, endpoint,
                 started, reply, routeSpans, route);
     }
@@ -639,12 +713,14 @@ public class MultiAgentDebugService {
         }
         String url = AgentScopeRuntime.modelEndpoint(model) + "/chat/completions";
         try {
-            String body = json.writeValueAsString(Map.of(
-                    "model", model.getModelId(),
-                    "temperature", 0,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", "你只负责选择编号。只输出 JSON，不要解释。"),
-                            Map.of("role", "user", "content", userPrompt))));
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("model", model.getModelId());
+            payload.put("temperature", 0);
+            payload.put("messages", List.of(
+                    Map.of("role", "system", "content", "你只负责选择编号。只输出 JSON，不要解释。"),
+                    Map.of("role", "user", "content", userPrompt)));
+            AgentScopeRuntime.putJsonResponseFormat(payload, model);
+            String body = json.writeValueAsString(payload);
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(20))
                     .header("Content-Type", "application/json")

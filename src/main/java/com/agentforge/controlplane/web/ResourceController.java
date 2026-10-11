@@ -5,6 +5,8 @@ import com.agentforge.controlplane.access.Permissions;
 import com.agentforge.controlplane.access.RequirePermission;
 import com.agentforge.controlplane.access.ResourceAccessService;
 import com.agentforge.controlplane.access.ResourceKind;
+import com.agentforge.controlplane.agent.A2aCards;
+import com.agentforge.controlplane.agent.AgentReleaseService;
 import com.agentforge.controlplane.agent.AgentScopeRuntime;
 import com.agentforge.controlplane.agent.MultiAgentGraphs;
 import com.agentforge.controlplane.agent.BindingValidator;
@@ -79,6 +81,7 @@ public class ResourceController {
     private final SandboxRuntime sandbox;
     private final OpenCliRuntime opencli;
     private final McpStreamClient mcpStream;
+    private final AgentReleaseService releases;
 
     public ResourceController(ResourceAccessService access, ResourceDumper dumper, AgentRepository agents,
                               HttpAgentRepository httpAgents, McpServerRepository mcps, SkillRepository skills,
@@ -87,7 +90,8 @@ public class ResourceController {
                               ToolRuntime tools, BindingValidator bindings, BoundAgentRuntime boundAgents,
                               HttpAgentRuntime httpAgentRuntime,
                               WorkspaceStore workspaces,
-                              SandboxRuntime sandbox, OpenCliRuntime opencli, McpStreamClient mcpStream) {
+                              SandboxRuntime sandbox, OpenCliRuntime opencli, McpStreamClient mcpStream,
+                              AgentReleaseService releases) {
         this.access = access;
         this.dumper = dumper;
         this.agents = agents;
@@ -106,6 +110,7 @@ public class ResourceController {
         this.sandbox = sandbox;
         this.opencli = opencli;
         this.mcpStream = mcpStream;
+        this.releases = releases;
     }
 
     @GetMapping("/api/{resource}")
@@ -183,6 +188,7 @@ public class ResourceController {
         row.setTemperature(payload.temperature());
         row.setEnabled(payload.enabled());
         row.setPurpose(normalizePurpose(payload.purpose()));
+        row.setJsonOutput("chat".equals(row.getPurpose()) && Boolean.TRUE.equals(payload.json_output()));
         access.stampOwner(row, user);
         models.save(row);
         return dumper.dump(row, user);
@@ -203,6 +209,7 @@ public class ResourceController {
         row.setTemperature(source.getTemperature());
         row.setEnabled(source.isEnabled());
         row.setPurpose(source.getPurpose());
+        row.setJsonOutput(source.wantsJsonObject());
         access.stampOwner(row, user);
         models.save(row);
         return dumper.dump(row, user);
@@ -247,6 +254,7 @@ public class ResourceController {
         row.setKnowledgeIds(payload.knowledge_ids());
         row.setToolFlows(payload.tool_flows());
         row.setSandboxId(payload.sandbox_id());
+        row.setA2aCard(A2aCards.normalize(payload.a2a_card()));
         applyHttpProxyMode(row);
         access.stampOwner(row, user);
         agents.save(row);
@@ -300,6 +308,7 @@ public class ResourceController {
         row.setKnowledgeIds(new ArrayList<>(bindings.retainVisibleKnowledge(user, source.getKnowledgeIds())));
         row.setToolFlows(new ArrayList<>(source.getToolFlows()));
         row.setSandboxId(source.getSandboxId());
+        row.setA2aCard(new LinkedHashMap<>(source.getA2aCard()));
         row.setWorkspace("");
         row.setSuccessRate(0);
         applyHttpProxyMode(row);
@@ -319,6 +328,17 @@ public class ResourceController {
         workspaces.ensureWorkspace(row);
         agents.save(row);
         return dumper.dump(row, user);
+    }
+
+    @RequirePermission("agent:write")
+    @PostMapping("/api/agents/{itemId}/publish-release")
+    public Map<String, Object> publishAgentRelease(CurrentUser user, @PathVariable Long itemId) {
+        Agent row = access.resolveForEdit(user, ResourceKind.AGENT, itemId);
+        AgentReleaseService.Published published = releases.publish(row);
+        Map<String, Object> body = dumper.dump(row, user);
+        body.put("release_created", published.created());
+        body.put("release_revision", published.release().getRevision());
+        return body;
     }
 
     @RequirePermission("agent:read")
@@ -404,6 +424,7 @@ public class ResourceController {
         }
         Object row = access.resolveForEdit(user, Permissions.kindOf(resource), itemId);
         if (row instanceof Agent agent) {
+            releases.deleteForAgent(agent.getId());
             workspaces.removeWorkspace(agent);
         }
         switch (resource) {
@@ -670,6 +691,9 @@ public class ResourceController {
         if (payload.containsKey("sandbox_id")) {
             row.setSandboxId(Jsons.asLong(payload.get("sandbox_id")));
         }
+        if (payload.containsKey("a2a_card")) {
+            row.setA2aCard(A2aCards.normalize(payload.get("a2a_card")));
+        }
         bindings.validateBindings(user.getTenantId(),
                 payload.containsKey("skill_ids") ? row.getSkillIds() : null,
                 payload.containsKey("mcp_ids") ? row.getMcpIds() : null,
@@ -833,6 +857,23 @@ public class ResourceController {
         if (payload.containsKey("purpose")) {
             row.setPurpose(normalizePurpose(Jsons.text(payload.get("purpose"))));
         }
+        if (payload.containsKey("json_output")) {
+            row.setJsonOutput(truthy(payload.get("json_output")));
+        }
+        if (!"chat".equals(row.getPurpose())) {
+            row.setJsonOutput(false);
+        }
+    }
+
+    private static boolean truthy(Object value) {
+        if (value instanceof Boolean flag) {
+            return flag;
+        }
+        if (value instanceof Number number) {
+            return number.intValue() != 0;
+        }
+        String text = Jsons.text(value).strip();
+        return "true".equalsIgnoreCase(text) || "1".equals(text) || "on".equalsIgnoreCase(text) || "yes".equalsIgnoreCase(text);
     }
 
     private static String normalizePurpose(String purpose) {

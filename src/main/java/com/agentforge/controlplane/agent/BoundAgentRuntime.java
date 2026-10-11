@@ -3,6 +3,7 @@ package com.agentforge.controlplane.agent;
 import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.domain.AgentRelease;
 import com.agentforge.controlplane.memory.MemoryService;
 import com.agentforge.controlplane.memory.MemorySummarizer;
 import com.agentforge.controlplane.domain.HttpAgent;
@@ -35,10 +36,11 @@ public class BoundAgentRuntime {
     private final HttpAgentRuntime httpAgents;
     private final MemoryService memories;
     private final MemorySummarizer summarizer;
+    private final AgentReleaseService releases;
 
     public BoundAgentRuntime(ModelConfigRepository models, ObjectProvider<AgentScopeRuntime> runtime,
                              BrowserRuntime browser, WorkspaceStore workspaces, HttpAgentRuntime httpAgents,
-                             MemoryService memories, MemorySummarizer summarizer) {
+                             MemoryService memories, MemorySummarizer summarizer, AgentReleaseService releases) {
         this.models = models;
         this.runtime = runtime;
         this.browser = browser;
@@ -46,10 +48,19 @@ public class BoundAgentRuntime {
         this.httpAgents = httpAgents;
         this.memories = memories;
         this.summarizer = summarizer;
+        this.releases = releases;
     }
 
     /** 调试台 / 对外接口共用。HTTP 接入的 Agent 直接打到对方平台。 */
     public ChatReply invoke(Agent target, String message, String sessionId) {
+        return invoke(target, message, sessionId, true, true);
+    }
+
+    /**
+     * @param pinRelease    为 true 时使用已发布版本；调试子智能体时为 false，仍读当前草稿
+     * @param recordExchange 为 true 时写入会话记忆。编排里的 A2A 跳转只取这一轮回复，不另记一条会话
+     */
+    public ChatReply invoke(Agent target, String message, String sessionId, boolean pinRelease, boolean recordExchange) {
         if (target == null) {
             throw ApiException.unprocessable("Agent 不存在");
         }
@@ -58,32 +69,46 @@ public class BoundAgentRuntime {
                 : sessionId.strip();
         if (httpAgents.isHttpBacked(target)) {
             ChatReply reply = httpAgents.chat(target, message, sid);
-            HttpAgent http = httpAgents.primary(target);
-            workspaces.persistRun(target, sid, message, message, reply.reply(), reply.mode(),
-                    http == null ? "HTTP" : http.getName(), reply.traceId(), reply.spans(), reply.usage(), 1, true);
+            if (recordExchange) {
+                HttpAgent http = httpAgents.primary(target);
+                workspaces.persistRun(target, sid, message, message, reply.reply(), reply.mode(),
+                        http == null ? "HTTP" : http.getName(), reply.traceId(), reply.spans(), reply.usage(), 1, true);
+            }
             return reply;
         }
-        ModelConfig model = resolveModel(target);
+        AgentRelease release = pinRelease ? releases.ensurePublished(target) : null;
+        ModelConfig model = release == null ? resolveModel(target) : releases.resolveModel(release, resolveModel(target));
         if (model == null) {
             throw ApiException.unprocessable(target.getName() + " 没有可用的模型配置");
         }
         CurrentUser caller = CurrentUserHolder.get();
-        if (caller != null) {
+        if (recordExchange && caller != null) {
             memories.assertReadable(caller, sid);
         }
-        List<Map<String, Object>> history = caller == null
-                ? historyFrom(workspaces.loadSession(target, sid))
-                : memories.shortTermHistory(caller, target.getId(), sid);
-        history.add(Map.of("role", "user", "content", message));
+        List<Map<String, Object>> history;
+        if (!recordExchange) {
+            history = new ArrayList<>();
+        } else if (caller == null) {
+            history = historyFrom(workspaces.loadSession(target, sid));
+        } else {
+            history = memories.shortTermHistory(caller, target.getId(), sid);
+        }
+        history.add(Map.of("role", "user", "content", message == null ? "" : message));
         ExecutionContext nested = ExecutionContext.forAgent(target, sid + "-" + WorkspaceStore.newTraceId());
-        ChatReply reply = ExecutionContext.runScoped(nested, browser,
-                () -> runtime.getObject().generate(target, model, history, sid, false, false));
-        if (caller != null) {
+        ChatReply reply = ExecutionContext.runScoped(nested, browser, () -> {
+            if (release == null) {
+                return runtime.getObject().generate(target, model, history, sid, false, false);
+            }
+            return ReleaseContext.call(release, () -> runtime.getObject().generate(target, model, history, sid, false, false));
+        });
+        if (recordExchange && caller != null) {
             memories.recordExchange(caller, target, sid, message, reply.reply());
             summarizer.summarize(caller, model, sid, message, reply.reply(), reply.mode());
         }
-        workspaces.persistRun(target, sid, message, message, reply.reply(), reply.mode(),
-                model.getName(), reply.traceId(), reply.spans(), reply.usage(), 1, true);
+        if (recordExchange) {
+            workspaces.persistRun(target, sid, message, message, reply.reply(), reply.mode(),
+                    model.getName(), reply.traceId(), reply.spans(), reply.usage(), 1, true);
+        }
         return reply;
     }
 
@@ -98,6 +123,10 @@ public class BoundAgentRuntime {
                 "protocol", "agentforge.invoke.v1",
                 "method", "POST",
                 "path", "/api/agents/" + agent.getId() + "/invoke",
+                "a2a", Map.of(
+                        "protocol", "JSONRPC",
+                        "card", A2aAddresses.cardPath(agent.getId()),
+                        "endpoint", A2aAddresses.rpcPath(agent.getId())),
                 "input", input,
                 "output", Map.of(
                         "reply", "string",
