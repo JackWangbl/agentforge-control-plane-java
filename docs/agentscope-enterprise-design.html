@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AgentForge 控制面技术方案与 AgentScope 企业实战</title>
+<style>
+  @page { size: A4; margin: 13mm 13mm 15mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #1b2430; font-family: "PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",sans-serif; font-size: 10.4pt; line-height: 1.58; }
+  h1 { font-size: 22pt; margin: 0 0 6px; line-height: 1.25; }
+  h2 { font-size: 14.5pt; margin: 20px 0 8px; padding-top: 8px; border-top: 1px solid #dce3ec; page-break-after: avoid; }
+  h3 { font-size: 12pt; margin: 14px 0 6px; page-break-after: avoid; }
+  h4 { font-size: 11pt; margin: 10px 0 4px; }
+  p { margin: 5px 0 8px; }
+  ul, ol { margin: 4px 0 10px; padding-left: 1.25em; }
+  li { margin: 3px 0; }
+  .meta { color: #5a687a; font-size: 10pt; margin-bottom: 10px; }
+  .lead { font-size: 11.2pt; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 9.2pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #cfd7e2; padding: 4px 6px; vertical-align: top; text-align: left; }
+  th { background: #eef3f8; font-weight: 600; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; background: #f2f5f8; padding: 0 3px; }
+  pre { background: #f4f7fa; border: 1px solid #dde3eb; border-radius: 5px; padding: 8px 10px; font-family: Menlo, Consolas, monospace; font-size: 8.6pt; line-height: 1.42; white-space: pre-wrap; page-break-inside: avoid; }
+  .note { background: #f3f7fc; border-left: 3px solid #2367e8; padding: 7px 10px; margin: 8px 0 12px; page-break-inside: avoid; }
+  .warn { background: #fff8ee; border-left: 3px solid #d48b16; padding: 7px 10px; margin: 8px 0 12px; page-break-inside: avoid; }
+  svg { width: 100%; height: auto; display: block; margin: 6px 0 12px; page-break-inside: avoid; }
+  .box { fill: #f7f9fc; stroke: #9aabc0; stroke-width: 1; }
+  .box2 { fill: #e8eef6; stroke: #6f86a3; stroke-width: 1; }
+  .box3 { fill: #fff; stroke: #8ea0b5; stroke-width: 1; }
+  .title { font-size: 11px; fill: #1b2430; font-family: "PingFang SC", sans-serif; }
+  .small { font-size: 9.5px; fill: #4c5c70; font-family: "PingFang SC", sans-serif; }
+  .arrow { stroke: #6f86a3; fill: none; stroke-width: 1.15; marker-end: url(#arrow); }
+  .toc a { color: #1b2430; text-decoration: none; }
+  .toc li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<svg width="0" height="0"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6f86a3"/></marker></defs></svg>
+
+<h1>AgentForge 控制面技术方案</h1>
+<p class="meta">按当前 Java 仓库代码整理 · 2026-09-23 · 含领域模型、架构、流程、实现与 AgentScope 企业教程</p>
+<p class="lead">这份文档对着 <code>com.agentforge.controlplane</code> 写。控制面管身份、配置、知识、记忆、评测和观测。一轮推理交给 AgentScope Java 2.0.3 的 <code>ReActAgent</code>。工具执行仍回到控制面，所以租户、试用凭证和知识库权限不会丢在模型线程上。</p>
+
+<h2>目录</h2>
+<ol class="toc">
+  <li>系统定位与不做什么</li>
+  <li>物理架构与逻辑架构</li>
+  <li>领域模型（聚合、字段、关系、隔离键）</li>
+  <li>核心流程（登录、对话、工具、知识库、记忆、评测）</li>
+  <li>模块职责与实现方案</li>
+  <li>AgentScope 学习教程（概念、API、和本项目的对应）</li>
+  <li>企业实战教程（从模型到上线）</li>
+  <li>验收清单与当前缝</li>
+</ol>
+
+<h2>1. 系统定位</h2>
+<p>AgentForge 控制面是企业里的 Agent 管理平面，不是一个对话玩具。它要解决四件事：谁能用哪个 Agent、这个 Agent 能调哪些工具和文档、一次运行留下什么痕迹、换一个人之后还能不能把别人的数据翻出来。</p>
+<table>
+  <tr><th>做</th><th>不做</th></tr>
+  <tr><td>多租户账号、角色、试用 5 分钟</td><td>不做 SSO / LDAP / 审计日志归档（当前没有）</td></tr>
+  <tr><td>Agent 绑定模型、Skill、MCP、知识库、沙箱</td><td>不做跨租户共享 Agent</td></tr>
+  <tr><td>文档清洗、自动分块、Milvus 混合检索</td><td>不做 OCR、网页同步、文档级 ACL</td></tr>
+  <tr><td>短期会话窗口 + 长期记忆自动总结</td><td>不做记忆向量检索、不做跨租户记忆</td></tr>
+  <tr><td>调试台、对外 invoke、评测、A/B</td><td>HTTP Agent 不走本机工具和记忆总结</td></tr>
+</table>
+<table>
+  <tr><th>项</th><th>当前实现</th></tr>
+  <tr><td>框架</td><td>Spring Boot 3.5.6，源码 Java 21</td></tr>
+  <tr><td>推理</td><td>io.agentscope:agentscope-core 2.0.3 + agentscope-extensions-model-openai</td></tr>
+  <tr><td>数据</td><td>MySQL，JPA <code>ddl-auto=none</code>。基础表不由本仓库建，<code>SchemaMigrator</code> 只补后来的表和列</td></tr>
+  <tr><td>向量</td><td>Milvus，collection 名 <code>kb_{tenantId}_{knowledgeId}</code></td></tr>
+  <tr><td>控制台</td><td>静态页 <code>src/main/resources/static</code>，本机 <code>127.0.0.1:8080</code></td></tr>
+  <tr><td>磁盘</td><td>原文 <code>rag-files/</code>，会话检查点和工作区 <code>workspaces/</code></td></tr>
+</table>
+
+<h2>2. 架构</h2>
+<h3>2.1 物理部署</h3>
+<p>本机开发时就是三块：控制面进程、远程或本地 MySQL、可选的 Milvus。模型都走 HTTP，不内嵌推理。</p>
+<svg viewBox="0 0 720 250">
+  <rect class="box2" x="16" y="16" width="150" height="70" rx="5"/><text class="title" x="91" y="46" text-anchor="middle">浏览器</text><text class="small" x="91" y="66" text-anchor="middle">app.js 控制台</text>
+  <rect class="box2" x="220" y="16" width="280" height="210" rx="6"/><text class="title" x="360" y="38" text-anchor="middle">控制面 JVM · 127.0.0.1:8080</text>
+  <rect class="box3" x="240" y="52" width="110" height="48" rx="4"/><text class="title" x="295" y="72" text-anchor="middle">Spring MVC</text><text class="small" x="295" y="88" text-anchor="middle">鉴权 / REST</text>
+  <rect class="box3" x="370" y="52" width="110" height="48" rx="4"/><text class="title" x="425" y="72" text-anchor="middle">领域服务</text><text class="small" x="425" y="88" text-anchor="middle">RAG / 记忆 / 评测</text>
+  <rect class="box3" x="240" y="116" width="240" height="48" rx="4"/><text class="title" x="360" y="136" text-anchor="middle">AgentScopeRuntime</text><text class="small" x="360" y="154" text-anchor="middle">ReActAgent + Toolkit + OpenAIChatModel</text>
+  <rect class="box3" x="240" y="176" width="240" height="36" rx="4"/><text class="title" x="360" y="199" text-anchor="middle">ToolRuntime / CurrentUserHolder</text>
+  <rect class="box2" x="540" y="16" width="164" height="46" rx="5"/><text class="title" x="622" y="35" text-anchor="middle">MySQL</text><text class="small" x="622" y="52" text-anchor="middle">配置 / 会话 / 记忆</text>
+  <rect class="box2" x="540" y="74" width="164" height="46" rx="5"/><text class="title" x="622" y="93" text-anchor="middle">磁盘</text><text class="small" x="622" y="110" text-anchor="middle">rag-files / workspaces</text>
+  <rect class="box2" x="540" y="132" width="164" height="46" rx="5"/><text class="title" x="622" y="151" text-anchor="middle">Milvus :19530</text><text class="small" x="622" y="168" text-anchor="middle">分块向量 + BM25</text>
+  <rect class="box2" x="540" y="190" width="164" height="36" rx="5"/><text class="title" x="622" y="213" text-anchor="middle">模型 HTTP</text>
+  <line class="arrow" x1="166" y1="51" x2="220" y2="51"/>
+  <line class="arrow" x1="500" y1="75" x2="540" y2="39"/>
+  <line class="arrow" x1="500" y1="140" x2="540" y2="97"/>
+  <line class="arrow" x1="500" y1="155" x2="540" y2="155"/>
+  <line class="arrow" x1="500" y1="168" x2="540" y2="208"/>
+</svg>
+<p>浏览器只打控制面。Milvus、模型密钥、试用 cookie 都不下发到前端。试用访问 <code>/api/models</code> 得到 403，避免把密钥列表暴露出去。</p>
+
+<h3>2.2 逻辑分层</h3>
+<svg viewBox="0 0 720 300">
+  <rect class="box" x="20" y="12" width="680" height="40" rx="4"/><text class="title" x="360" y="37" text-anchor="middle">表现层 · index.html / app.js · 页面权限 pagePerm，试用只藏模型配置</text>
+  <rect class="box" x="20" y="64" width="680" height="40" rx="4"/><text class="title" x="360" y="89" text-anchor="middle">接入层 · AuthInterceptor → CurrentUserHolder · @RequirePermission · PublicEndpoint</text>
+  <rect class="box" x="20" y="116" width="218" height="72" rx="4"/><text class="title" x="129" y="145" text-anchor="middle">身份与资源</text><text class="small" x="129" y="166" text-anchor="middle">Auth / ResourceAccess</text>
+  <rect class="box" x="250" y="116" width="218" height="72" rx="4"/><text class="title" x="359" y="145" text-anchor="middle">对话与质量</text><text class="small" x="359" y="166" text-anchor="middle">Playground / Eval / Experiment</text>
+  <rect class="box" x="482" y="116" width="218" height="72" rx="4"/><text class="title" x="591" y="145" text-anchor="middle">知识与记忆</text><text class="small" x="591" y="166" text-anchor="middle">RAG / Memory / Visit</text>
+  <rect class="box2" x="20" y="202" width="680" height="40" rx="4"/><text class="title" x="360" y="227" text-anchor="middle">运行时 · AgentScopeRuntime.generate · ToolRuntime.executeTool · HttpAgentRuntime</text>
+  <rect class="box" x="20" y="254" width="680" height="36" rx="4"/><text class="title" x="360" y="277" text-anchor="middle">持久化 · JPA 实体 · SchemaMigrator · WorkspaceStore · MilvusVectorStore</text>
+  <line class="arrow" x1="360" y1="52" x2="360" y2="64"/>
+  <line class="arrow" x1="360" y1="104" x2="360" y2="116"/>
+  <line class="arrow" x1="360" y1="188" x2="360" y2="202"/>
+  <line class="arrow" x1="360" y1="242" x2="360" y2="254"/>
+</svg>
+<p>请求进入后的固定顺序：解析 Bearer（或试用 token）→ 可选 <code>X-Tenant-Id</code> 切换租户 → 权限注解 → Controller → 领域服务。需要模型时才进 <code>AgentScopeRuntime</code>。工具回调不走第二次 HTTP，而是 AgentScope 在进程内调 <code>DelegatingTool</code>，再进 <code>ToolRuntime</code>。</p>
+
+<h2>3. 领域模型</h2>
+<p>所有带属主的业务对象继承 <code>TenantOwnedEntity</code>：<code>tenant_id</code> 必填，默认 1；<code>owner_id</code> 可空。时间列在 <code>TimestampedEntity</code>：<code>id</code>、<code>created_at</code>、<code>updated_at</code>（UTC）。<code>Trace</code> 例外，它只有 <code>started_at</code>。</p>
+
+<h3>3.1 身份聚合</h3>
+<svg viewBox="0 0 720 190">
+  <rect class="box2" x="20" y="20" width="140" height="70" rx="4"/><text class="title" x="90" y="48" text-anchor="middle">Tenant</text><text class="small" x="90" y="68" text-anchor="middle">slug / name</text>
+  <rect class="box2" x="200" y="20" width="150" height="70" rx="4"/><text class="title" x="275" y="48" text-anchor="middle">User</text><text class="small" x="275" y="68" text-anchor="middle">tenant_id + role_id</text>
+  <rect class="box2" x="390" y="20" width="150" height="70" rx="4"/><text class="title" x="465" y="48" text-anchor="middle">Role</text><text class="small" x="465" y="68" text-anchor="middle">permissions JSON</text>
+  <rect class="box2" x="570" y="20" width="130" height="70" rx="4"/><text class="title" x="635" y="48" text-anchor="middle">AuthToken</text><text class="small" x="635" y="68" text-anchor="middle">token / trial_key</text>
+  <rect class="box" x="200" y="120" width="320" height="50" rx="4"/><text class="title" x="360" y="140" text-anchor="middle">CurrentUser（请求内，不落库）</text><text class="small" x="360" y="158" text-anchor="middle">tenantId / homeTenantId / trialKey / activeSessionId</text>
+  <line class="arrow" x1="160" y1="55" x2="200" y2="55"/>
+  <line class="arrow" x1="350" y1="55" x2="390" y2="55"/>
+  <line class="arrow" x1="540" y1="55" x2="570" y2="55"/>
+  <line class="arrow" x1="275" y1="90" x2="300" y2="120"/>
+</svg>
+<table>
+  <tr><th>实体</th><th>关键字段</th><th>规则</th></tr>
+  <tr><td>Tenant</td><td>slug、name、description</td><td>平台管理员可切到其他租户；普通用户不能</td></tr>
+  <tr><td>User</td><td>username 全局唯一、password_hash、role_id、enabled</td><td>guest 是试用共用账号，不能当长期记忆主键</td></tr>
+  <tr><td>Role</td><td>tenant_id、permissions 字符串列表</td><td><code>*</code> 和 <code>platform:admin</code> 全放行；<code>:write</code> 隐含对应 <code>:read</code>；<code>eval:run</code> 兼评测读写</td></tr>
+  <tr><td>AuthToken</td><td>token、user_id、expires_at、trial_key</td><td>试用 token 过期文案是「试用已结束」。cookie <code>af_trial</code> 存 trial_key，7 天，HttpOnly</td></tr>
+</table>
+<p><code>subject_key</code> 不是单独一张表，是会话和记忆上的身份串：已登录 <code>user:{用户id}</code>，试用 <code>trial:{af_trial}</code>。平台管理员切租户后，看到的是自己在那个租户下的记忆，不是该租户其他人的记忆。</p>
+
+<h3>3.2 Agent 聚合（系统核心）</h3>
+<svg viewBox="0 0 720 260">
+  <rect class="box2" x="270" y="10" width="180" height="56" rx="4"/><text class="title" x="360" y="33" text-anchor="middle">Agent</text><text class="small" x="360" y="50" text-anchor="middle">tenant_id + owner_id + model_name</text>
+  <rect class="box" x="20" y="100" width="120" height="44" rx="4"/><text class="title" x="80" y="127" text-anchor="middle">ModelConfig</text>
+  <rect class="box" x="160" y="100" width="100" height="44" rx="4"/><text class="title" x="210" y="127" text-anchor="middle">Skill[]</text>
+  <rect class="box" x="280" y="100" width="100" height="44" rx="4"/><text class="title" x="330" y="127" text-anchor="middle">McpServer[]</text>
+  <rect class="box" x="400" y="100" width="110" height="44" rx="4"/><text class="title" x="455" y="127" text-anchor="middle">KnowledgeBase[]</text>
+  <rect class="box" x="530" y="100" width="80" height="44" rx="4"/><text class="title" x="570" y="127" text-anchor="middle">Sandbox</text>
+  <rect class="box" x="160" y="176" width="110" height="44" rx="4"/><text class="title" x="215" y="203" text-anchor="middle">HttpAgent[]</text>
+  <rect class="box" x="290" y="176" width="110" height="44" rx="4"/><text class="title" x="345" y="203" text-anchor="middle">tool_flows</text>
+  <rect class="box" x="420" y="176" width="110" height="44" rx="4"/><text class="title" x="475" y="203" text-anchor="middle">workspace</text>
+  <line class="arrow" x1="300" y1="66" x2="80" y2="100"/>
+  <line class="arrow" x1="330" y1="66" x2="210" y2="100"/>
+  <line class="arrow" x1="360" y1="66" x2="330" y2="100"/>
+  <line class="arrow" x1="390" y1="66" x2="455" y2="100"/>
+  <line class="arrow" x1="420" y1="66" x2="570" y2="100"/>
+  <line class="arrow" x1="330" y1="66" x2="215" y2="176"/>
+  <line class="arrow" x1="360" y1="66" x2="345" y2="176"/>
+  <line class="arrow" x1="390" y1="66" x2="475" y2="176"/>
+</svg>
+<table>
+  <tr><th>字段</th><th>类型</th><th>运行时含义</th></tr>
+  <tr><td>name</td><td>唯一，80</td><td>展示名，也是 ReActAgent.name</td></tr>
+  <tr><td>model_name</td><td>指向 ModelConfig.name</td><td>调试台 <code>resolvePlaygroundModel</code> 只用这一项，忽略客户端 model_config_id</td></tr>
+  <tr><td>system_prompt</td><td>text</td><td>空则用名称+描述拼默认人设</td></tr>
+  <tr><td>skill_ids / mcp_ids / opencli_ids / knowledge_ids / http_agent_ids</td><td>JSON 长整型数组</td><td>没有外键。保存时 BindingValidator 校验同租户且当前用户能看见</td></tr>
+  <tr><td>tool_flows</td><td>JSON 对象数组</td><td>多步工具收成一个 <code>flow_xxx</code>，对模型只暴露一个工具名</td></tr>
+  <tr><td>sandbox_id</td><td>可空</td><td>有则注册 sandbox_* 工具</td></tr>
+  <tr><td>workspace</td><td>路径</td><td>磁盘上的会话、检查点、Trace JSON</td></tr>
+  <tr><td>status / version / success_rate</td><td>发布态</td><td>概览健康度用 success_rate 排序</td></tr>
+</table>
+<p>绑定了 <code>http_agent_ids</code> 时，<code>HttpAgentRuntime.isHttpBacked</code> 为真：不组本机 Toolkit，不注入知识库提示，不跑记忆总结，整段 POST 到对方平台。</p>
+
+<h3>3.3 模型、工具、沙箱</h3>
+<table>
+  <tr><th>实体</th><th>字段</th><th>约束</th></tr>
+  <tr><td>ModelConfig</td><td>name 唯一、provider、model_id、base_url、api_key / api_key_ref、temperature、enabled、purpose</td><td>purpose 只能是 chat / embedding / rerank。密钥优先用库里的 api_key，否则读环境变量 api_key_ref</td></tr>
+  <tr><td>Skill</td><td>name、instruction、version、source</td><td>instruction 写入系统提示词「你必须遵循以下已绑定 Skill」</td></tr>
+  <tr><td>McpServer</td><td>transport、endpoint、config、enabled</td><td>builtin / streamable_http / sse / stdio / opencli。内置「本地工具」「浏览器工具」也是 MCP 行</td></tr>
+  <tr><td>SandboxPolicy</td><td>runtime、cpu/memory 限额、timeout、network_mode</td><td>network_mode 默认 deny。工具名 sandbox_*</td></tr>
+  <tr><td>HttpAgent</td><td>protocol、endpoint、headers</td><td>外部平台对话地址，不是本机 Agent</td></tr>
+</table>
+
+<h3>3.4 知识库聚合</h3>
+<svg viewBox="0 0 720 180">
+  <rect class="box2" x="250" y="8" width="220" height="48" rx="4"/><text class="title" x="360" y="28" text-anchor="middle">KnowledgeBase</text><text class="small" x="360" y="45" text-anchor="middle">visibility / embedding / rerank / vector_store</text>
+  <rect class="box" x="20" y="86" width="150" height="70" rx="4"/><text class="title" x="95" y="112" text-anchor="middle">KnowledgeMember</text><text class="small" x="95" y="132" text-anchor="middle">owner / editor / viewer</text>
+  <rect class="box" x="200" y="86" width="160" height="70" rx="4"/><text class="title" x="280" y="112" text-anchor="middle">KnowledgeDocument</text><text class="small" x="280" y="132" text-anchor="middle">状态+策略在 MySQL</text>
+  <rect class="box" x="390" y="86" width="140" height="70" rx="4"/><text class="title" x="460" y="112" text-anchor="middle">rag-files/</text><text class="small" x="460" y="132" text-anchor="middle">原始文件</text>
+  <rect class="box" x="550" y="86" width="150" height="70" rx="4"/><text class="title" x="625" y="112" text-anchor="middle">Milvus collection</text><text class="small" x="625" y="132" text-anchor="middle">content + context</text>
+  <line class="arrow" x1="300" y1="56" x2="95" y2="86"/>
+  <line class="arrow" x1="360" y1="56" x2="280" y2="86"/>
+  <line class="arrow" x1="400" y1="56" x2="460" y2="86"/>
+  <line class="arrow" x1="430" y1="56" x2="625" y2="86"/>
+</svg>
+<table>
+  <tr><th>对象</th><th>字段</th><th>含义</th></tr>
+  <tr><td>KnowledgeBase</td><td>visibility=private|tenant，embedding_model_id，rerank_model_id 可空，vector_store_id，top_k=5，candidate_k=20，score_threshold=0.3</td><td>新建默认 private。vector_store_id 创建时抄租户默认 Milvus，普通用户不选手填地址</td></tr>
+  <tr><td>KnowledgeMember</td><td>knowledge_id、user_id、role</td><td>创建者自动 owner。同一库同一用户一条</td></tr>
+  <tr><td>KnowledgeDocument</td><td>status queued/processing/ready/failed，strategy，strategy_reason，generation，content_hash，chunk_count，storage_path</td><td>分块正文不进 MySQL。重建时 generation 增加，旧向量按代次失效</td></tr>
+  <tr><td>VectorStore</td><td>uri、database_name、token、is_default</td><td>平台设置，需要 tenant:admin 或 vector:read</td></tr>
+</table>
+<p>检索权限 <code>canRetrieve = canRead && (成员 || tenantVisible)</code>。租户管理员能在管理界面看到别人的库，但不能凭管理员身份检索私有文档。</p>
+
+<h3>3.5 会话、记忆、观测</h3>
+<table>
+  <tr><th>实体</th><th>字段</th><th>隔离</th></tr>
+  <tr><td>Conversation</td><td>session_id 唯一、user_id（用户名）、agent_id、title、status、message_count、total_tokens、latency_ms、channel、subject_key</td><td>读历史要租户一致，且 subject_key 等于当前身份；旧数据空键时，已登录按 owner_id，试用一律不读</td></tr>
+  <tr><td>ChatMessage</td><td>session_id、agent_id、role、content</td><td>短期记忆原文。窗口最近 20 条且约 6000 字</td></tr>
+  <tr><td>MemoryItem</td><td>tenant_id、subject_key、agent_id 可空、content≤500、kind、source、pinned、session_id、deleted_at</td><td>第一版 agent_id 保持空，此人该租户下各 Agent 共用。最多 200 条未删除</td></tr>
+  <tr><td>Trace</td><td>trace_id、session_id、spans JSON、input/output tokens、duration_ms</td><td>步骤 title 为「调用工具 search_documents」，没有名为 RAG 的节点</td></tr>
+  <tr><td>VisitorDay</td><td>visitor_key、visited_on、created_at</td><td>概览次数。每次 GET /api/dashboard 插一行，按北京日切</td></tr>
+</table>
+
+<h3>3.6 质量聚合</h3>
+<table>
+  <tr><th>实体</th><th>字段</th><th>用途</th></tr>
+  <tr><td>Dataset / DatasetCase</td><td>问句 input、期望 expected、case_key</td><td>回归集。评测每题一个新 session_id，不污染长期记忆</td></tr>
+  <tr><td>EvaluationRun / EvaluationResult</td><td>status、actual、latency、tokens、error</td><td>走 AgentScopeRuntime.run 或 HTTP Agent</td></tr>
+  <tr><td>Experiment / Variant / Assignment / Event</td><td>status draft/running/paused/completed，assignment_unit user/session/request，strategy user_hash/session_hash/user_first/random，traffic_percent</td><td>只有 running 才分流。holdout 仍用原 Agent</td></tr>
+</table>
+
+<h3>3.7 资源可见性（和知识库不同）</h3>
+<p>Agent、模型、Skill、MCP、会话列表等走 <code>ResourceAccessService</code>：同租户有对应读权限就能看见彼此的配置。知识库和记忆更严：知识库默认私有，记忆永远只看自己。不要把这两套规则混为一谈。</p>
+
+<h2>4. 核心流程</h2>
+<h3>4.1 登录与试用</h3>
+<svg viewBox="0 0 720 220">
+  <rect class="box" x="20" y="16" width="120" height="36" rx="4"/><text class="title" x="80" y="39" text-anchor="middle">打开控制台</text>
+  <rect class="box" x="180" y="16" width="140" height="36" rx="4"/><text class="title" x="250" y="39" text-anchor="middle">有未过期 token？</text>
+  <rect class="box" x="360" y="8" width="140" height="52" rx="4"/><text class="title" x="430" y="30" text-anchor="middle">进入应用</text><text class="small" x="430" y="48" text-anchor="middle">概览 / 各页</text>
+  <rect class="box" x="180" y="80" width="140" height="36" rx="4"/><text class="title" x="250" y="103" text-anchor="middle">af_trial 决策</text>
+  <rect class="box" x="360" y="72" width="130" height="52" rx="4"/><text class="title" x="425" y="94" text-anchor="middle">new / resume</text><text class="small" x="425" y="110" text-anchor="middle">发试用 token</text>
+  <rect class="box" x="360" y="140" width="130" height="52" rx="4"/><text class="title" x="425" y="162" text-anchor="middle">expired</text><text class="small" x="425" y="178" text-anchor="middle">必须登录</text>
+  <rect class="box" x="540" y="140" width="150" height="52" rx="4"/><text class="title" x="615" y="162" text-anchor="middle">POST /api/auth/login</text><text class="small" x="615" y="178" text-anchor="middle">失败红条 + toast</text>
+  <line class="arrow" x1="140" y1="34" x2="180" y2="34"/>
+  <line class="arrow" x1="320" y1="34" x2="360" y2="34"/>
+  <line class="arrow" x1="250" y1="52" x2="250" y2="80"/>
+  <line class="arrow" x1="320" y1="98" x2="360" y2="98"/>
+  <line class="arrow" x1="250" y1="116" x2="250" y2="166"/>
+  <line class="arrow" x1="250" y1="166" x2="360" y2="166"/>
+  <line class="arrow" x1="490" y1="166" x2="540" y2="166"/>
+</svg>
+<p><code>AuthService.trialDecision</code>：cookie 对不上库 → new；过期时间在未来 → resume；已到期 → expired，不再发新试用。清 localStorage 无效，因为时钟在 HttpOnly cookie 和 auth_tokens 行上。</p>
+
+<h3>4.2 一轮调试台对话（主路径）</h3>
+<ol>
+  <li><code>POST /api/playground/run</code>，权限 <code>session:write</code> 或 <code>agent:write</code>。</li>
+  <li>取出 Agent，用 Agent.model_name 解析 chat 模型。若绑了 HTTP Agent，改走外部平台。</li>
+  <li>按 session_id 取 Conversation：跨租户拒绝；跨 Agent 拒绝（实验分流时换新 session）。subject_key 对不上则拒绝「这个会话属于其他人」。</li>
+  <li><code>MemoryService.shortTermHistory</code> 取本会话窗口，再追加本轮用户消息。</li>
+  <li><code>PlaygroundService.generate</code> → <code>ExecutionContext.runScoped</code> → <code>AgentScopeRuntime.generate</code>。</li>
+  <li>无密钥：返回 preview，可选执行 get_current_time。有密钥：组系统提示词、Toolkit、ReActAgent.call，最多 4 轮（浏览器/OpenCLI 为 8）。</li>
+  <li>工具执行时 <code>CurrentUserHolder.call(caller, ...)</code>，search_documents / remember / forget 都能看见登录人。</li>
+  <li>失败则把 working、pending_tools 写入工作区检查点，前端可 resume。</li>
+  <li>成功则 <code>finalizeTurn</code> 写 ChatMessage、Conversation（补 subject_key）、Trace、工作区会话文件。</li>
+  <li>mode=ready 时 <code>MemorySummarizer.summarize</code> 再调一次 chat/completions，把稳定事实写入 memory_items。失败只打日志。</li>
+</ol>
+<svg viewBox="0 0 720 280">
+  <rect class="box" x="20" y="16" width="100" height="36" rx="4"/><text class="title" x="70" y="39" text-anchor="middle">run</text>
+  <rect class="box" x="140" y="16" width="110" height="36" rx="4"/><text class="title" x="195" y="39" text-anchor="middle">短期窗口</text>
+  <rect class="box" x="270" y="16" width="130" height="36" rx="4"/><text class="title" x="335" y="39" text-anchor="middle">buildSystemPrompt</text>
+  <rect class="box2" x="420" y="8" width="140" height="52" rx="4"/><text class="title" x="490" y="30" text-anchor="middle">ReActAgent.call</text><text class="small" x="490" y="48" text-anchor="middle">模型 ↔ 工具循环</text>
+  <rect class="box" x="580" y="16" width="120" height="36" rx="4"/><text class="title" x="640" y="39" text-anchor="middle">finalizeTurn</text>
+  <rect class="box" x="270" y="100" width="160" height="44" rx="4"/><text class="title" x="350" y="118" text-anchor="middle">DelegatingTool</text><text class="small" x="350" y="134" text-anchor="middle">CurrentUserHolder.call</text>
+  <rect class="box" x="460" y="100" width="200" height="44" rx="4"/><text class="title" x="560" y="118" text-anchor="middle">executeTool</text><text class="small" x="560" y="134" text-anchor="middle">MCP / RAG / 记忆 / 沙箱</text>
+  <rect class="box" x="140" y="180" width="160" height="40" rx="4"/><text class="title" x="220" y="205" text-anchor="middle">ChatMessage + Trace</text>
+  <rect class="box" x="330" y="180" width="170" height="40" rx="4"/><text class="title" x="415" y="205" text-anchor="middle">MemorySummarizer</text>
+  <rect class="box" x="530" y="180" width="150" height="40" rx="4"/><text class="title" x="605" y="205" text-anchor="middle">memory_items</text>
+  <line class="arrow" x1="120" y1="34" x2="140" y2="34"/>
+  <line class="arrow" x1="250" y1="34" x2="270" y2="34"/>
+  <line class="arrow" x1="400" y1="34" x2="420" y2="34"/>
+  <line class="arrow" x1="560" y1="34" x2="580" y2="34"/>
+  <line class="arrow" x1="490" y1="60" x2="350" y2="100"/>
+  <line class="arrow" x1="430" y1="122" x2="460" y2="122"/>
+  <line class="arrow" x1="640" y1="52" x2="220" y2="180"/>
+  <line class="arrow" x1="640" y1="52" x2="415" y2="180"/>
+  <line class="arrow" x1="500" y1="200" x2="530" y2="200"/>
+</svg>
+
+<h3>4.3 知识库入库与检索</h3>
+<p>入库：上传（txt/md/html/csv/docx/pdf，16MB）→ 落盘 rag-files/tenants/{tenant}/knowledge/{id}/ → 清洗 → 按形态选策略（qa / article / table_row / heading / paragraph / sentence，否则 recursive）→ 子块约中文 450 字重叠 60 → 调 embedding → 写入 Milvus。子块字段 <code>content</code> 用于向量和 BM25，<code>context</code> 是所在章节，最长 2000 字，交给模型。</p>
+<p>检索：问题 embedding → 当前可见且已绑定的每个库做 AnnSearchReq（稠密 COSINE + 稀疏 BM25）→ RRFRanker(60) → 可选 rerank → 阈值 → 合并最多 10 条。返回「【n】库名 / 文件名 / 标题 + context」。</p>
+
+<h3>4.4 记忆</h3>
+<p>短期：同会话 chat_messages，换会话清零。长期：总结器只收偏好、资料、决定、更正；已有相同正文字面不重复 add；用户否定则 delete。页面只改正、置顶、删除。试用按浏览器凭证分开，登录后不自动合并试用记忆。</p>
+
+<h3>4.5 对外调用与评测</h3>
+<p><code>POST /api/agents/{id}/invoke</code> 与调试台共用 <code>BoundAgentRuntime</code>：有登录人则走短期窗口并写会话、再总结记忆。评测每题新 session，走 <code>run()</code>，也会带短期窗口，但新会话通常只有当前一句；评测不调用总结器。</p>
+
+<h2>5. 模块与实现</h2>
+<table>
+  <tr><th>包</th><th>职责</th><th>关键类</th></tr>
+  <tr><td>access</td><td>登录、试用、权限、租户切换、工具线程身份</td><td>AuthService、AuthInterceptor、CurrentUserHolder、ResourceAccessService</td></tr>
+  <tr><td>web</td><td>REST</td><td>PlaygroundController、KnowledgeController、MemoryController、ResourceController、EvalController、HealthController</td></tr>
+  <tr><td>agent</td><td>ReAct、工具、HTTP Agent、链路</td><td>AgentScopeRuntime、ToolRuntime、BoundAgentRuntime、FlowRuntime、BindingValidator</td></tr>
+  <tr><td>rag</td><td>清洗、分块、混合检索、ACL</td><td>KnowledgeIndexService、KnowledgeSearchService、MilvusVectorStore、KnowledgeAccess</td></tr>
+  <tr><td>memory</td><td>窗口、总结、CRUD</td><td>MemoryService、MemorySummarizer</td></tr>
+  <tr><td>playground</td><td>落库会话和 Trace</td><td>PlaygroundService</td></tr>
+  <tr><td>eval / experiment</td><td>回归、分流</td><td>EvalService、ExperimentService</td></tr>
+  <tr><td>runtime</td><td>沙箱、浏览器、OpenCLI、MCP 流</td><td>SandboxRuntime、BrowserRuntime、OpenCliRuntime、McpStreamClient</td></tr>
+  <tr><td>workspace</td><td>检查点、会话 JSON</td><td>WorkspaceStore</td></tr>
+  <tr><td>config</td><td>补表、SQLAlchemy URL → JDBC</td><td>SchemaMigrator、SqlAlchemyUrlEnvironmentPostProcessor</td></tr>
+</table>
+<h3>5.1 身份穿过工具线程</h3>
+<p>AgentScope 的工具不在 HTTP 线程上跑。如果只靠 ThreadLocal，<code>search_documents</code> 会看到空用户，返回「当前没有你可以检索的文档」。做法：<code>generate</code> 入口 <code>CurrentUser caller = CurrentUserHolder.get()</code>，<code>buildToolkit</code> 和 <code>runPending</code> 都用 <code>CurrentUserHolder.call(caller, supplier)</code> 包一层执行。</p>
+<h3>5.2 检查点</h3>
+<p>每一步 <code>flush</code> 写 <code>workspaces/.../sessions/{session}.ckpt.json</code>：working、pending_tools、done_tool_ids、next=llm|tool。失败后续跑不重新截短期窗口，直接恢复 working。</p>
+<h3>5.3 数据迁移原则</h3>
+<p>不改已有列含义，只 ADD TABLE/COLUMN。最近补过：<code>auth_tokens.trial_key</code>、<code>model_configs.purpose</code>、<code>knowledge_*</code>、<code>visitor_days</code>、<code>memory_items</code>、<code>conversations.subject_key</code>。</p>
+
+<h2>6. AgentScope 学习教程</h2>
+<p>这一节只讲本项目真正用到的 AgentScope Java 2.0.3，不讲仓库里没有接的 Python 生态或未引入的扩展。学完应能看懂 <code>AgentScopeRuntime</code>，并能加一个企业工具。</p>
+
+<h3>6.1 它在企业里干什么</h3>
+<p>AgentScope 提供「模型 ↔ 工具」循环，不提供租户、权限、知识库 ACL。企业把循环嵌进控制面：</p>
+<table>
+  <tr><th>AgentScope 对象</th><th>控制面谁来填</th></tr>
+  <tr><td>ReActAgent.name / sysPrompt</td><td>Agent.name，ToolRuntime.buildSystemPrompt（人设+Skill+工具说明+知识库提示+长期记忆）</td></tr>
+  <tr><td>OpenAIChatModel</td><td>ModelConfig 的 model_id、base_url、密钥、temperature</td></tr>
+  <tr><td>Toolkit</td><td>ToolRuntime.agentTools 转成 DelegatingTool，执行仍回 executeTool</td></tr>
+  <tr><td>List&lt;Msg&gt;</td><td>短期记忆窗口 + 本轮用户消息，映射成 UserMessage / AssistantMessage / ToolResultMessage</td></tr>
+  <tr><td>RuntimeContext</td><td>当前写死 userId="playground"，sessionId 用调试会话。真正身份在 CurrentUserHolder，不在这个对象里</td></tr>
+</table>
+<div class="warn">不要以为 RuntimeContext.userId 就是登录用户。本项目的鉴权在 CurrentUserHolder。改企业功能时跟控制面身份，不要去改 AgentScope 的 userId 当 ACL。</div>
+
+<h3>6.2 ReAct 循环（必须理解）</h3>
+<ol>
+  <li>把系统提示词和历史消息交给模型。</li>
+  <li>模型要么直接输出文本结束，要么输出 tool_call。</li>
+  <li>AgentScope 按 Toolkit 找到工具并执行，把结果作为 tool 消息回灌。</li>
+  <li>再调模型。重复直到没有工具调用，或达到 maxIters。</li>
+</ol>
+<p>本项目 maxIters：普通 4，名字以 browser_ 或 opencli_ 开头则 8。打开了 <code>enablePendingToolRecovery(true)</code>：工具调用中断时可以留下 pending，用 <code>/api/playground/resume</code> 续跑。</p>
+<pre>ReActAgent react = ReActAgent.builder()
+    .name(agent.getName())
+    .sysPrompt(tools.buildSystemPrompt(agent))
+    .model(chatModel)
+    .toolkit(toolkit)
+    .maxIters(maxIters)
+    .enablePendingToolRecovery(true)
+    .generateOptions(GenerateOptions.builder().temperature(model.getTemperature()).build())
+    .build();
+Msg result = react.call(msgs, RuntimeContext.builder()
+        .userId("playground")
+        .sessionId(sessionId)
+        .build())
+    .block(Duration.ofMinutes(5));</pre>
+
+<h3>6.3 消息类型</h3>
+<table>
+  <tr><th>本项目 history.role</th><th>AgentScope 类</th><th>何时出现</th></tr>
+  <tr><td>user</td><td>UserMessage</td><td>人说话、短期窗口里的历史用户句</td></tr>
+  <tr><td>assistant</td><td>AssistantMessage，可带 ToolUseBlock[]</td><td>模型回复或上一轮未完成的 tool_calls</td></tr>
+  <tr><td>tool</td><td>ToolResultMessage + ToolResultBlock</td><td>续跑时把已执行的工具结果灌回去</td></tr>
+</table>
+<p><code>toMsgs</code> 负责这层转换。新代码如果往 history 里塞了别的 role，模型看不到。</p>
+
+<h3>6.4 模型适配</h3>
+<p>用的是 <code>io.agentscope.extensions.model.openai.OpenAIChatModel</code>，不是 DashScope 扩展（依赖里有，运行时没走）。DeepSeek、智谱、Kimi 只要提供 OpenAI 兼容的 <code>/v1/chat/completions</code> 即可。base_url 去尾斜杠；空则按 provider 猜 DashScope 或 OpenAI 官方。</p>
+<p>向量和重排序<strong>不走 AgentScope</strong>。embedding 是控制面 <code>EmbeddingClient</code> 自己 POST <code>/embeddings</code>。rerank 是 <code>HttpRerankClient</code> POST <code>/rerank</code>。把 chat 模型指到 embeddings 地址会 400。</p>
+
+<h3>6.5 工具怎么注册</h3>
+<p>AgentScope 的 Toolkit 需要带 JSON Schema 的工具。本项目用 <code>ToolSpec(name, description, parameters)</code>，<code>parameters</code> 是标准 JSON Schema。注册时包成 <code>DelegatingTool</code>：模型只看到名字和参数，执行闭包里再鉴权、恢复身份、调 <code>executeTool</code>、写一条 span「调用工具 {name}」。</p>
+<p>当前会进 Toolkit 的工具：</p>
+<ul>
+  <li>Agent 绑定的 MCP 工具（含内置时间、计算、浏览器）</li>
+  <li>沙箱 sandbox_*</li>
+  <li>有就绪文档时的 search_documents</li>
+  <li>长期记忆 remember / forget / list_memories（HTTP Agent 除外）</li>
+  <li>tool_flows 展开的 flow_*</li>
+</ul>
+<p>新增企业工具的标准步骤：</p>
+<ol>
+  <li>在 <code>ToolRuntime.agentTools</code> 里 <code>new ToolSpec(...)</code>，参数用 <code>ToolSpec.objectSchema</code>。</li>
+  <li>在 <code>agentAllowsTool</code> 里声明何时允许。</li>
+  <li>在 <code>executeTool</code> 里实现。身份用 <code>CurrentUserHolder.get()</code>，不要从模型参数里收 user_id。</li>
+  <li>需要时在 <code>buildSystemPrompt</code> 加一句「什么情况下必须先调这个工具」。</li>
+  <li>用调试台看执行链路是否出现「调用工具 你的名字」。</li>
+</ol>
+
+<h3>6.6 系统提示词怎么叠</h3>
+<p>顺序固定：人设 → Skill 全文 → MCP/沙箱工具名单 → 编排提示 → 知识库「必须先 search_documents」→ 长期记忆清单。HTTP Agent 只用 Agent 自己的 system_prompt，不加后面这些。</p>
+
+<h3>6.7 超时、预览、失败</h3>
+<ul>
+  <li>没有密钥：不创建 ReActAgent，返回 preview 文本。</li>
+  <li>call 最多阻塞 5 分钟。</li>
+  <li>异常：密钥从错误串里打码，检查点 status=failed，回复 mode=error，并附一段预览，避免前端空白。</li>
+</ul>
+
+<h3>6.8 学习顺序（建议按这个读代码）</h3>
+<ol>
+  <li><code>ToolSpec</code>、<code>ChatReply</code>：看输入输出长什么样。</li>
+  <li><code>AgentScopeRuntime.toMsgs</code>、<code>buildToolkit</code>、<code>buildModel</code>：看 AgentScope 边界。</li>
+  <li><code>generate</code> 主循环和 <code>flush</code>：看检查点。</li>
+  <li><code>ToolRuntime.executeTool</code> 和 <code>CurrentUserHolder.call</code>：看企业身份。</li>
+  <li><code>KnowledgeSearchService.searchForAgent</code>、<code>MemorySummarizer</code>：看知识与记忆如何挂在循环外。</li>
+</ol>
+
+<h2>7. 企业实战教程</h2>
+<p>下面按这个仓库能点出来的界面写。账号种子：<code>linmo/admin123</code>（平台管理员）、<code>developer/dev123</code>、<code>auditor/audit123</code>、<code>demo/demo123</code>。试用用户名 guest，不能登录。</p>
+
+<h3>7.1 启动</h3>
+<ol>
+  <li><code>.env</code> 里 <code>DATABASE_URL</code> 必须是 <code>mysql+pymysql://</code> 或 <code>jdbc:mysql://</code>。占位文字会导致启动失败。</li>
+  <li>JDK 用 21+（本机常用 openjdk-26）。<code>mvn spring-boot:run</code>，打开 http://127.0.0.1:8080 。</li>
+  <li>需要知识库时再起 Milvus（本机常见 127.0.0.1:19530）。没有默认向量连接时，先到「向量数据库」登记并设为默认。</li>
+</ol>
+
+<h3>7.2 配三种模型</h3>
+<ol>
+  <li>模型配置 → 新建，用途选「对话」。填 OpenAI 兼容地址、模型 id、密钥。这是 Agent 的 model_name。</li>
+  <li>再新建用途「向量」。智谱用 embedding-3 或 embedding-2。不要把 glm-4-flash 填成向量。</li>
+  <li>再新建用途「重排序」。智谱模型 id 必须是 <code>rerank</code>。不配也可以，检索走 RRF 截断。</li>
+  <li>试用账号看不到这一页。密钥不要写进 README。</li>
+</ol>
+
+<h3>7.3 建一个企业助手</h3>
+<ol>
+  <li>Agent 管理 → 新建。名称、说明、绑定刚建的对话模型。system_prompt 写职责，不要写制度全文。</li>
+  <li>需要流程约束就建 Skill，把条款写进 instruction，再勾到 Agent。</li>
+  <li>需要实时能力就绑 MCP 或沙箱。浏览器和本地时间是内置 MCP。</li>
+  <li>保存。调试台选这个 Agent。不要指望页面上再选一次模型。</li>
+</ol>
+
+<h3>7.4 知识库：私有制度 vs 全员制度</h3>
+<ol>
+  <li>知识库 → 新建。选向量模型。可见性先 private。</li>
+  <li>上传 PDF/Markdown。等状态 ready，看自动策略和理由。需要可改策略后重建。</li>
+  <li>回到 Agent，勾选这个库。</li>
+  <li>用属主在调试台问文档里的数字。执行链路应出现「调用工具 search_documents」，再出现「调用模型」。回答应依据章节，而不是模型常识。</li>
+  <li>用另一个账号打开同一 Agent 问同一句。应得到「当前没有你可以检索的文档」或与该库无关的回答，且响应里没有库名。</li>
+  <li>全员制度：把库改成租户公开，或把对方加成 viewer。对方应能检索，仍不能上传（viewer）。</li>
+</ol>
+
+<h3>7.5 记忆</h3>
+<ol>
+  <li>属主在调试台说稳定偏好，例如「以后回答先给结论，用中文」。</li>
+  <li>等回复结束后打开「记忆」。应出现自动总结，来源为自动总结。</li>
+  <li>新开一个会话问「你准备怎么回答我」。应沿用长期记忆，而不是上一会话的闲聊全文。</li>
+  <li>另一个账号的记忆页必须是空的或只有他自己的。</li>
+  <li>试用换浏览器，记忆不能串。登录后不自动带上试用期间的记忆。</li>
+  <li>改错了就在记忆页改正或删除。不要在页面上手工「添加一条当主数据」——主数据来自对话总结。</li>
+</ol>
+
+<h3>7.6 评测和 A/B</h3>
+<ol>
+  <li>数据测试里建数据集，每行一个 input 和 expected。</li>
+  <li>选中 Agent 跑评测。每题新 session。看 actual、耗时、Trace。</li>
+  <li>要对比两个 system_prompt 或两个 Agent：建实验，加两个 variant，启动后 status=running，调试台选实验再聊。只有进行中的实验会改 agent_id。</li>
+</ol>
+
+<h3>7.7 对外接口</h3>
+<p>其他系统调用 <code>POST /api/agents/{id}/invoke</code>，body 为 message 和可选 session_id。带上登录 Bearer。同一 session_id 会续短期记忆。这是本平台 Agent 的出口。登记别人的 HTTP Agent 是反向：我们当客户端。</p>
+<pre>curl -s http://127.0.0.1:8080/api/agents/10/invoke \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"北京GDP是多少","session_id":"biz_001"}'</pre>
+
+<h3>7.8 权限怎么配给部门</h3>
+<ul>
+  <li>开发：agent/mcp/skill/knowledge 读写 + session 写 + 模型读。</li>
+  <li>业务试用：除 model:read/write 外的产品权限。对应种子角色「试用访客」。</li>
+  <li>审计：session:read、trace:read、eval:read，不要模型写、不要知识库写。</li>
+  <li>租户管理员：能进向量库设置，不能自动变成别人私有库的检索者。</li>
+</ul>
+
+<h3>7.9 上线检查</h3>
+<ul>
+  <li>改掉种子密码。不要提交 .env。</li>
+  <li>确认 DATABASE_URL 不是占位符。</li>
+  <li>对话、向量、重排序三种模型分开测通。</li>
+  <li>用两个账号验证知识库交集和记忆隔离。</li>
+  <li>看一条真实 Trace：调用模型 → 调用工具 search_documents → 再调用模型。</li>
+  <li>静态资源改完后提高 <code>app.js?v=</code>。</li>
+</ul>
+
+<h2>8. 验收与已知缝</h2>
+<table>
+  <tr><th>应成立</th><th>否则看哪里</th></tr>
+  <tr><td>A 的私有库 B 检索不到</td><td>KnowledgeAccess.canRetrieve、searchForAgent 交集</td></tr>
+  <tr><td>同会话第二轮能接上文</td><td>shortTermHistory、Conversation.subject_key</td></tr>
+  <tr><td>跨会话仍记得偏好</td><td>MemorySummarizer 是否在 ready 后调用，模型是否返回 items</td></tr>
+  <tr><td>试用互不影响记忆</td><td>CurrentUser.trialKey 是否从 AuthToken 带上</td></tr>
+  <tr><td>工具能看到登录人</td><td>CurrentUserHolder.call 是否包住 executeTool</td></tr>
+  <tr><td>无密钥是预览不是空指针</td><td>generate 开头 credential.isBlank</td></tr>
+</table>
+<div class="note">当前仍在的缝：RuntimeContext.userId 仍是 playground；评测不写长期记忆；HTTP Agent 无本机记忆；概览请求数/Token 仍有估算系数；Agent 绑定用 JSON id 列表，没有数据库外键。</div>
+<p>审查这份文档时，请按第 3 章对表、第 4 章对流程、第 6 章对 AgentScope 边界、第 7 章对操作路径。需要改口径时直接改对应章节，再改代码。</p>
+</body>
+</html>

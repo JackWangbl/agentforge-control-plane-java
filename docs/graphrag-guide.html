@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GraphRAG 深入浅出</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #1b2430; font-family: "PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",sans-serif; font-size: 10.4pt; line-height: 1.62; }
+  h1 { font-size: 22pt; margin: 0 0 6px; line-height: 1.25; }
+  h2 { font-size: 14pt; margin: 20px 0 8px; padding-top: 10px; border-top: 1px solid #dce3ec; page-break-after: avoid; }
+  h3 { font-size: 11.4pt; margin: 14px 0 6px; color: #163a7a; page-break-after: avoid; }
+  p { margin: 5px 0 8px; }
+  ul, ol { margin: 4px 0 10px; padding-left: 1.25em; }
+  li { margin: 3px 0; }
+  .meta { color: #5a687a; font-size: 9.8pt; margin-bottom: 10px; }
+  .lead { font-size: 11pt; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 9.2pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #cfd7e2; padding: 6px 8px; vertical-align: top; text-align: left; }
+  th { background: #eef3f8; font-weight: 600; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; background: #f2f5f8; padding: 0 3px; border-radius: 3px; }
+  .note { background: #fff8ee; border-left: 3px solid #d48b16; padding: 8px 10px; margin: 8px 0 12px; font-size: 9.7pt; }
+  .callout { background: #f3f7fc; border-left: 3px solid #2367e8; padding: 8px 10px; margin: 8px 0 12px; }
+  .scene { background: #f7faf7; border: 1px solid #d5e4d6; border-radius: 6px; padding: 8px 10px; margin: 8px 0 12px; page-break-inside: avoid; }
+  .scene b { color: #1d5c32; }
+  .flow { display: flex; gap: 6px; align-items: stretch; margin: 10px 0 14px; page-break-inside: avoid; }
+  .step { flex: 1; background: #f4f7fb; border: 1px solid #d5deea; border-radius: 6px; padding: 8px 8px 7px; }
+  .step .n { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #2367e8; color: #fff; font-size: 8.5pt; margin-bottom: 4px; }
+  .step strong { display: block; font-size: 9.4pt; margin-bottom: 2px; }
+  .step span { display: block; font-size: 8.6pt; color: #3d4b5c; line-height: 1.45; }
+  .toc { margin: 8px 0 4px; }
+  .toc li { margin: 2px 0; }
+  .small { font-size: 9pt; color: #5a687a; }
+  .pipe { margin: 8px 0 12px; }
+  .pipe-row { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 6px; page-break-inside: avoid; }
+  .pipe-row .k { flex: 0 0 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 50%; background: #2367e8; color: #fff; font-size: 8.5pt; }
+  .pipe-row .b { flex: 1; }
+  .pipe-row strong { font-size: 10.2pt; }
+  .where { font-size: 8.6pt; color: #1a4fb8; }
+</style>
+</head>
+<body>
+
+<h1>GraphRAG 深入浅出</h1>
+<p class="meta">给要选型、讲解或落地知识库的人 · 结合 AgentForge 知识库里的检索方式</p>
+<p class="lead">GraphRAG 是在普通文档检索之外，先把文本里的人、事、组织、条款抽成「谁和谁有什么关系」，再按这些关系或整篇摘要来回答。找某一句话时，混合检索往往够用；问关系、问全貌时，图更合适。</p>
+
+<div class="callout"><b>30 秒版本：</b>普通 RAG 像在一摞资料里用荧光笔标出最像的几段。GraphRAG 先把资料整理成一张关系网，再准备每份文档的短摘要。问题点名了某个对象，就沿着它的关系回答；问题在问整体，就读这些摘要。</div>
+
+<ol class="toc">
+  <li>为什么相似段落不够</li>
+  <li>GraphRAG 在做什么</li>
+  <li>建库和查询的两段路</li>
+  <li>导入流程</li>
+  <li>查询流程</li>
+  <li>和混合检索、传统知识图谱怎么分工</li>
+  <li>六个常用场景</li>
+  <li>在本知识库里怎么选</li>
+  <li>落地时要守住的边界</li>
+</ol>
+
+<h2>一、为什么相似段落不够</h2>
+<p>常见知识库的做法是：文档切成小块，每块变成向量，再配上关键词。用户提问后，系统找出最像的几块，交给大模型组织成答案。问「年假几天」「第三条怎么写」，这种做法很稳，因为答案就躺在某一段里。</p>
+<p>换一种问法，相似段落就开始吃力：</p>
+<ul>
+  <li>「这份供应商制度里，采购、法务、财务各自卡在哪一环？」答案散在不同章节，单段相似度都不高。</li>
+  <li>「A 产品和 B 组件是什么关系？故障会传到谁？」需要的是关系，不是某一句原文。</li>
+  <li>「这 20 份周报整体在推进什么、卡在哪里？」没有任何一块能代表全部文档。</li>
+</ul>
+<p>GraphRAG 针对的就是后一类问题：先把散落的事实收成结构，再检索结构。</p>
+
+<h2>二、GraphRAG 在做什么</h2>
+<p>名字拆开就是 Graph（图）+ RAG（检索增强生成）。图上的点是实体，例如人、公司、产品、制度条款、系统模块；边是关系，例如「负责」「依赖」「引用」「属于」。检索时可以沿边走，也可以先读预先写好的摘要。</p>
+<p>业界常被引用的做法来自微软 2024 年的 GraphRAG：用大模型从文本抽取实体和关系，再把联系紧密的实体收成一层层「社区」，给每个社区写摘要。问局部事实时钻到相关实体；问全局主题时读社区摘要，而不是把所有原文塞进一次对话。</p>
+<p>可以把它想成两份索引，建在同一批文档上：</p>
+<ul>
+  <li><b>段落索引：</b>方便定位原文、数字、原句。</li>
+  <li><b>关系索引：</b>方便回答「谁连着谁」和「这批材料在讲什么」。</li>
+</ul>
+
+<h2>三、建库和查询的两段路</h2>
+<p>建库发生在上传之后，查询发生在用户提问时。把建图放到上传阶段，是为了让每次提问只做检索，避免每次都重新读完全文。</p>
+
+<div class="flow">
+  <div class="step"><div class="n">1</div><strong>清洗分块</strong><span>去掉噪声，按标题、段落或条款切开。这一步和普通知识库相同。</span></div>
+  <div class="step"><div class="n">2</div><strong>抽取</strong><span>对话模型读每个分块，输出实体（名称、类型、描述）和关系（起点、终点、说明）。</span></div>
+  <div class="step"><div class="n">3</div><strong>合并</strong><span>同名实体合成一个点，保留更完整的描述。重复关系去掉。</span></div>
+  <div class="step"><div class="n">4</div><strong>摘要</strong><span>用实体和关系写一份短摘要，作为这份文档的「社区说明」。</span></div>
+</div>
+
+<h3>局部查询</h3>
+<p>问题里出现了图上的名字，就走局部查询。例如文档里有实体「年假」，用户问「年假和入职多久有关」。系统找到「年假」，带上与它相连的边（「年假 → 入职满一年：方可申请」），把这些文字交给模型。回答贴近具体对象，证据是关系和描述，方便核对。</p>
+
+<h3>全局查询</h3>
+<p>问题里没有点名任何实体，或点名的名字不在图上，就走全局查询。系统改读各文档摘要，用来回答「这批制度整体在规范什么」「这几份纪要的共同主题是什么」。摘要在建库时已经写好，查询时只是挑选和拼接，成本远低于现场重读全文。</p>
+
+<div class="note">微软论文里的「社区」是用社区发现算法（如 Leiden）把整张大图切成多层团块，每层都有摘要。下面两节写的是本知识库当前的做法：一份文档就是一个社区，摘要就是这篇文档的关系概览。</div>
+
+<h2>四、导入流程</h2>
+<p>导入从「新建知识库并选 GraphRAG」开始，到这份文档变成 <code>ready</code> 结束。建图发生在上传之后的索引任务里，查询时不再调用图谱模型。</p>
+
+<div class="pipe">
+  <div class="pipe-row"><div class="k">1</div><div class="b"><strong>选定检索方式。</strong>新建知识库时，向量模型照常要选。检索方式选 GraphRAG，并指定一个本租户已启用的对话模型作为图谱模型。没选图谱模型，创建会被拒绝。已有库默认仍是混合检索，可在设置里改过来；一改方式或更换图谱模型，已有文档会重新排队处理。<span class="where">写入 knowledge_bases.retrieval_mode、graph_model_id</span></div></div>
+  <div class="pipe-row"><div class="k">2</div><div class="b"><strong>上传原文件。</strong>支持 txt、md、html、csv、docx、pdf。单次最多 10 个，单个不超过 15MB。文件落到 <code>rag-files</code>，文档先记为排队，再交给单线程索引队列。<span class="where">状态 queued → 索引线程</span></div></div>
+  <div class="pipe-row"><div class="k">3</div><div class="b"><strong>抽出正文并清洗。</strong>按文件类型取可复制文字，去掉噪声。清洗后不足 20 个字，文档失败，提示换成可复制文字的文件。扫描版 PDF 若抽不出字，会停在这一步。<span class="where">状态 processing</span></div></div>
+  <div class="pipe-row"><div class="k">4</div><div class="b"><strong>分块。</strong>按标题、段落、条款等自动选策略，也可以在重建时指定策略。没有可写入的分块，文档失败。分块结果同时供后面的向量和建图使用。</div></div>
+  <div class="pipe-row"><div class="k">5</div><div class="b"><strong>能跳过就跳过。</strong>正文哈希、向量模型、分块策略、向量库都没变，而且这份文档已经有与当前版本号一致的图，就直接标成就绪，不再调模型。换了图谱模型或强制重建时，这一步不跳过。</div></div>
+  <div class="pipe-row"><div class="k">6</div><div class="b"><strong>写入向量库。</strong>全部分块用向量模型嵌入，写入该租户、该知识库的 Milvus collection，并删掉这份文档更旧的版本。维度和库里已有维度不一致则失败。GraphRAG 库仍保留这段段落索引，供以后切回混合检索，或供长文档靠后的章节留在向量里。<span class="where">Milvus 分块</span></div></div>
+  <div class="pipe-row"><div class="k">7</div><div class="b"><strong>逐块抽取实体和关系。</strong>只取前 16 个分块。每块调用一次图谱模型，要求只返回 JSON：实体含名称、类型、描述，关系含起点、终点、说明，每类最多 8 条。能解析出内容的块才保留。同名实体合并成一个，留下描述更完整的那条；重复关系去掉，关系总数不超过 80。一个实体都没有，文档失败。<span class="where">图谱模型 /chat/completions，temperature 0</span></div></div>
+  <div class="pipe-row"><div class="k">8</div><div class="b"><strong>写文档摘要。</strong>把合并后的实体和关系再交给图谱模型，概括这篇文档的主题和关键关系。模型没有返回文字时，用实体描述拼一份兜底摘要。</div></div>
+  <div class="pipe-row"><div class="k">9</div><div class="b"><strong>落库并就绪。</strong>每个文档一行图：知识库、文档、版本号、摘要、实体 JSON、关系 JSON。文档状态改为就绪，并记下分块数、内容哈希和版本号。之后查询只读这行图，不再读原文件。<span class="where">表 kg_document_graphs，状态 ready</span></div></div>
+</div>
+
+<table>
+  <tr><th>导入停在哪里</th><th>页面上看到什么</th></tr>
+  <tr><td>正文太短、分块为空、向量模型或 Milvus 不可用</td><td>文档失败，说明里是对应原因</td></tr>
+  <tr><td>图谱模型未启用、没有密钥，或调用失败</td><td>文档失败，说明里是图谱模型错误</td></tr>
+  <tr><td>16 个分块都没抽出实体</td><td>文档失败：「没有从文档里抽出实体」</td></tr>
+  <tr><td>上面都通过</td><td>状态就绪。调试检索可以开始用</td></tr>
+</table>
+
+<h2>五、查询流程</h2>
+<p>查询有两个入口，读的是同一张图。知识库页面的「调试检索」只查当前这一个库。智能体绑定知识库后，通过工具 <code>search_documents</code> 查它有权访问、且已启用的库；一个智能体绑了多个库时，每个库按自己的检索方式走，再把命中合在一起。</p>
+
+<div class="pipe">
+  <div class="pipe-row"><div class="k">1</div><div class="b"><strong>只使用已就绪的文档。</strong>状态不是 ready 的文档不参与。该库一份就绪文档都没有，调试检索返回空命中；智能体侧得到「没有足够相关的内容」。</div></div>
+  <div class="pipe-row"><div class="k">2</div><div class="b"><strong>清洗问题。</strong>问句走和导入相同的文本清洗。清洗后若是空白，就用去掉首尾空白的原问句。这一步只整理文字，不调用模型。</div></div>
+  <div class="pipe-row"><div class="k">3</div><div class="b"><strong>确认这条库走图。</strong>检索方式是 GraphRAG 时，这次查询不嵌入问题、不查 Milvus、也不做重排序。方式是混合检索的库，仍走向量加关键词。</div></div>
+  <div class="pipe-row"><div class="k">4</div><div class="b"><strong>读出该库全部文档图。</strong>一次取出实体、关系和摘要。图存在 MySQL，按文档一行。</div></div>
+  <div class="pipe-row"><div class="k">5</div><div class="b"><strong>先尝试局部查询。</strong>实体名至少两个字，并且问题里包含这个名字，或实体名包含整句问题，算命中。命中后带上类型、描述，以及它作为起点或终点的关系，形如「差旅 → 部门负责人：出差前审批」。局部命中最多 8 条。只要有一条局部命中，就不再读摘要。<span class="where">调试里显示 graphrag-local</span></div></div>
+  <div class="pipe-row"><div class="k">6</div><div class="b"><strong>没有点名实体时走全局查询。</strong>按文档取已写好的摘要，最多 6 份，标题记为「社区摘要」。用来回答「这批材料整体在说什么」。摘要是导入时生成的，查询当场不再让模型重写。<span class="where">调试里显示 graphrag-global</span></div></div>
+  <div class="pipe-row"><div class="k">7</div><div class="b"><strong>按入口交出去。</strong>调试检索按该库的返回条数（1 到 10）截断，重排序显示为 none，页面能看到文件名、实体名或「社区摘要」、描述和关系。智能体路径把各库命中放在一起：局部命中排在全局摘要前面，最多留 10 条，格式是「【序号】库名 / 文件名 / 标题」加下面的证据文字。</div></div>
+  <div class="pipe-row"><div class="k">8</div><div class="b"><strong>由对话模型组织答案。</strong>图查询到此结束。智能体拿到上述证据后，再按自己的系统提示作答。知识库没有命中时，应说明不知道，而不是用常识补全这些事实。</div></div>
+</div>
+
+<table>
+  <tr><th>问法</th><th>走哪一步</th><th>返回里有什么</th></tr>
+  <tr><td>「部门负责人在差旅里做什么」</td><td>第 5 步，局部</td><td>实体「部门负责人」或「差旅」，以及相连的审批、报销关系</td></tr>
+  <tr><td>「这些制度整体在管什么」</td><td>第 6 步，全局</td><td>最多 6 份文档摘要，标题为社区摘要</td></tr>
+  <tr><td>问题里的名字和抽取时的名字对不上</td><td>局部落空，改走全局</td><td>摘要。要把全称和简称写进正文，查询才容易点中实体</td></tr>
+</table>
+
+<h2>六、和混合检索、传统知识图谱怎么分工</h2>
+<table>
+  <tr><th></th><th>混合检索</th><th>GraphRAG</th><th>人工搭建的知识图谱</th></tr>
+  <tr><td>索引里有什么</td><td>文本块的向量和关键词</td><td>实体、关系，外加文档摘要</td><td>预先定义好的本体和三元组</td></tr>
+  <tr><td>谁来生产结构</td><td>切块和向量模型</td><td>对话模型从正文里抽取</td><td>领域专家和数据工程师</td></tr>
+  <tr><td>问一句原文、一个数字</td><td>直接命中所在段落</td><td>能回到相关实体，原句不一定完整</td><td>取决于图里是否录入了该字段</td></tr>
+  <tr><td>问关系和全貌</td><td>靠多段拼接，容易漏跨章节的联系</td><td>沿边或读摘要</td><td>查询最稳，前提是图已经建全</td></tr>
+  <tr><td>更新一份新文档</td><td>重新切块、重新向量化</td><td>再抽取一遍该文档的图和摘要</td><td>按规范补点、补边，通常更慢</td></tr>
+  <tr><td>主要成本</td><td>向量模型，查询便宜</td><td>建库时多次调用对话模型</td><td>人力建模和持续维护</td></tr>
+</table>
+<p>三种可以同时存在。混合检索负责「把原句找出来」，GraphRAG 负责「把关系和图景找出来」，人工图谱负责「必须严格、可审计的那部分关系」。</p>
+
+<h2>七、六个常用场景</h2>
+
+<div class="scene">
+  <p><b>场景 1 · 制度、合同、招投标文件</b></p>
+  <p>材料长、章节互相引用。用户很少问「第 12 页有没有出现违约」，更多问「违约后谁通知谁、保证金和验收是什么关系」。</p>
+  <p>实体可以是主体（甲方、供应商）、对象（保证金、验收）、动作（通知、扣除）。关系把流程串起来。局部查询回答某一个主体的义务；全局查询回答「这份合同整体在约束什么」。</p>
+  <p class="small">仍建议保留混合检索，用来核对金额、日期和原条款措辞。</p>
+</div>
+
+<div class="scene">
+  <p><b>场景 2 · 研报、行业材料和竞品档案</b></p>
+  <p>一篇研报里公司、产品、客户、供应链缠在一起。分析师的问题常常是「这家公司和哪几家供应商绑在一起」，或「这批材料对某个赛道的共同判断是什么」。</p>
+  <p>图适合第一种；文档摘要适合第二种。若只要摘录某一段预测数字，混合检索更直接。</p>
+</div>
+
+<div class="scene">
+  <p><b>场景 3 · 故障手册和系统依赖</b></p>
+  <p>运维文档里真正有用的是依赖：服务 A 调用 B，B 依赖数据库 C，告警从 C 传到值班组。用户描述一个现象时，点名了服务名就能沿边看到上下游，而不是只命中某一段排障步骤。</p>
+  <p>适合组件名稳定、文档会反复提到同一批系统的知识库。</p>
+</div>
+
+<div class="scene">
+  <p><b>场景 4 · 会议纪要和项目周报</b></p>
+  <p>单份纪要里的待办，用关键词就能搜到。跨很多份纪要问「这个项目现在卡在哪个依赖、涉及哪些人」，需要把反复出现的项目、负责人和阻塞项收成点，再看边。</p>
+  <p>全局查询还能先给一个「最近这些纪要在重复什么主题」的概览，再让人点进某一份原文。</p>
+</div>
+
+<div class="scene">
+  <p><b>场景 5 · 产品说明和客服知识</b></p>
+  <p>FAQ 适合混合检索：「怎么重置密码」几乎总有标准答案段。GraphRAG 更适合功能之间的依赖：「开通高级版之后，哪些接口、哪些角色、哪份合同条款会一起变化。」</p>
+  <p>客服场景里建议两种都在：标准问句走混合检索，牵涉多个功能的问题走图。</p>
+</div>
+
+<div class="scene">
+  <p><b>场景 6 · 人物、组织和项目归属</b></p>
+  <p>内部百科、项目空间说明、组织材料里，高频问题是归属和协作：「这个项目归哪个组、和哪个系统有关、接口人是谁。」实体名短、重复出现，图的命中很直观。</p>
+  <p>人名和项目名要写全。抽取模型看到的是正文，正文里只写简称时，查询也要用同一个简称。</p>
+</div>
+
+<h2>八、在本知识库里怎么选</h2>
+<p>新建知识库时，检索方式有两项。混合检索是向量加关键词，可选重排序，适合原句、数字、条款和 FAQ。GraphRAG 要再指定图谱模型，适合关系和文档全貌。导入怎么一步步落库，见第四节；提问之后怎么分流，见第五节。</p>
+<p>已有知识库保持混合检索。设置里可以改方式。改成 GraphRAG 或更换图谱模型后，已有文档会按第四节重新处理。改回混合检索后，查询改走向量和关键词，已建的图会清掉。</p>
+
+<div class="callout">
+  <p><b>走一遍。</b>一份《差旅制度》抽取出实体「差旅」「部门负责人」「报销」，关系是「差旅 → 部门负责人：出差前审批」「差旅 → 报销：返回后五个工作日内提交」。</p>
+  <p>问「部门负责人在差旅里做什么」，局部查询带回审批那条边。问「这份制度和别的财务材料都在管什么」，若问题里没有命中实体名，就读各文档摘要。</p>
+</div>
+
+<h2>九、落地时要守住的边界</h2>
+<ul>
+  <li><b>建库更慢，也更贵。</b>每个被抽样的分块都要调用一次对话模型，整篇还要一次摘要。混合检索主要消耗向量模型。文档很多时，先在一小批上确认抽取质量，再铺开。</li>
+  <li><b>抽取会漏，也会说多。</b>模型可能漏掉正文里的关系，或把猜测写成关系。回答时应能看到实体描述和关系原文，重要结论回到混合检索或原文件核对。</li>
+  <li><b>名字要对得上。</b>当前局部查询按名称包含来匹配，没有单独的实体向量。正文和用户用同一个叫法时最稳。别名很多的领域，要在文档里把全称和简称写在一起。</li>
+  <li><b>图要跟着文档走。</b>文件更新后要重建该文档的图。只改了图谱模型，也要重建，否则摘要仍是旧模型写的。</li>
+  <li><b>抽样有上限。</b>当前实现每个文档最多用前 16 个分块建图。短制度、说明、纪要很合适；特别长的单文件，靠前的章节会进入图，靠后的章节仍在向量库里，通过混合检索更能被逐段找到。</li>
+  <li><b>社区目前是「一篇文档一份摘要」。</b>它可以回答单文档主题，以及跨文档时把多份摘要放在一起看。若语料大到需要「先按主题团成多层社区再逐层汇总」，那是微软论文中的完整 GraphRAG，需要额外的社区发现和多层摘要，超出当前知识库这一档。</li>
+</ul>
+
+<h2>怎么向同事讲</h2>
+<p>混合检索负责把原句找准。GraphRAG 负责两件原句不擅长的事：沿着人、系统、条款之间的关系回答，以及用建库时写好的摘要回答「这批文档整体在说什么」。新建知识库时按问题类型选一种；两种都需要时，可以建两个库，或在设置里按当前材料切换。标准问句和精确数字，优先混合检索；关系和全貌，优先 GraphRAG。</p>
+
+<p class="small">参考：Darren Edge 等，<i>From Local to Global: A Graph RAG Approach to Query-Focused Summarization</i>（Microsoft Research，2024）。本文后半的检索方式、16 个分块、局部/全局分支，对应 AgentForge 知识库当前实现。</p>
+
+</body>
+</html>

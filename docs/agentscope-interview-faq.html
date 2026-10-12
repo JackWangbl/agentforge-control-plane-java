@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AgentScope 高频面试题（结合 AgentForge 控制面）</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #1b2430; font-family: "PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",sans-serif; font-size: 10.2pt; line-height: 1.58; }
+  h1 { font-size: 20pt; margin: 0 0 6px; line-height: 1.25; }
+  h2 { font-size: 13.5pt; margin: 18px 0 8px; padding-top: 8px; border-top: 1px solid #dce3ec; page-break-after: avoid; }
+  h3 { font-size: 11.2pt; margin: 14px 0 6px; color: #163a7a; page-break-after: avoid; }
+  p { margin: 5px 0 8px; }
+  ul, ol { margin: 4px 0 10px; padding-left: 1.25em; }
+  li { margin: 3px 0; }
+  .meta { color: #5a687a; font-size: 9.8pt; margin-bottom: 10px; }
+  .lead { font-size: 10.8pt; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 9pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #cfd7e2; padding: 5px 7px; vertical-align: top; text-align: left; }
+  th { background: #eef3f8; font-weight: 600; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; background: #f2f5f8; padding: 0 3px; border-radius: 3px; }
+  .q { background: #f3f7fc; border-left: 3px solid #2367e8; padding: 8px 10px; margin: 12px 0 6px; page-break-inside: avoid; font-weight: 650; }
+  .a { margin: 0 0 14px; page-break-inside: avoid; }
+  .tag { display: inline-block; font-size: 8.5pt; color: #1a4fb8; background: #eef4ff; border-radius: 4px; padding: 1px 6px; margin-right: 6px; font-weight: 500; }
+  .toc a { color: #1b2430; text-decoration: none; }
+  .toc li { margin: 3px 0; }
+  .note { background: #fff8ee; border-left: 3px solid #d48b16; padding: 7px 10px; margin: 8px 0 12px; font-size: 9.6pt; }
+</style>
+</head>
+<body>
+
+<h1>AgentScope 高频面试题详解</h1>
+<p class="meta">结合 AgentForge Control Plane（Java + AgentScope Java 2.x）项目实践 · 面试备忘</p>
+<p class="lead">本文面向「做过 AgentScope / 多智能体控制面」的面试场景。题目覆盖市面高频考点，答案同时对齐通用概念与本项目真实实现（<code>ReActAgent</code>、<code>Toolkit</code>、多智能体三种编排模式等）。</p>
+
+<div class="note">答题口诀：先讲概念 → 再讲本项目怎么落地 → 最后说边界与演进。面试官最爱听「我们为什么这样选」。</div>
+
+<ol class="toc">
+  <li>AgentScope 与控制面基础</li>
+  <li>ReAct、工具与 Toolkit</li>
+  <li>记忆、会话与可观测</li>
+  <li>多智能体编排（移交 / 主从 / 工作流）</li>
+  <li>工程化与对比题</li>
+</ol>
+
+<!-- ========== 1 ========== -->
+<h2>一、AgentScope 与控制面基础</h2>
+
+<div class="q"><span class="tag">高频</span>Q1. 什么是 AgentScope？它解决什么问题？和 LangChain / AutoGen 怎么区分？</div>
+<div class="a">
+<p><b>标准答：</b>AgentScope 是面向 Agent 应用的开发框架（阿里系开源，有 Python / Java 等实现），核心是把「模型 + 提示词 + 工具 + 消息循环」收成可组合的 Agent 运行时，并强调可调试、可扩展的工程能力。</p>
+<ul>
+  <li><b>相对 LangChain：</b>LangChain 更偏链式编排与生态插件；AgentScope 更强调 Agent 本体（ReAct 循环、工具、消息结构）和运行时可观测。</li>
+  <li><b>相对 AutoGen：</b>AutoGen 强在多 Agent 对话协作范式；AgentScope 单 Agent ReAct 很完整，多 Agent 可自建或与上层控制面结合。</li>
+</ul>
+<p><b>结合本项目：</b>控制面不重写推理引擎，而是用 AgentScope Java 的 <code>ReActAgent</code> + <code>OpenAIChatModel</code> 跑一轮对话；Agent 配置、权限、MCP、知识库、多智能体画布由 Spring Boot 控制面托管。</p>
+</div>
+
+<div class="q"><span class="tag">高频</span>Q2. 你们项目里 AgentScope 处在哪一层？控制面又负责什么？</div>
+<div class="a">
+<p><b>标准答：</b>分层清楚：</p>
+<table>
+  <tr><th>层</th><th>职责</th><th>本项目对应</th></tr>
+  <tr><td>控制面</td><td>租户、权限、Agent/模型/MCP/知识库 CRUD、编排发布、会话审计</td><td>Spring Boot API + 静态控制台</td></tr>
+  <tr><td>运行时</td><td>单轮对话、工具调用、ReAct 迭代</td><td><code>AgentScopeRuntime</code></td></tr>
+  <tr><td>工具执行</td><td>MCP / 沙箱 / 知识检索 / Flow / SubAgent</td><td><code>ToolRuntime</code> + Overlay</td></tr>
+  <tr><td>编排</td><td>多 Agent 路由、主从、流水线</td><td><code>MultiAgentDebugService</code></td></tr>
+</table>
+<p>面试加分句：「模型推理交给 AgentScope，业务治理留在控制面，避免把租户权限塞进框架内核。」</p>
+</div>
+
+<div class="q"><span class="tag">概念</span>Q3. AgentScope 里一次对话的最小闭环是什么？</div>
+<div class="a">
+<p><b>标准答：</b>典型闭环是：</p>
+<ol>
+  <li>构造系统提示（角色 + 技能 + 工具说明）</li>
+  <li>把历史消息转成框架 <code>Msg</code></li>
+  <li><code>ReActAgent.call</code>：模型思考 → 可能发起 ToolUse → 执行工具 → ToolResult 回填 → 再思考，直到给出最终回复或达到 <code>maxIters</code></li>
+  <li>收集 usage、traces，写回会话/检查点</li>
+</ol>
+<p><b>本项目：</b><code>playground.generate</code> → <code>AgentScopeRuntime.generate</code> → <code>react.call(msgs, RuntimeContext)</code>，超时约 5 分钟；浏览器类工具时 <code>maxIters</code> 提到 8，否则默认 4。</p>
+</div>
+
+<!-- ========== 2 ========== -->
+<h2>二、ReAct、工具与 Toolkit</h2>
+
+<div class="q"><span class="tag">必问</span>Q4. 解释 ReAct。为什么 Agent 常用 ReAct 而不是一次 function call？</div>
+<div class="a">
+<p><b>标准答：</b>ReAct = <b>Reason + Act</b>：模型交替进行推理与行动（工具调用），根据观察再推理，直到任务完成。</p>
+<p>一次 function call 适合「单次查数/单次动作」；复杂任务需要多步工具、根据中间结果改计划，所以用 ReAct 循环。代价是延迟和 token 更高，要用 <code>maxIters</code>、超时、权限和可观测兜住。</p>
+<p><b>本项目：</b>明确使用 <code>ReActAgent.builder().maxIters(...).enablePendingToolRecovery(true)</code>，并支持检查点续跑未完成的 tool。</p>
+</div>
+
+<div class="q"><span class="tag">必问</span>Q5. Toolkit / Tool 在 AgentScope 里怎么工作？你们怎么挂动态工具？</div>
+<div class="a">
+<p><b>标准答：</b>Toolkit 是工具注册表。每个工具有名称、描述、JSON Schema 参数；模型通过 ToolUse 选择工具，框架回调执行，结果以 ToolResult 进入对话。</p>
+<p><b>本项目落地：</b></p>
+<ul>
+  <li>控制面先汇总 <code>ToolSpec</code>（MCP、内置、知识库、记忆、flow_ 链路等）</li>
+  <li>用自定义 <code>DelegatingTool</code> 注册进 Toolkit，真正执行走 <code>ToolRuntime.executeTool</code></li>
+  <li>主从模式再通过 <code>ToolOverlay</code> 临时注入 <code>call_sub_*</code> SubAgent 工具，不写回 Agent 绑定</li>
+</ul>
+<p>要点：「框架管协议与循环，控制面管鉴权与执行，」避免把租户逻辑写死在 AgentScope 里。</p>
+</div>
+
+<div class="q"><span class="tag">深挖</span>Q6. 工具允许调用的权限怎么做？没绑工具时模型还调会怎样？</div>
+<div class="a">
+<p><b>标准答：</b>注册进 Toolkit 不等于业务允许。本项目在执行前调用 <code>agentAllowsTool</code>：按 Agent 绑定的 MCP/沙箱/知识库/flow/记忆工具白名单判断。未允许则返回错误 JSON（「Agent 未绑定工具 xxx」），并在 span 里记 error。</p>
+<p>Overlay 的 SubAgent 工具走单独 executor，视为编排注入，不依赖 Agent 永久绑定。</p>
+</div>
+
+<div class="q"><span class="tag">深挖</span>Q7. 什么是 Tool Flow？和多智能体 pipeline 有何不同？</div>
+<div class="a">
+<p><b>标准答：</b></p>
+<table>
+  <tr><th></th><th>Agent 上的 tool_flows</th><th>编排 pipeline</th></tr>
+  <tr><td>粒度</td><td>单个 Agent 内部</td><td>多个 Agent 节点</td></tr>
+  <tr><td>暴露方式</td><td>模型看到一个 <code>flow_xxx</code> 工具</td><td>图上串行/分支执行</td></tr>
+  <tr><td>执行</td><td><code>FlowRuntime</code> 按步骤调工具，步骤间可用 <code>{{prev}}</code> 引用</td><td>每步是一次完整 Agent 生成</td></tr>
+</table>
+<p>面试句：「Flow 是 deterministic 工具链；Pipeline 是多专家流水线。」</p>
+</div>
+
+<div class="q"><span class="tag">工程</span>Q8. 没有 API Key 时你们怎么表现？</div>
+<div class="a">
+<p><b>标准答：</b>凭证为空时不调用真实模型，走预览回复 <code>previewReply</code>，并可演示部分本地工具（如时间）。这样控制台仍可演示 Agent 配置，但 mode 会标 preview/error，避免假装成线上可用。</p>
+</div>
+
+<!-- ========== 3 ========== -->
+<h2>三、记忆、会话与可观测</h2>
+
+<div class="q"><span class="tag">高频</span>Q9. Agent 的短期记忆和长期记忆一般怎么设计？本项目呢？</div>
+<div class="a">
+<p><b>标准答（通用）：</b>短期=当前会话上下文；长期=跨会话可检索的事实/偏好。常用：滑动窗口、摘要、向量检索、显式 remember/forget 工具。</p>
+<p><b>本项目：</b></p>
+<ul>
+  <li>短期：<code>MemoryService.shortTermHistory</code>，多智能体调试时传 <code>agentId=null</code> 以共享会话内多节点历史</li>
+  <li>长期：对话结束后 <code>MemorySummarizer</code> 总结；工具侧有 remember/forget/list_memories</li>
+  <li>按用户/租户隔离，控制台可改正删除</li>
+</ul>
+</div>
+
+<div class="q"><span class="tag">高频</span>Q10. RuntimeContext / sessionId 有什么用？</div>
+<div class="a">
+<p><b>标准答：</b>给运行时提供 userId、sessionId 等上下文，用于工作空间、检查点、追踪关联。本项目 <code>RuntimeContext.builder().userId("playground").sessionId(...)</code>；编排里主会话用 <code>orch_*</code>，SubAgent / pipeline 步用后缀隔离（如 <code>::sub::</code>、<code>::pipe::</code>），防止子轮次污染主会话检查点。</p>
+</div>
+
+<div class="q"><span class="tag">高频</span>Q11. 如何调试 Agent「到底调了什么工具」？</div>
+<div class="a">
+<p><b>标准答：</b>需要结构化 traces/spans：每步名称、类型（llm/tool）、耗时、截断后的 detail。本项目在 Toolkit 回调里写 <code>debugSpan</code>，flow 还有逐步 span；多智能体额外有 <code>route.jump</code> / <code>route.handoff</code> / <code>route.supervisor</code> / <code>pipeline.step</code> / <code>subagent.*</code>。控制台调试台与编排调试面板展示链路；生产 invoke 可剥掉 route 细节。</p>
+</div>
+
+<div class="q"><span class="tag">概念</span>Q12. 系统提示词应该写什么？如何避免「改提示词写脏数据库」？</div>
+<div class="a">
+<p><b>标准答：</b>系统提示=角色、边界、输出格式、安全约束；工具说明可由框架/Toolkit 补充。动态叠加（全局人设、节点提示）不要直接改 JPA 实体字段。</p>
+<p><b>本项目：</b><code>PromptOverlay</code> 用 ThreadLocal 前缀/后缀，仅本轮生效：<code>global_prompt + 原系统提示 + 节点/主从说明</code>，避免 OpenEntityManagerInView 下脏写回 Agent 表。</p>
+</div>
+
+<!-- ========== 4 ========== -->
+<h2>四、多智能体编排（本项目重点）</h2>
+
+<div class="q"><span class="tag">必问</span>Q13. 移交（handoff）和主从（supervisor）有什么区别？</div>
+<div class="a">
+<table>
+  <tr><th></th><th>场景移交 handoff</th><th>主从 supervisor</th></tr>
+  <tr><td>用户对面</td><td>被选中的智能体</td><td>始终是主智能体</td></tr>
+  <tr><td>下游角色</td><td>接班人（换人聊）</td><td>SubAgent 工具（干活交回）</td></tr>
+  <tr><td>单轮形态</td><td>最多路由一次 + 一人回答</td><td>主 ReAct 可多次 call_sub_*</td></tr>
+  <tr><td>像什么</td><td>扣子多 Agent 场景跳转</td><td>Supervisor + tools</td></tr>
+</table>
+</div>
+
+<div class="q"><span class="tag">必问</span>Q14. 移交是靠什么移交的？只有一个意图识别吗？</div>
+<div class="a">
+<p><b>标准答：不是只有一个意图识别。</b> 本项目是两级、有优先级：</p>
+<ol>
+  <li><b>全局跳转（优先）</b>：路由模型判断用户原话是否命中某条 jump 条件（如「转人工」）。命中则直接落到目标，不再做场景选择。</li>
+  <li><b>适用场景移交</b>：未跳中时，在候选人（开始的出边，或当前节点的下游）里按「适用场景」文本做 LLM 分类；从 agent 出发时还允许「留下」(<code>choice=-1</code>)。</li>
+</ol>
+<p>实现上是 temperature=0 的短 JSON 分类（<code>{"choice":n}</code>），不是独立训练的意图模型，也不是纯关键词。无可用路由模型时跳过跳转并按 fallback 规则处理（例如 start 多候选人失败时用第一个）。</p>
+</div>
+
+<div class="q"><span class="tag">高频</span>Q15. 三种 pattern 分别什么时候用？</div>
+<div class="a">
+<ul>
+  <li><b>handoff：</b>客服分流、专家切换，用户需要感觉「换人」。</li>
+  <li><b>supervisor：</b>一个总入口汇总，需要调用多个专项能力（行程+预算）。</li>
+  <li><b>pipeline：</b>固定步骤且有中间产物（素材→文案→校对）。</li>
+</ul>
+<p>不要用 handoff 硬做强顺序流水线；不要用 pipeline 做闲聊分流。</p>
+</div>
+
+<div class="q"><span class="tag">深挖</span>Q16. SubAgent 如何注入？如何防止递归互调？</div>
+<div class="a">
+<p><b>标准答：</b>开始节点只连一个主 Agent；主的出边变成 <code>call_sub_&lt;nodeId&gt;</code> 工具，描述来自适用场景，参数为 <code>task</code>。通过 <code>ToolOverlay.call</code> 注入本轮 Toolkit。</p>
+<p>子 Agent 执行时用 <code>ToolOverlay.nest</code> 提高深度，使 <code>current()</code> 为空，子轮次看不到 SubAgent 工具，避免 A 调 B、B 再调 A。HTTP 智能体不走 AgentScope Toolkit，故不能作为挂 SubAgent 的主智能体。</p>
+</div>
+
+<div class="q"><span class="tag">深挖</span>Q17. pipeline 如何传状态、防环？</div>
+<div class="a">
+<p>第 1 步吃用户原话；后续步拼「用户原话 + 上一步输出」。多出边时复用 choice 分类做分支。用 visited 防环，<code>MAX_PIPELINE_STEPS=8</code>。每步独立临时 session，整链只对用户会话 finalize 一次，落点为最后一步。</p>
+</div>
+
+<div class="q"><span class="tag">工程</span>Q18. 发布校验为什么重要？草稿能否调试？</div>
+<div class="a">
+<p>发布时 <code>requirePublishable</code>：一 start、边类型、agent 可见且不重复、跳转条件与目标、pattern 专属规则（主从 start 只能连一个主、子要有 scenario 等）。保证线上图可运行。</p>
+<p>当前实现：debug/invoke 要求 published；草稿可脏便于边画边存。这是体验与安全的折中；演进可做「带警告的试运行」。</p>
+</div>
+
+<div class="q"><span class="tag">场景</span>Q19. dispatch=start 和 last 有什么差别？</div>
+<div class="a">
+<p>会话持久化 <code>current_node_id</code>。<code>start</code>：每轮从开始节点重新分发；<code>last</code>：从上次落地 agent 继续，适合多轮粘在同一专家。主从多数时间落在主节点；pipeline 记录链尾节点。</p>
+</div>
+
+<!-- ========== 5 ========== -->
+<h2>五、工程化与对比题</h2>
+
+<div class="q"><span class="tag">高频</span>Q20. Agent 幻觉调错工具、死循环怎么治理？</div>
+<div class="a">
+<ul>
+  <li>工具描述写清适用边界；场景/跳转文案可区分</li>
+  <li><code>maxIters</code>、超时、pending tool recovery / 检查点</li>
+  <li>白名单 <code>agentAllowsTool</code></li>
+  <li>可观测 spans，线上按 route.detail 排查</li>
+  <li>编排侧限制一跳、跳转条数、pipeline 步数与防环</li>
+</ul>
+</div>
+
+<div class="q"><span class="tag">对比</span>Q21. 为什么不把多智能体也全塞进 AgentScope 原生多 Agent API？</div>
+<div class="a">
+<p><b>标准答：</b>控制面需要租户权限、发布校验、画布持久化、HTTP 智能体混布、与现有 playground/记忆体系统一。用图 JSON + 自研路由/主从/流水线，AgentScope 专注单节点 ReAct，边界清晰、可替换模型运行时。若团队强依赖框架原生多 Agent 协议，再评估迁移成本。</p>
+</div>
+
+<div class="q"><span class="tag">开放</span>Q22. 若继续演进，你优先做什么？</div>
+<div class="a">
+<ol>
+  <li>独立 Router 模型与跳转优先级配置</li>
+  <li>草稿可调试 / 试运行</li>
+  <li>编排版本与回滚、编排级评测</li>
+  <li>流式输出；SubAgent 超时与重试策略</li>
+  <li>更丰富的工作流节点（条件/人工介入）——与对话编排分产品线</li>
+</ol>
+</div>
+
+<div class="q"><span class="tag">临场</span>Q23. 请用 90 秒介绍你们 AgentScope 相关工作</div>
+<div class="a">
+<p><b>口述稿：</b>「我们做的是企业 Agent 控制面。单 Agent 对话用 AgentScope Java 的 ReActAgent，工具经 Toolkit 回调到控制面执行 MCP、知识库和沙箱。多智能体画布支持三种模式：场景移交做客服分流，主从把子 Agent 当工具调用，工作流做固定流水线。路由是全局跳转优先再适用场景分类；提示词叠加用 ThreadLocal Overlay 避免写脏 Agent 配置。发布有图校验，调试能看到 jump/handoff/subagent 全链路。」</p>
+</div>
+
+<h2>附录：速查表</h2>
+<table>
+  <tr><th>概念</th><th>本项目关键类</th></tr>
+  <tr><td>ReAct 运行</td><td><code>AgentScopeRuntime</code> / <code>ReActAgent</code></td></tr>
+  <tr><td>工具</td><td><code>Toolkit</code> / <code>DelegatingTool</code> / <code>ToolRuntime</code></td></tr>
+  <tr><td>提示叠加</td><td><code>PromptOverlay</code></td></tr>
+  <tr><td>SubAgent 注入</td><td><code>ToolOverlay</code></td></tr>
+  <tr><td>图与校验</td><td><code>MultiAgentGraphs</code></td></tr>
+  <tr><td>编排运行</td><td><code>MultiAgentDebugService</code></td></tr>
+  <tr><td>工具链</td><td><code>FlowRuntime</code></td></tr>
+</table>
+
+<p class="meta" style="margin-top:18px;">文档生成自 AgentForge 控制面实践整理 · 仅供面试准备</p>
+</body>
+</html>
