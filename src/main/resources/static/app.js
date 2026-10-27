@@ -21,7 +21,7 @@ function apiError(err){
 }
 const authState = {token: localStorage.getItem('af_token')||'', me:null, trialExpiresAt:''};
 let trialTimer=0;
-const pagePerm = {dashboard:'',memories:'',sessions:'session:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',knowledge:'knowledge:read',models:'model:read',vectors:'tenant:admin',sandboxes:'sandbox:read',roles:'role:read'};
+const pagePerm = {dashboard:'',memories:'',sessions:'session:read','failure-cases':'trace:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',knowledge:'knowledge:read',models:'model:read',vectors:'tenant:admin',sandboxes:'sandbox:read',roles:'role:read'};
 function can(perm){
   if(!perm) return !!authState.me;
   const granted=authState.me?.permissions||[];
@@ -107,10 +107,10 @@ const api = async (path, options={}) => {
 };
 const fmt = n => n >= 1000000 ? (n/1000000).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : n;
 const dt = value => new Date(value+'Z').toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-const statusText = {completed:'已完成',running:'运行中',failed:'失败',ok:'正常',error:'异常',published:'已发布',draft:'草稿',queued:'排队中',passed:'通过',skipped:'跳过',cancelled:'已取消',paused:'已暂停'};
-const titles = {dashboard:'运行概览',memories:'记忆',sessions:'会话查询',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'多智能体',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
+const statusText = {completed:'已完成',running:'运行中',failed:'失败',ok:'正常',error:'异常',published:'已发布',draft:'草稿',queued:'排队中',passed:'通过',skipped:'跳过',cancelled:'已取消',paused:'已暂停',RESUMABLE:'可重拾',RECOVERING:'重拾中',MANUAL_REQUIRED:'需人工处理',RECOVERED:'重拾成功',QUEUED:'排队中',RUNNING:'运行中',SUCCEEDED:'成功',FAILED:'失败',TIMED_OUT:'超时'};
+const titles = {dashboard:'运行概览',memories:'记忆',sessions:'会话查询','failure-cases':'失败 Case',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'多智能体',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
 const pageMeta = {
-  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['MULTI AGENT','多智能体','三种模式可打开「示例·」编排跟着练：场景移交、主从 SubAgent、工作流'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。新建时可选混合检索或 GraphRAG。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
+  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], 'failure-cases':['FAILURE RECOVERY','失败 Case','查看失败率、原始入参和失败原因，并从最近安全检查点继续执行'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['MULTI AGENT','多智能体','三种模式可打开「示例·」编排跟着练：场景移交、主从 SubAgent、工作流'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。新建时可选混合检索或 GraphRAG。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
 };
 let currentPage='dashboard', currentParam='';
 function pageTools(extra=''){
@@ -3022,7 +3022,10 @@ async function resumePlayground(){
     chatState.messages.push({role:'assistant',content:reply,agent:r.agent||currentAgentName(),error:r.mode==='error'});
     applyCheckpoint(r.checkpoint||null);
     persistChat();
-    if(state){state.className=r.mode==='error'?'pill failed':r.mode==='ready'?'pill completed':'pill queued';state.textContent=r.mode==='ready'?'已续跑':r.mode==='error'?'续跑失败':'预览回复'}
+    if(state){
+      state.className=r.mode==='error'?'pill failed':r.mode==='ready'?'pill completed':'pill queued';
+      state.textContent=r.mode==='ready'?'已续跑':r.mode==='error'?'续跑失败':r.mode==='queued'?'后台续跑':'预览回复';
+    }
     paintChat();paintTrace();syncChatHeader();
   }catch(e){
     chatState.messages.push({role:'assistant',content:e.message||'续跑失败，请检查 Agent 与模型配置',agent:currentAgentName(),error:true});
@@ -3037,6 +3040,13 @@ function bindPage(page){
   if(page==='knowledge') bindKnowledgeUpload();
   if(page==='evaluations') bindEvalPage();
   if(page==='experiments') bindExpPage();
+  if(page==='failure-cases'){
+    const form=$('#failureFilters');
+    if(form)form.onsubmit=event=>{event.preventDefault();const values=new FormData(form);const params=new URLSearchParams();for(const [key,value] of values.entries()){if(!value)continue;params.set(key,(key==='from'||key==='to')?new Date(String(value)).toISOString():String(value))}params.set('page','0');params.set('size',String(failureState.size));failureState.page=0;failureState.query='?'+params.toString();render('failure-cases')};
+    document.querySelectorAll('[data-case-id]').forEach(element=>element.onclick=event=>{event.preventDefault();openFailureCase(element.dataset.caseId)});
+    if($('#failurePrev'))$('#failurePrev').onclick=()=>{failureState.page=Math.max(0,failureState.page-1);const params=new URLSearchParams(failureState.query);params.set('page',String(failureState.page));failureState.query='?'+params;render('failure-cases')};
+    if($('#failureNext'))$('#failureNext').onclick=()=>{failureState.page+=1;const params=new URLSearchParams(failureState.query);params.set('page',String(failureState.page));failureState.query='?'+params;render('failure-cases')};
+  }
   if(page==='sessions'){const runFilter=async()=>{const p=new URLSearchParams();const q=$('#sessionQ').value.trim(),a=$('#agentFilter').value,s=$('#statusFilter').value;if(q)p.set('q',q);if(a)p.set('agent_name',a);if(s)p.set('status',s);const rows=await api('/api/sessions?'+p);$('#sessionResults').innerHTML=sessionTable(rows).replace('<section class="panel wide-panel">','<section>');closeSessionDetail()};$('#doFilter').onclick=runFilter;$('#sessionQ').onkeydown=e=>{if(e.key==='Enter')runFilter()};$('#sessionResults').onclick=e=>{const hit=e.target.closest('[data-session-id]');if(hit)openSessionDetail(hit.dataset.sessionId)}}if(page==='playground'){paintChat();paintTrace();syncPlaygroundMode();const form=$('#chatForm'),input=$('#runMessage');if(form)form.onsubmit=e=>{e.preventDefault();runPlayground()};if(input){input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runPlayground()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(120,input.scrollHeight)+'px'})}const agentSel=$('#runAgent');if(agentSel)agentSel.onchange=async()=>{if(String(chatState.agentId)!==agentSel.value){await restoreAgentChat(agentSel.value);paintChat();paintTrace()}syncPlaygroundMode()};const expSel=$('#runExperiment');if(expSel)expSel.onchange=applyExperimentChoice;const userKey=$('#runUserKey');if(userKey)userKey.onchange=()=>{chatState.experimentUserKey=userKey.value.trim()};syncExpUserField();paintExpHint(null);if($('#resumeChat'))$('#resumeChat').onclick=resumePlayground;syncResumeButton();if($('#clearChat'))$('#clearChat').onclick=resetChat;input&&input.focus()}if(page==='workflows') bindWorkflowCanvas()}
 function syncExpUserField(){
   const wrap=$('#runUserWrap');
@@ -3238,6 +3248,41 @@ async function deleteKnowledge(id){if(!confirm('删除知识库？非空库会�
 async function deleteDocument(baseId,docId){if(!confirm('删除这份文档和它的分块？'))return; try{await api('/api/knowledge/'+baseId+'/documents/'+docId,{method:'DELETE'}); kbState.docId=''; render('knowledge')}catch(err){toast(apiError(err)||'删除失败')}}
 async function reindexDocument(baseId,docId){const strategy=$('#kbStrategy')?$('#kbStrategy').value:''; try{await api('/api/knowledge/'+baseId+'/documents/'+docId+'/reindex',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(strategy?{strategy}:{})}); toast('已开始重建'); render('knowledge')}catch(err){toast(apiError(err)||'重建失败')}}
 async function searchKnowledge(id){const query=$('#kbQuery')?$('#kbQuery').value:''; try{const data=await api('/api/knowledge/'+id+'/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})}); const hits=(data.hits||[]).map(hit=>`<article class="session-message"><header><b>${escapeHtml(hit.filename||'')} / ${escapeHtml(hit.heading||'')}</b><span>名次 ${hit.rank}${hit.rerank_score==null?'':' · 重排 '+Number(hit.rerank_score).toFixed(3)}</span></header><p>${escapeHtml(hit.content||'')}</p>${hit.context&&hit.context!==hit.content?`<p style="color:#667085">${escapeHtml(hit.context)}</p>`:''}</article>`).join(''); $('#kbHits').innerHTML=`<p>${escapeHtml(data.vector_store||'')} · ${escapeHtml(data.retriever||'')} · ${escapeHtml(data.reranker||'none')}</p>${hits||'<p>没有命中</p>'}`}catch(err){toast(apiError(err)||'检索失败')}}
+const failureState={page:0,size:50,query:'',poll:0};
+function failureDate(value){if(!value)return '—';const parsed=new Date(value);return Number.isNaN(parsed.getTime())?'—':parsed.toLocaleString('zh-CN')}
+function failureEntry(value){return {PLAYGROUND:'调试台',AGENT_INVOKE:'Agent 调用',WORKFLOW_DEBUG:'工作流调试',WORKFLOW_INVOKE:'工作流调用',A2A:'A2A'}[value]||value||'—'}
+async function failureCases(){
+  const [data,agents]=await Promise.all([api('/api/failure-cases'+failureState.query),api('/api/agents')]);
+  const rows=(data.items||[]).map(item=>`<tr class="failure-row" data-case-id="${escapeHtml(item.case_id)}" tabindex="0"><td class="mono">${escapeHtml(item.case_id)}</td><td>${escapeHtml(failureEntry(item.entry_point))}</td><td><b>${escapeHtml(item.agent_name||'')}</b><br><small>${escapeHtml(item.agent_id)}</small></td><td>${pill(item.status)}</td><td><b>${escapeHtml(item.failure_step||'—')}</b><br><small>${escapeHtml(item.failure_category||'')}</small></td><td>${escapeHtml(item.error_summary||'—')}</td><td>${failureDate(item.failed_at)}</td><td><button type="button" class="btn ghost failure-open" data-case-id="${escapeHtml(item.case_id)}">查看</button></td></tr>`).join('');
+  const agentOptions=agents.map(agent=>`<option value="${Number(agent.id)}">${escapeHtml(agent.name)}</option>`).join('');
+  return `${head('failure-cases',pageTools())}<div class="failure-metrics"><article><small>失败率</small><b>${Number(data.summary?.failure_rate||0).toFixed(1)}%</b></article><article><small>失败原始执行</small><b>${Number(data.summary?.failed_original_executions||0)}</b></article><article><small>已结束原始执行</small><b>${Number(data.summary?.completed_original_executions||0)}</b></article></div><section class="panel"><form id="failureFilters" class="failure-filters"><label>开始时间<input type="datetime-local" name="from"></label><label>结束时间<input type="datetime-local" name="to"></label><label>请求入口<select name="entry_point" class="select"><option value="">全部入口</option><option value="PLAYGROUND">调试台</option><option value="AGENT_INVOKE">Agent 调用</option><option value="WORKFLOW_DEBUG">工作流调试</option><option value="WORKFLOW_INVOKE">工作流调用</option><option value="A2A">A2A</option></select></label><label>Agent<select name="agent_id" class="select"><option value="">全部 Agent</option>${agentOptions}</select></label><label>状态<select name="status" class="select"><option value="">全部状态</option><option value="RESUMABLE">可重拾</option><option value="RECOVERING">重拾中</option><option value="MANUAL_REQUIRED">需人工处理</option><option value="RECOVERED">重拾成功</option></select></label><button class="btn primary" type="submit">查询</button></form><div class="failure-table"><table class="data-table"><thead><tr><th>Case</th><th>入口</th><th>Agent</th><th>状态</th><th>失败步骤</th><th>失败原因</th><th>时间</th><th>操作</th></tr></thead><tbody>${rows||'<tr><td colspan="8" class="session-empty">当前筛选条件下没有失败 Case</td></tr>'}</tbody></table></div><div class="failure-pages"><button class="btn ghost" id="failurePrev" ${data.page<=0?'disabled':''}>上一页</button><span>第 ${Number(data.page)+1} 页 · 共 ${Number(data.total||0)} 条</span><button class="btn ghost" id="failureNext" ${(Number(data.page)+1)*Number(data.size)>=Number(data.total)?'disabled':''}>下一页</button></div></section>`;
+}
+function failureAttemptMarkup(attempt){return `<li><b>${escapeHtml(statusText[attempt.status]||attempt.status)}</b><span>${failureDate(attempt.started_at||attempt.finished_at)}</span><p>${escapeHtml(attempt.failure_category||'')}${attempt.error_summary?' · '+escapeHtml(attempt.error_summary):''}</p>${attempt.forced?`<small>管理员强制：${escapeHtml(attempt.force_reason||'')}</small>`:''}</li>`}
+function failureDetailMarkup(data){
+  const item=data.case||{};const cp=data.checkpoint||{};const actions=data.actions||{};
+  const attempts=(data.attempts||[]).map(failureAttemptMarkup).join('')||'<li>尚无重拾尝试</li>';
+  const recover=actions.can_recover?`<button class="btn primary" id="failureRecover" data-case-id="${escapeHtml(item.case_id)}">从失败点重拾</button>`:'';
+  const force=actions.can_force_recover?`<button class="btn ghost danger" id="failureForceRecover" data-case-id="${escapeHtml(item.case_id)}">管理员强制重拾</button>`:'';
+  let hint='';
+  if(!recover&&!force){
+    if(item.status==='RECOVERED')hint='该 Case 已重拾成功，不能再次重拾';
+    else if(item.status==='RECOVERING')hint='正在重拾，请等待当前任务结束';
+    else if(item.status==='MANUAL_REQUIRED')hint='检查点副作用未确认，只有租户管理员可以强制重拾';
+    else if(item.status==='RESUMABLE')hint='当前账号没有重拾执行权限，需要 session:write';
+    else hint='当前状态不可重拾';
+  }
+  return `<section class="failure-detail"><header><div><small>FAILURE CASE</small><h2>${escapeHtml(item.case_id||'')}</h2><p>${pill(item.status)}</p></div><div class="failure-detail-actions">${recover}${force}<button type="button" class="close" id="closeFailureDetail">×</button></div></header>${hint?`<p class="failure-action-hint">${escapeHtml(hint)}</p>`:''}<div class="failure-facts"><span><small>入口</small><b>${escapeHtml(failureEntry(item.entry_point))}</b></span><span><small>Agent</small><b>${escapeHtml(item.agent_name||'')}</b></span><span><small>失败步骤</small><b>${escapeHtml(item.failure_step||'—')}</b></span><span><small>失败类别</small><b>${escapeHtml(item.failure_category||'—')}</b></span></div><section><h3>失败原因</h3><p>${escapeHtml(item.error_summary||'—')}</p></section><section><h3>重拾前原始入参（只读、已脱敏）</h3><pre>${escapeHtml(JSON.stringify(data.original_request??{},null,2))}</pre><small class="mono">SHA-256 ${escapeHtml(data.request_hash||'')}</small></section><section><h3>检查点</h3><p>最近安全步骤：${escapeHtml(cp.latest_safe_step||'—')} · 下一步：${escapeHtml(cp.pending_step||'—')} · ${escapeHtml(cp.side_effect_semantics||'')}</p><p>已确认步骤：${escapeHtml((cp.completed_steps||[]).join(' → ')||'无')}</p></section><section><h3>历次重拾</h3><ul class="failure-attempts">${attempts}</ul></section></section>`;
+}
+async function openFailureCase(caseId){
+  clearInterval(failureState.poll);failureState.poll=0;
+  try{const data=await api('/api/failure-cases/'+encodeURIComponent(caseId));const modal=$('#sessionModal');$('#sessionDetail').innerHTML=failureDetailMarkup(data);modal.showModal();$('#closeFailureDetail').onclick=closeFailureDetail;if($('#failureRecover'))$('#failureRecover').onclick=()=>recoverFailure(caseId,false);if($('#failureForceRecover'))$('#failureForceRecover').onclick=()=>recoverFailure(caseId,true)}catch(err){toast(apiError(err))}
+}
+function closeFailureDetail(){clearInterval(failureState.poll);failureState.poll=0;const modal=$('#sessionModal');if(modal&&modal.open)modal.close();if($('#sessionDetail'))$('#sessionDetail').innerHTML=''}
+async function recoverFailure(caseId,force){
+  let reason='';if(force){reason=prompt('请填写强制重拾理由。该操作可能重复外部副作用。')||'';if(!reason.trim())return;if(!confirm('确认已知晓重复副作用风险并继续？'))return}else if(!confirm('将使用原入参和失败时配置，从最近安全检查点继续。确认重拾？'))return;
+  try{const result=await api('/api/failure-cases/'+encodeURIComponent(caseId)+'/recover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({force,force_reason:reason,risk_acknowledged:force})});toast(result.status==='SUCCEEDED'?'重拾成功':'任务已提交，后台继续执行');if(result.task_id&&result.status!=='SUCCEEDED')pollFailureTask(caseId,result.task_id);else await openFailureCase(caseId);await refreshPage()}catch(err){toast(apiError(err))}
+}
+function pollFailureTask(caseId,taskId){clearInterval(failureState.poll);failureState.poll=setInterval(async()=>{try{const task=await api('/api/recovery-tasks/'+encodeURIComponent(taskId));if(['SUCCEEDED','FAILED','TIMED_OUT','MANUAL_REQUIRED'].includes(task.status)){clearInterval(failureState.poll);failureState.poll=0;toast('重拾任务：'+(statusText[task.status]||task.status));await openFailureCase(caseId);await refreshPage()}}catch(err){clearInterval(failureState.poll);failureState.poll=0;toast(apiError(err))}},1200)}
 let renderSeq=0;
 async function render(page,param=''){
   if(page==='traces')page='studio';
@@ -3256,6 +3301,7 @@ async function render(page,param=''){
     if(page==='dashboard')html=await dashboard();
     else if(page==='memories')html=await memoriesPage();
     else if(page==='sessions')html=await sessions();
+    else if(page==='failure-cases')html=await failureCases();
     else if(page==='studio')html=await studio();
     else if(page==='evaluations')html=await evaluations();
     else if(page==='experiments')html=await experiments();

@@ -14,6 +14,11 @@ import com.agentforge.controlplane.runtime.ExecutionContext;
 import com.agentforge.controlplane.util.Jsons;
 import com.agentforge.controlplane.web.ApiException;
 import com.agentforge.controlplane.workspace.WorkspaceStore;
+import com.agentforge.controlplane.recovery.ExecutionRecorder;
+import com.agentforge.controlplane.recovery.CheckpointService;
+import com.agentforge.controlplane.recovery.RecoveryTrace;
+import com.agentforge.controlplane.domain.ExecutionRecord;
+import com.agentforge.controlplane.domain.ExecutionCheckpoint;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -37,10 +42,13 @@ public class BoundAgentRuntime {
     private final MemoryService memories;
     private final MemorySummarizer summarizer;
     private final AgentReleaseService releases;
+    private final ExecutionRecorder executionRecorder;
+    private final CheckpointService checkpointService;
 
     public BoundAgentRuntime(ModelConfigRepository models, ObjectProvider<AgentScopeRuntime> runtime,
                              BrowserRuntime browser, WorkspaceStore workspaces, HttpAgentRuntime httpAgents,
-                             MemoryService memories, MemorySummarizer summarizer, AgentReleaseService releases) {
+                             MemoryService memories, MemorySummarizer summarizer, AgentReleaseService releases,
+                             ExecutionRecorder executionRecorder, CheckpointService checkpointService) {
         this.models = models;
         this.runtime = runtime;
         this.browser = browser;
@@ -49,6 +57,8 @@ public class BoundAgentRuntime {
         this.memories = memories;
         this.summarizer = summarizer;
         this.releases = releases;
+        this.executionRecorder = executionRecorder;
+        this.checkpointService = checkpointService;
     }
 
     /** 调试台 / 对外接口共用。HTTP 接入的 Agent 直接打到对方平台。 */
@@ -61,6 +71,40 @@ public class BoundAgentRuntime {
      * @param recordExchange 为 true 时写入会话记忆。编排里的 A2A 跳转只取这一轮回复，不另记一条会话
      */
     public ChatReply invoke(Agent target, String message, String sessionId, boolean pinRelease, boolean recordExchange) {
+        return invoke(target, message, sessionId, pinRelease, recordExchange, ExecutionRecord.EntryPoint.AGENT_INVOKE);
+    }
+
+    public ChatReply invoke(Agent target, String message, String sessionId, boolean pinRelease, boolean recordExchange,
+                            ExecutionRecord.EntryPoint entryPoint) {
+        CurrentUser caller = CurrentUserHolder.get();
+        String sid = sessionId == null || sessionId.isBlank()
+                ? "invoke_" + WorkspaceStore.newTraceId() : sessionId.strip();
+        ExecutionRecord execution = null;
+        if (recordExchange && caller != null && target != null) {
+            execution = executionRecorder.start(caller, target, null, entryPoint, sid,
+                    Jsons.ordered("message", message, "session_id", sid, "agent_id", target.getId()),
+                    ExecutionRecorder.agentConfig(target), ExecutionRecorder.credentialRefs(target));
+        }
+        try {
+            ChatReply reply = execution == null
+                    ? invokeUntracked(target, message, sid, pinRelease, recordExchange)
+                    : RecoveryTrace.call(new RecoveryTrace.Binding(execution.getTenantId(), execution.getId(), null),
+                    () -> invokeUntracked(target, message, sid, pinRelease, recordExchange));
+            if (execution != null) {
+                if ("error".equals(reply.mode())) {
+                    recordFailure(execution, target, sid, new IllegalStateException("Agent 执行失败"));
+                } else {
+                    executionRecorder.succeed(execution.getId(), reply.traceId());
+                }
+            }
+            return reply;
+        } catch (RuntimeException error) {
+            if (execution != null) recordFailure(execution, target, sid, error);
+            throw error;
+        }
+    }
+
+    private ChatReply invokeUntracked(Agent target, String message, String sessionId, boolean pinRelease, boolean recordExchange) {
         if (target == null) {
             throw ApiException.unprocessable("Agent 不存在");
         }
@@ -110,6 +154,19 @@ public class BoundAgentRuntime {
                     model.getName(), reply.traceId(), reply.spans(), reply.usage(), 1, true);
         }
         return reply;
+    }
+
+    private void recordFailure(ExecutionRecord execution, Agent agent, String sessionId, RuntimeException error) {
+        Map<String, Object> state = workspaces.loadCheckpoint(agent, sessionId);
+        String step = state == null ? "execution.start" : Jsons.text(state.get("next"));
+        if (state != null && checkpointService.history(execution.getTenantId(), execution.getId()).isEmpty()) {
+            boolean pending = !Jsons.mapList(state.get("pending_tools")).isEmpty();
+            checkpointService.append(execution.getTenantId(), execution.getId(), null,
+                    step.isBlank() ? "llm" : step, step, ExecutionCheckpoint.Outcome.FAILED, !pending,
+                    pending ? ExecutionCheckpoint.SideEffectSemantics.UNKNOWN : ExecutionCheckpoint.SideEffectSemantics.NONE,
+                    null, state, "EXECUTION_FAILED", "执行失败");
+        }
+        executionRecorder.fail(execution.getId(), null, step.isBlank() ? "execution.start" : step, error);
     }
 
     public Map<String, Object> interfaceCard(Agent agent) {

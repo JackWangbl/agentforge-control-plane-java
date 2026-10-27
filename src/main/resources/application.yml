@@ -63,6 +63,23 @@ agentforge:
   sandbox-egress-network: ${SANDBOX_EGRESS_NETWORK:}
   browser-allow-private-network: ${BROWSER_ALLOW_PRIVATE_NETWORK:false}
   eval-worker: ${EVAL_WORKER:true}
+  recovery:
+    sync-wait-ms: ${RECOVERY_SYNC_WAIT_MS:3000}
+    step-timeout-ms: ${RECOVERY_STEP_TIMEOUT_MS:300000}
+    overall-timeout-ms: ${RECOVERY_OVERALL_TIMEOUT_MS:1800000}
+    per-agent-concurrency: ${RECOVERY_PER_AGENT_CONCURRENCY:2}
+    per-tenant-concurrency: ${RECOVERY_PER_TENANT_CONCURRENCY:10}
+    tenant-queue-capacity: ${RECOVERY_TENANT_QUEUE_CAPACITY:100}
+    worker-threads: ${RECOVERY_WORKER_THREADS:4}
+    poll-interval-ms: ${RECOVERY_POLL_INTERVAL_MS:500}
+    lease-ms: ${RECOVERY_LEASE_MS:30000}
+  http-retry:
+    total-attempts: ${HTTP_RETRY_TOTAL_ATTEMPTS:3}
+    initial-delay-ms: ${HTTP_RETRY_INITIAL_DELAY_MS:200}
+    multiplier: ${HTTP_RETRY_MULTIPLIER:2.0}
+    maximum-delay-ms: ${HTTP_RETRY_MAXIMUM_DELAY_MS:2000}
+    jitter: ${HTTP_RETRY_JITTER:0.20}
+    maximum-retry-after-ms: ${HTTP_RETRY_MAXIMUM_RETRY_AFTER_MS:5000}
 
 logging:
   level:

@@ -25,6 +25,10 @@ public class Workflow extends TenantOwnedEntity {
     @Column(name = "graph", columnDefinition = "json")
     private Map<String, Object> graph = new LinkedHashMap<>();
 
+    @Convert(converter = JsonConverters.MapConverter.class)
+    @Column(name = "recovery_policy", columnDefinition = "json")
+    private Map<String, Object> recoveryPolicy = new LinkedHashMap<>();
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }
@@ -34,5 +38,9 @@ public class Workflow extends TenantOwnedEntity {
     public Map<String, Object> getGraph() { return graph; }
     public void setGraph(Map<String, Object> graph) {
         this.graph = graph == null ? new LinkedHashMap<>() : graph;
+    }
+    public Map<String, Object> getRecoveryPolicy() { return recoveryPolicy == null ? Map.of() : recoveryPolicy; }
+    public void setRecoveryPolicy(Map<String, Object> value) {
+        recoveryPolicy = value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
     }
 }

@@ -19,6 +19,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.time.Instant;
+import com.agentforge.controlplane.runtime.http.ThirdPartyHttpExecutor;
+import com.agentforge.controlplane.runtime.http.HttpRequestSemantics;
+import com.agentforge.controlplane.runtime.http.RetryPolicy;
 
 /**
  * 把其他平台的 Agent 接到本平台：勾选 HTTP 接口后，这个 Agent 就是对方本身。
@@ -33,13 +37,11 @@ public class HttpAgentRuntime {
     private static final List<String> PROTOCOLS = List.of("generic", "openai", "agentforge", "dify");
 
     private final HttpAgentRepository httpAgents;
-    private final HttpClient http = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    private final ThirdPartyHttpExecutor httpExecutor;
 
-    public HttpAgentRuntime(HttpAgentRepository httpAgents) {
+    public HttpAgentRuntime(HttpAgentRepository httpAgents, ThirdPartyHttpExecutor httpExecutor) {
         this.httpAgents = httpAgents;
+        this.httpExecutor = httpExecutor;
     }
 
     public static String toolName(Long id) {
@@ -337,7 +339,9 @@ public class HttpAgentRuntime {
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(Jsons.json(body)));
         applyHeaders(builder, target.getHeaders());
-        HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpExecutor.execute(builder.build(), HttpResponse.BodyHandlers.ofString(),
+                HttpRequestSemantics.SIDE_EFFECTING_OR_UNKNOWN, RetryPolicy.defaults(),
+                Instant.now().plusSeconds(timeout), "http-agent", hostOf(target.getEndpoint()));
         String raw = response.body() == null ? "" : response.body();
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             String detail = raw.length() > 400 ? raw.substring(0, 400) + "…" : raw;

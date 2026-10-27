@@ -185,7 +185,128 @@ public class SchemaMigrator implements ApplicationRunner {
                 log.info("已为 agents 表补齐 a2a_card 列");
             }
             createKnowledgeTables(conn);
+            createRecoveryTables(conn);
         }
+    }
+
+    private void createRecoveryTables(Connection conn) throws Exception {
+        if (!hasColumn(conn, "agents", "recovery_policy")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE agents ADD COLUMN recovery_policy JSON NULL");
+            }
+        }
+        if (!hasColumn(conn, "workflows", "recovery_policy")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE workflows ADD COLUMN recovery_policy JSON NULL");
+            }
+        }
+        if (!hasTable(conn, "execution_records")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("""
+                        CREATE TABLE execution_records (
+                          id BIGINT NOT NULL AUTO_INCREMENT, execution_key VARCHAR(80) NOT NULL,
+                          tenant_id BIGINT NOT NULL, owner_id BIGINT NULL, execution_kind VARCHAR(20) NOT NULL,
+                          entry_point VARCHAR(32) NOT NULL, agent_id BIGINT NOT NULL, agent_name VARCHAR(80) NOT NULL,
+                          workflow_id BIGINT NULL, session_id VARCHAR(160) NULL, trace_id VARCHAR(160) NULL,
+                          parent_execution_id BIGINT NULL, request_snapshot_json LONGTEXT NOT NULL,
+                          request_hash CHAR(64) NOT NULL, config_snapshot_json LONGTEXT NOT NULL,
+                          config_hash CHAR(64) NOT NULL, credential_refs_json JSON NULL, status VARCHAR(24) NOT NULL,
+                          failure_category VARCHAR(40) NULL, failure_step VARCHAR(120) NULL,
+                          error_summary VARCHAR(500) NULL, started_at DATETIME(6) NOT NULL,
+                          finished_at DATETIME(6) NULL, created_at DATETIME(6) NOT NULL, updated_at DATETIME(6) NOT NULL,
+                          PRIMARY KEY (id), UNIQUE KEY uk_execution_records_key (execution_key),
+                          KEY idx_execution_rate (tenant_id, execution_kind, status, finished_at),
+                          KEY idx_execution_agent (tenant_id, agent_id, started_at),
+                          KEY idx_execution_entry (tenant_id, entry_point, started_at),
+                          KEY idx_execution_trace (trace_id), KEY idx_execution_session (session_id),
+                          KEY idx_execution_parent (parent_execution_id)
+                        )
+                        """);
+            }
+        }
+        if (!hasTable(conn, "failure_cases")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("""
+                        CREATE TABLE failure_cases (
+                          id BIGINT NOT NULL AUTO_INCREMENT, case_key VARCHAR(80) NOT NULL,
+                          tenant_id BIGINT NOT NULL, owner_id BIGINT NULL, execution_record_id BIGINT NOT NULL,
+                          status VARCHAR(24) NOT NULL, resumable TINYINT(1) NOT NULL,
+                          latest_checkpoint_id BIGINT NULL, failure_category VARCHAR(40) NULL,
+                          failure_step VARCHAR(120) NULL, error_summary VARCHAR(500) NULL,
+                          recovered_execution_id BIGINT NULL, recovered_attempt_id BIGINT NULL,
+                          version BIGINT NOT NULL DEFAULT 0, created_at DATETIME(6) NOT NULL, updated_at DATETIME(6) NOT NULL,
+                          PRIMARY KEY (id), UNIQUE KEY uk_failure_cases_key (case_key),
+                          UNIQUE KEY uk_failure_cases_execution (execution_record_id),
+                          KEY idx_failure_cases_status (tenant_id, status, updated_at),
+                          CONSTRAINT fk_failure_execution FOREIGN KEY (execution_record_id) REFERENCES execution_records(id)
+                        )
+                        """);
+            }
+        }
+        if (!hasTable(conn, "execution_checkpoints")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("""
+                        CREATE TABLE execution_checkpoints (
+                          id BIGINT NOT NULL AUTO_INCREMENT, checkpoint_key VARCHAR(80) NOT NULL,
+                          tenant_id BIGINT NOT NULL, execution_record_id BIGINT NOT NULL, failure_case_id BIGINT NULL,
+                          sequence_no INT NOT NULL, step_key VARCHAR(120) NOT NULL, next_step_key VARCHAR(120) NULL,
+                          outcome VARCHAR(24) NOT NULL, safe_to_resume TINYINT(1) NOT NULL,
+                          side_effect_semantics VARCHAR(32) NOT NULL, idempotency_key VARCHAR(160) NULL,
+                          state_snapshot_json LONGTEXT NOT NULL, state_hash CHAR(64) NOT NULL,
+                          error_category VARCHAR(40) NULL, error_summary VARCHAR(500) NULL, created_at DATETIME(6) NOT NULL,
+                          PRIMARY KEY (id), UNIQUE KEY uk_checkpoint_key (checkpoint_key),
+                          UNIQUE KEY uk_checkpoint_sequence (execution_record_id, sequence_no),
+                          KEY idx_checkpoint_case (failure_case_id, sequence_no),
+                          CONSTRAINT fk_checkpoint_execution FOREIGN KEY (execution_record_id) REFERENCES execution_records(id),
+                          CONSTRAINT fk_checkpoint_case FOREIGN KEY (failure_case_id) REFERENCES failure_cases(id)
+                        )
+                        """);
+            }
+        }
+        if (!hasTable(conn, "recovery_attempts")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("""
+                        CREATE TABLE recovery_attempts (
+                          id BIGINT NOT NULL AUTO_INCREMENT, attempt_key VARCHAR(80) NOT NULL,
+                          tenant_id BIGINT NOT NULL, failure_case_id BIGINT NOT NULL, initiated_by BIGINT NOT NULL,
+                          forced TINYINT(1) NOT NULL, force_reason VARCHAR(500) NULL,
+                          risk_acknowledged_at DATETIME(6) NULL, start_checkpoint_id BIGINT NOT NULL,
+                          status VARCHAR(24) NOT NULL, sync_wait_ms BIGINT NOT NULL, step_timeout_ms BIGINT NOT NULL,
+                          overall_timeout_ms BIGINT NOT NULL, retry_policy_json JSON NOT NULL,
+                          concurrency_policy_json JSON NOT NULL, result_execution_id BIGINT NULL,
+                          result_checkpoint_id BIGINT NULL, failure_category VARCHAR(40) NULL,
+                          error_summary VARCHAR(500) NULL, started_at DATETIME(6) NULL, finished_at DATETIME(6) NULL,
+                          created_at DATETIME(6) NOT NULL, updated_at DATETIME(6) NOT NULL,
+                          PRIMARY KEY (id), UNIQUE KEY uk_recovery_attempt_key (attempt_key),
+                          KEY idx_recovery_attempt_case (tenant_id, failure_case_id, created_at),
+                          CONSTRAINT fk_attempt_case FOREIGN KEY (failure_case_id) REFERENCES failure_cases(id),
+                          CONSTRAINT fk_attempt_checkpoint FOREIGN KEY (start_checkpoint_id) REFERENCES execution_checkpoints(id)
+                        )
+                        """);
+            }
+        }
+        if (!hasTable(conn, "recovery_tasks")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("""
+                        CREATE TABLE recovery_tasks (
+                          id BIGINT NOT NULL AUTO_INCREMENT, task_key VARCHAR(80) NOT NULL, attempt_id BIGINT NOT NULL,
+                          tenant_id BIGINT NOT NULL, agent_id BIGINT NOT NULL, status VARCHAR(24) NOT NULL,
+                          queue_sequence BIGINT NOT NULL, claimed_by VARCHAR(120) NULL, lease_until DATETIME(6) NULL,
+                          heartbeat_at DATETIME(6) NULL, available_at DATETIME(6) NOT NULL,
+                          started_at DATETIME(6) NULL, finished_at DATETIME(6) NULL,
+                          created_at DATETIME(6) NOT NULL, updated_at DATETIME(6) NOT NULL,
+                          PRIMARY KEY (id), UNIQUE KEY uk_recovery_task_key (task_key),
+                          UNIQUE KEY uk_recovery_task_attempt (attempt_id),
+                          KEY idx_recovery_claim (status, available_at, queue_sequence),
+                          KEY idx_recovery_tenant_status (tenant_id, status),
+                          KEY idx_recovery_agent_status (tenant_id, agent_id, status),
+                          KEY idx_recovery_lease (status, lease_until),
+                          CONSTRAINT fk_task_attempt FOREIGN KEY (attempt_id) REFERENCES recovery_attempts(id)
+                        )
+                        """);
+            }
+        }
+        log.info("Failure Case 恢复表结构已就绪");
     }
 
     private void createKnowledgeTables(Connection conn) throws Exception {

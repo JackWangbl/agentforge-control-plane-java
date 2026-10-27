@@ -15,6 +15,11 @@ import com.agentforge.controlplane.playground.PlaygroundService;
 import com.agentforge.controlplane.repo.ConversationRepository;
 import com.agentforge.controlplane.repo.ModelConfigRepository;
 import com.agentforge.controlplane.util.Jsons;
+import com.agentforge.controlplane.recovery.CheckpointService;
+import com.agentforge.controlplane.recovery.ExecutionRecorder;
+import com.agentforge.controlplane.recovery.RecoveryTrace;
+import com.agentforge.controlplane.domain.ExecutionCheckpoint;
+import com.agentforge.controlplane.domain.ExecutionRecord;
 import com.agentforge.controlplane.web.ApiException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -48,6 +53,8 @@ public class MultiAgentDebugService {
     private final MemorySummarizer summarizer;
     private final AgentReleaseService releases;
     private final A2aGateway a2a;
+    private final ExecutionRecorder executionRecorder;
+    private final CheckpointService checkpointService;
     private final ThreadLocal<Boolean> usePublishedRelease = ThreadLocal.withInitial(() -> Boolean.FALSE);
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
     private final ObjectMapper json = new ObjectMapper();
@@ -55,7 +62,8 @@ public class MultiAgentDebugService {
     public MultiAgentDebugService(ResourceAccessService access, PlaygroundService playground,
                                   ConversationRepository conversations, ModelConfigRepository models,
                                   HttpAgentRuntime httpAgents, MemoryService memories, MemorySummarizer summarizer,
-                                  AgentReleaseService releases, A2aGateway a2a) {
+                                  AgentReleaseService releases, A2aGateway a2a, ExecutionRecorder executionRecorder,
+                                  CheckpointService checkpointService) {
         this.access = access;
         this.playground = playground;
         this.conversations = conversations;
@@ -65,6 +73,8 @@ public class MultiAgentDebugService {
         this.summarizer = summarizer;
         this.releases = releases;
         this.a2a = a2a;
+        this.executionRecorder = executionRecorder;
+        this.checkpointService = checkpointService;
     }
 
     @Transactional
@@ -125,6 +135,36 @@ public class MultiAgentDebugService {
         MultiAgentGraphs.Graph graph = MultiAgentGraphs.read(workflow.getGraph());
         MultiAgentGraphs.requirePublishable(graph, agentId -> agentVisible(user, agentId));
         String sid = sessionId == null || sessionId.isBlank() ? "orch_" + UUID.randomUUID().toString().substring(0, 8) : sessionId.strip();
+        Agent primary = primaryAgent(user, graph);
+        if (primary == null) {
+            return runTracked(user, workflow, graph, message, sid, focusNodeId, endpoint);
+        }
+        ExecutionRecord.EntryPoint entryPoint = endpoint.contains("/debug")
+                ? ExecutionRecord.EntryPoint.WORKFLOW_DEBUG : ExecutionRecord.EntryPoint.WORKFLOW_INVOKE;
+        ExecutionRecord execution = executionRecorder.start(user, primary, workflow.getId(), entryPoint, sid,
+                Jsons.ordered("message", message, "session_id", sid, "workflow_id", workflow.getId()),
+                Jsons.ordered("workflow_id", workflow.getId(), "workflow_name", workflow.getName(),
+                        "pattern", graph.pattern(), "graph", workflow.getGraph(),
+                        "agent", ExecutionRecorder.agentConfig(primary)),
+                ExecutionRecorder.credentialRefs(primary));
+        try {
+            Map<String, Object> result = RecoveryTrace.call(
+                    new RecoveryTrace.Binding(execution.getTenantId(), execution.getId(), null),
+                    () -> runTracked(user, workflow, graph, message, sid, focusNodeId, endpoint));
+            if ("error".equals(String.valueOf(result.get("mode")))) {
+                failWorkflow(execution, new IllegalStateException("编排执行失败"));
+            } else {
+                executionRecorder.succeed(execution.getId(), Jsons.text(result.get("trace_id")));
+            }
+            return result;
+        } catch (RuntimeException error) {
+            failWorkflow(execution, error);
+            throw error;
+        }
+    }
+
+    private Map<String, Object> runTracked(CurrentUser user, Workflow workflow, MultiAgentGraphs.Graph graph,
+                                           String message, String sid, String focusNodeId, String endpoint) {
         Conversation conversation = conversations.findBySessionId(sid).orElse(null);
         if (conversation != null && conversation.getTenantId() != null && !conversation.getTenantId().equals(user.getTenantId())) {
             throw ApiException.conflict("这个会话属于其他租户");
@@ -655,6 +695,34 @@ public class MultiAgentDebugService {
                         "开始节点没有连出智能体")),
                 "route", Jsons.ordered("jump", false, "handoff", false, "stayed", false, "fallback", true,
                         "detail", "开始节点没有连出智能体"));
+    }
+
+    private Agent primaryAgent(CurrentUser user, MultiAgentGraphs.Graph graph) {
+        if (graph.start() == null) {
+            return null;
+        }
+        List<MultiAgentGraphs.Node> roots = graph.outgoingAgents(graph.start().id());
+        if (roots.isEmpty() || roots.get(0).agentId() == null) {
+            return null;
+        }
+        return access.getRow(user, ResourceKind.AGENT, roots.get(0).agentId());
+    }
+
+    private void failWorkflow(ExecutionRecord execution, RuntimeException error) {
+        String step = "execution.start";
+        List<ExecutionCheckpoint> history = checkpointService.history(execution.getTenantId(), execution.getId());
+        if (history.isEmpty()) {
+            checkpointService.append(execution.getTenantId(), execution.getId(), null,
+                    step, step, ExecutionCheckpoint.Outcome.FAILED, true,
+                    ExecutionCheckpoint.SideEffectSemantics.NONE, null,
+                    Jsons.ordered("session_id", execution.getSessionId()),
+                    "EXECUTION_FAILED", "执行失败");
+        } else {
+            ExecutionCheckpoint latest = history.get(history.size() - 1);
+            step = latest.getNextStepKey() == null || latest.getNextStepKey().isBlank()
+                    ? latest.getStepKey() : latest.getNextStepKey();
+        }
+        executionRecorder.fail(execution.getId(), null, step, error);
     }
 
     private boolean agentVisible(CurrentUser user, long agentId) {

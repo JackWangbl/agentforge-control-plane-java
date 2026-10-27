@@ -19,6 +19,76 @@ public class AppSettings {
     private String sandboxEgressNetwork = "";
     private boolean browserAllowPrivateNetwork = false;
     private boolean evalWorker = true;
+    private Recovery recovery = new Recovery();
+    private HttpRetry httpRetry = new HttpRetry();
+
+    public static class Recovery {
+        private long syncWaitMs = 3000;
+        private long stepTimeoutMs = 300_000;
+        private long overallTimeoutMs = 1_800_000;
+        private int perAgentConcurrency = 2;
+        private int perTenantConcurrency = 10;
+        private int tenantQueueCapacity = 100;
+        private int workerThreads = 4;
+        private long pollIntervalMs = 500;
+        private long leaseMs = 30_000;
+
+        public long getSyncWaitMs() { return syncWaitMs; }
+        public void setSyncWaitMs(long value) { syncWaitMs = bounded("sync-wait-ms", value, 0, 30_000); }
+        public long getStepTimeoutMs() { return stepTimeoutMs; }
+        public void setStepTimeoutMs(long value) { stepTimeoutMs = bounded("step-timeout-ms", value, 1_000, 3_600_000); }
+        public long getOverallTimeoutMs() { return overallTimeoutMs; }
+        public void setOverallTimeoutMs(long value) { overallTimeoutMs = bounded("overall-timeout-ms", value, 1_000, 86_400_000); }
+        public int getPerAgentConcurrency() { return perAgentConcurrency; }
+        public void setPerAgentConcurrency(int value) { perAgentConcurrency = boundedInt("per-agent-concurrency", value, 1, 32); }
+        public int getPerTenantConcurrency() { return perTenantConcurrency; }
+        public void setPerTenantConcurrency(int value) { perTenantConcurrency = boundedInt("per-tenant-concurrency", value, 1, 128); }
+        public int getTenantQueueCapacity() { return tenantQueueCapacity; }
+        public void setTenantQueueCapacity(int value) { tenantQueueCapacity = boundedInt("tenant-queue-capacity", value, 1, 10_000); }
+        public int getWorkerThreads() { return workerThreads; }
+        public void setWorkerThreads(int value) { workerThreads = boundedInt("worker-threads", value, 1, 64); }
+        public long getPollIntervalMs() { return pollIntervalMs; }
+        public void setPollIntervalMs(long value) { pollIntervalMs = bounded("poll-interval-ms", value, 50, 60_000); }
+        public long getLeaseMs() { return leaseMs; }
+        public void setLeaseMs(long value) { leaseMs = bounded("lease-ms", value, 1_000, 600_000); }
+    }
+
+    public static class HttpRetry {
+        private int totalAttempts = 3;
+        private long initialDelayMs = 200;
+        private double multiplier = 2.0;
+        private long maximumDelayMs = 2000;
+        private double jitter = 0.20;
+        private long maximumRetryAfterMs = 5000;
+
+        public int getTotalAttempts() { return totalAttempts; }
+        public void setTotalAttempts(int value) { totalAttempts = boundedInt("total-attempts", value, 1, 5); }
+        public long getInitialDelayMs() { return initialDelayMs; }
+        public void setInitialDelayMs(long value) { initialDelayMs = bounded("initial-delay-ms", value, 0, 5_000); }
+        public double getMultiplier() { return multiplier; }
+        public void setMultiplier(double value) { multiplier = boundedDouble("multiplier", value, 1.0, 4.0); }
+        public long getMaximumDelayMs() { return maximumDelayMs; }
+        public void setMaximumDelayMs(long value) { maximumDelayMs = bounded("maximum-delay-ms", value, 0, 5_000); }
+        public double getJitter() { return jitter; }
+        public void setJitter(double value) { jitter = boundedDouble("jitter", value, 0, 0.5); }
+        public long getMaximumRetryAfterMs() { return maximumRetryAfterMs; }
+        public void setMaximumRetryAfterMs(long value) { maximumRetryAfterMs = bounded("maximum-retry-after-ms", value, 0, 30_000); }
+    }
+
+    private static long bounded(String name, long value, long min, long max) {
+        if (value < min || value > max) throw new IllegalArgumentException(name + " 超出安全范围");
+        return value;
+    }
+
+    private static int boundedInt(String name, int value, int min, int max) {
+        if (value < min || value > max) throw new IllegalArgumentException(name + " 超出安全范围");
+        return value;
+    }
+
+    private static double boundedDouble(String name, double value, double min, double max) {
+        if (value < min || value > max) throw new IllegalArgumentException(name + " 超出安全范围");
+        return value;
+    }
 
     public static class Langfuse {
         private String publicKey = "";
@@ -82,4 +152,8 @@ public class AppSettings {
     public void setBrowserAllowPrivateNetwork(boolean v) { this.browserAllowPrivateNetwork = v; }
     public boolean isEvalWorker() { return evalWorker; }
     public void setEvalWorker(boolean v) { this.evalWorker = v; }
+    public Recovery getRecovery() { return recovery; }
+    public void setRecovery(Recovery value) { recovery = value == null ? new Recovery() : value; }
+    public HttpRetry getHttpRetry() { return httpRetry; }
+    public void setHttpRetry(HttpRetry value) { httpRetry = value == null ? new HttpRetry() : value; }
 }

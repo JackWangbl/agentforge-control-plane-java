@@ -140,6 +140,7 @@ public class ResourceDumper {
             data.put("system_prompt", agent.getSystemPrompt());
             data.put("invoke_path", "/api/agents/" + agent.getId() + "/invoke");
             data.put("a2a_card", agent.getA2aCard());
+            data.put("recovery_policy", agent.getRecoveryPolicy());
             data.put("a2a_card_path", A2aAddresses.cardPath(agent.getId()));
             data.put("a2a_endpoint", A2aAddresses.rpcPath(agent.getId()));
             List<Map<String, Object>> boundSkills = new ArrayList<>();

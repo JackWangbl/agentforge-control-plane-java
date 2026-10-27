@@ -17,6 +17,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.time.Instant;
+import com.agentforge.controlplane.runtime.http.ThirdPartyHttpExecutor;
+import com.agentforge.controlplane.runtime.http.HttpRequestSemantics;
+import com.agentforge.controlplane.runtime.http.RetryPolicy;
 
 /**
  * 远程 MCP 客户端：Streamable HTTP / SSE 上的 JSON-RPC，
@@ -34,10 +38,11 @@ public class McpStreamClient {
     private static final List<String> SECRET_TOKENS =
             List.of("authorization token", "authorization", "api_key", "apikey", "password", "secret", "token");
 
-    private final HttpClient http = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    private final ThirdPartyHttpExecutor httpExecutor;
+
+    public McpStreamClient(ThirdPartyHttpExecutor httpExecutor) {
+        this.httpExecutor = httpExecutor;
+    }
 
     // --- transport 归一化 ---
 
@@ -345,10 +350,11 @@ public class McpStreamClient {
             }
         }
         try {
-            return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException(String.valueOf(e.getMessage()), e);
+            String method = String.valueOf(payload.getOrDefault("method", ""));
+            HttpRequestSemantics semantics = ("initialize".equals(method) || "tools/list".equals(method))
+                    ? HttpRequestSemantics.SAFE : HttpRequestSemantics.SIDE_EFFECTING_OR_UNKNOWN;
+            return httpExecutor.execute(builder.build(), HttpResponse.BodyHandlers.ofString(), semantics,
+                    RetryPolicy.defaults(), Instant.now().plus(timeout), "mcp-" + method, uri.getHost());
         } catch (Exception e) {
             throw new IllegalStateException(String.valueOf(e.getMessage()), e);
         }

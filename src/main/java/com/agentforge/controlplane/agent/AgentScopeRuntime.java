@@ -3,8 +3,11 @@ package com.agentforge.controlplane.agent;
 import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.domain.ExecutionCheckpoint;
 import com.agentforge.controlplane.memory.MemoryService;
 import com.agentforge.controlplane.domain.ModelConfig;
+import com.agentforge.controlplane.recovery.CheckpointService;
+import com.agentforge.controlplane.recovery.RecoveryTrace;
 import com.agentforge.controlplane.util.Jsons;
 import com.agentforge.controlplane.web.ApiException;
 import com.agentforge.controlplane.workspace.WorkspaceStore;
@@ -38,11 +41,14 @@ public class AgentScopeRuntime implements ChatTurnRunner {
     private final ToolRuntime tools;
     private final WorkspaceStore workspaces;
     private final MemoryService memories;
+    private final CheckpointService checkpoints;
 
-    public AgentScopeRuntime(ToolRuntime tools, WorkspaceStore workspaces, MemoryService memories) {
+    public AgentScopeRuntime(ToolRuntime tools, WorkspaceStore workspaces, MemoryService memories,
+                             CheckpointService checkpoints) {
         this.tools = tools;
         this.workspaces = workspaces;
         this.memories = memories;
+        this.checkpoints = checkpoints;
     }
 
     @Override
@@ -90,14 +96,8 @@ public class AgentScopeRuntime implements ChatTurnRunner {
             return new ChatReply(previewReply(agent, lastUser, extra), "preview", spans, Map.of(), WorkspaceStore.newTraceId());
         }
 
-        String runId = WorkspaceStore.newTraceId();
-        List<Map<String, Object>> working = copyHistory(history);
-        List<Map<String, Object>> traces = new ArrayList<>();
-        Map<String, Object> usage = new LinkedHashMap<>();
-        List<Map<String, Object>> pending = new ArrayList<>();
-        List<String> doneIds = new ArrayList<>();
-        String next = "llm";
-        int step = 0;
+        RunState state = new RunState(agent, sessionId, lastUser);
+        state.working.addAll(copyHistory(history));
 
         if (resume) {
             Map<String, Object> ckpt = sessionId == null ? null : workspaces.loadCheckpoint(agent, sessionId);
@@ -108,66 +108,66 @@ public class AgentScopeRuntime implements ChatTurnRunner {
             if (!"failed".equals(status) && !"running".equals(status)) {
                 throw ApiException.conflict("当前检查点已经结束，不能续跑");
             }
-            working = copyHistory(Jsons.mapList(ckpt.get("working")));
-            traces = new ArrayList<>(Jsons.mapList(ckpt.get("traces")));
+            state.working = copyHistory(Jsons.mapList(ckpt.get("working")));
+            state.traces = new ArrayList<>(Jsons.mapList(ckpt.get("traces")));
             if (ckpt.get("usage") instanceof Map<?, ?> map) {
-                map.forEach((key, value) -> usage.put(String.valueOf(key), value));
+                map.forEach((key, value) -> state.usage.put(String.valueOf(key), value));
             }
-            pending = new ArrayList<>(Jsons.mapList(ckpt.get("pending_tools")));
+            state.pending = new ArrayList<>(Jsons.mapList(ckpt.get("pending_tools")));
             if (ckpt.get("done_tool_ids") instanceof List<?> list) {
-                list.forEach(item -> doneIds.add(String.valueOf(item)));
+                list.forEach(item -> state.doneIds.add(String.valueOf(item)));
             }
-            next = Jsons.text(ckpt.get("next")).isEmpty() ? "llm" : Jsons.text(ckpt.get("next"));
-            step = ckpt.get("step") instanceof Number n ? n.intValue() : 0;
-            runId = Jsons.text(ckpt.get("run_id")).isEmpty() ? runId : Jsons.text(ckpt.get("run_id"));
+            state.next = Jsons.text(ckpt.get("next")).isEmpty() ? "llm" : Jsons.text(ckpt.get("next"));
+            state.step = ckpt.get("step") instanceof Number n ? n.intValue() : 0;
+            String storedRunId = Jsons.text(ckpt.get("run_id"));
+            if (!storedRunId.isEmpty()) {
+                state.runId = storedRunId;
+            }
             if (!Jsons.text(ckpt.get("last_user")).isEmpty()) {
-                lastUser = Jsons.text(ckpt.get("last_user"));
+                state.lastUser = Jsons.text(ckpt.get("last_user"));
             }
         }
 
-        int stepHolder = step;
         if (caller != null) {
             caller.setActiveSessionId(sessionId);
         }
         try {
-            flush(agent, sessionId, runId, "running", next, stepHolder, working, pending, doneIds, traces, usage, "", lastUser);
-            if ("tool".equals(next) && !pending.isEmpty()) {
-                stepHolder = runPending(agent, caller, pending, doneIds, forceRerunTools, working, traces, stepHolder,
-                        sessionId, runId, usage, lastUser);
+            flush(state, "running", "");
+            if ("tool".equals(state.next) && !state.pending.isEmpty()) {
+                runPending(caller, state, forceRerunTools);
             }
             OpenAIChatModel chatModel = buildModel(model, credential);
-            Toolkit toolkit = buildToolkit(agent, caller, specs, traces, overlayTools);
+            Toolkit toolkit = buildToolkit(agent, caller, specs, overlayTools, state);
             int maxIters = specs.stream().map(ToolSpec::name)
                     .anyMatch(name -> name.startsWith("browser_") || name.startsWith("opencli_")) ? 8 : 4;
             ReActAgent react = ReActAgent.builder()
                     .name(agent.getName())
-                    .sysPrompt(withJsonInstruction(fillUserInput(PromptOverlay.apply(tools.buildSystemPrompt(agent)), lastUser), model))
+                    .sysPrompt(withJsonInstruction(fillUserInput(PromptOverlay.apply(tools.buildSystemPrompt(agent)), state.lastUser), model))
                     .model(chatModel)
                     .toolkit(toolkit)
                     .maxIters(maxIters)
                     .enablePendingToolRecovery(true)
                     .generateOptions(chatOptions(model))
                     .build();
-            List<Msg> msgs = toMsgs(working);
+            List<Msg> msgs = toMsgs(state.working);
             Msg result = react.call(msgs, RuntimeContext.builder()
                             .userId("playground")
                             .sessionId(sessionId == null || sessionId.isBlank() ? agent.getName() : sessionId)
                             .build())
                     .block(Duration.ofMinutes(5));
             String reply = result == null || result.getTextContent() == null
-                    ? previewReply(agent, lastUser, "")
+                    ? previewReply(agent, state.lastUser, "")
                     : result.getTextContent();
             ChatUsage chatUsage = result == null ? null : result.getUsage();
             if (chatUsage != null) {
-                usage.put("prompt_tokens", chatUsage.getInputTokens());
-                usage.put("completion_tokens", chatUsage.getOutputTokens());
-                usage.put("total_tokens", chatUsage.getTotalTokens());
+                state.usage.put("prompt_tokens", chatUsage.getInputTokens());
+                state.usage.put("completion_tokens", chatUsage.getOutputTokens());
+                state.usage.put("total_tokens", chatUsage.getTotalTokens());
             }
             if (sessionId != null && !sessionId.isBlank()) {
                 workspaces.clearCheckpoint(agent, sessionId);
             }
-            Map<String, Integer> usageInts = intUsage(usage);
-            return new ChatReply(reply, "ready", traces, usageInts, runId);
+            return new ChatReply(reply, "ready", state.traces, intUsage(state.usage), state.runId);
         } catch (ApiException e) {
             throw e;
         } catch (Exception e) {
@@ -175,13 +175,13 @@ public class AgentScopeRuntime implements ChatTurnRunner {
             if (!credential.isBlank()) {
                 detail = detail.replace(credential, "****");
             }
-            flush(agent, sessionId, runId, "failed", next, stepHolder, working, pending, doneIds, traces, usage, detail, lastUser);
+            flush(state, "failed", detail);
             return new ChatReply(
-                    "模型调用失败：" + detail + "\n\n" + previewReply(agent, lastUser, ""),
+                    "模型调用失败：" + detail + "\n\n" + previewReply(agent, state.lastUser, ""),
                     "error",
-                    traces,
-                    intUsage(usage),
-                    runId);
+                    state.traces,
+                    intUsage(state.usage),
+                    state.runId);
         } finally {
             if (caller != null) {
                 caller.setActiveSessionId(null);
@@ -245,7 +245,7 @@ public class AgentScopeRuntime implements ChatTurnRunner {
     }
 
     private Toolkit buildToolkit(Agent agent, CurrentUser caller, List<ToolSpec> specs,
-                                 List<Map<String, Object>> traces, List<ToolOverlay.Extra> overlayTools) {
+                                 List<ToolOverlay.Extra> overlayTools, RunState state) {
         Map<String, java.util.function.Function<Map<String, Object>, String>> overlayExecutors = new LinkedHashMap<>();
         if (overlayTools != null) {
             for (ToolOverlay.Extra extra : overlayTools) {
@@ -255,6 +255,9 @@ public class AgentScopeRuntime implements ChatTurnRunner {
         Toolkit toolkit = new Toolkit();
         for (ToolSpec spec : specs) {
             toolkit.registerAgentTool(new DelegatingTool(spec, args -> {
+                if (state.doneIds.contains(spec.name())) {
+                    return lastToolOutput(state.working, spec.name());
+                }
                 long started = System.nanoTime();
                 java.util.function.Function<Map<String, Object>, String> overlay = overlayExecutors.get(spec.name());
                 boolean allowed = overlay != null || tools.agentAllowsTool(agent, spec.name());
@@ -271,11 +274,16 @@ public class AgentScopeRuntime implements ChatTurnRunner {
                 String spanTitle = ToolOverlay.isOverlayTool(spec.name())
                         ? "通过 A2A 调用子智能体 " + spec.name()
                         : "调用工具 " + spec.name();
-                traces.add(debugSpan(spanName, spanTitle, "tool",
+                state.traces.add(debugSpan(spanName, spanTitle, "tool",
                         allowed ? "ok" : "error", duration, output));
                 if (allowed && FlowRuntime.isFlowTool(spec.name())) {
-                    traces.addAll(FlowRuntime.flowStepSpans(spec.name(), output));
+                    state.traces.addAll(FlowRuntime.flowStepSpans(spec.name(), output));
                 }
+                state.doneIds.add(spec.name());
+                state.working.add(Jsons.ordered("role", "tool", "tool_call_id", spec.name(), "content", output));
+                state.step += 1;
+                state.next = "llm";
+                flush(state, "running", "");
                 return output;
             }));
         }
@@ -322,64 +330,121 @@ public class AgentScopeRuntime implements ChatTurnRunner {
         return base + "\n\n回复必须是一个 JSON 对象。不要输出 Markdown、代码围栏或解释。";
     }
 
-    private int runPending(Agent agent, CurrentUser caller, List<Map<String, Object>> pending, List<String> doneIds,
-                           boolean forceRerun, List<Map<String, Object>> working,
-                           List<Map<String, Object>> traces, int step, String sessionId, String runId,
-                           Map<String, Object> usage, String lastUser) {
-        int current = step;
-        for (Map<String, Object> call : List.copyOf(pending)) {
+    private void runPending(CurrentUser caller, RunState state, boolean forceRerun) {
+        for (Map<String, Object> call : List.copyOf(state.pending)) {
             Map<String, Object> fn = call.get("function") instanceof Map<?, ?> map
                     ? castMap(map) : Map.of();
-            String name = Jsons.text(fn.get("name"));
-            if (name.isEmpty()) {
-                name = "unknown";
-            }
+            String rawName = Jsons.text(fn.get("name"));
+            String name = rawName.isEmpty() ? "unknown" : rawName;
             String rawCallId = Jsons.text(call.get("id"));
             String callId = rawCallId.isEmpty() ? name : rawCallId;
-            if (doneIds.contains(callId) && !forceRerun) {
-                pending.removeIf(item -> callId.equals(Jsons.text(item.get("id"))));
+            if (!forceRerun && (state.doneIds.contains(callId) || state.doneIds.contains(name))) {
+                state.pending.removeIf(item -> callId.equals(Jsons.text(item.get("id")))
+                        || name.equals(Jsons.text(item.get("id"))));
                 continue;
             }
             Map<String, Object> args = ToolRuntime.parseToolArguments(fn.get("arguments"));
             String toolName = name;
-            boolean allowed = tools.agentAllowsTool(agent, toolName);
+            boolean allowed = tools.agentAllowsTool(state.agent, toolName);
             String output = CurrentUserHolder.call(caller, () -> allowed
-                    ? tools.executeTool(toolName, args, agent)
+                    ? tools.executeTool(toolName, args, state.agent)
                     : Jsons.json(Map.of("error", "Agent 未绑定工具 " + toolName)));
-            traces.add(debugSpan("mcp." + name, "调用工具 " + name, "tool", allowed ? "ok" : "error", 8, output));
+            state.traces.add(debugSpan("mcp." + name, "调用工具 " + name, "tool", allowed ? "ok" : "error", 8, output));
             if (allowed && FlowRuntime.isFlowTool(name)) {
-                traces.addAll(FlowRuntime.flowStepSpans(name, output));
+                state.traces.addAll(FlowRuntime.flowStepSpans(name, output));
             }
-            working.add(Jsons.ordered("role", "tool", "tool_call_id", callId, "content", output));
-            doneIds.add(callId);
+            state.working.add(Jsons.ordered("role", "tool", "tool_call_id", callId, "content", output));
+            state.doneIds.add(callId);
+            if (!state.doneIds.contains(name)) {
+                state.doneIds.add(name);
+            }
             String id = callId;
-            pending.removeIf(item -> id.equals(Jsons.text(item.get("id")))
+            state.pending.removeIf(item -> id.equals(Jsons.text(item.get("id")))
                     || id.equals(Jsons.text(castMap(item.get("function") instanceof Map<?, ?> m ? m : Map.of()).get("name"))));
-            current += 1;
-            flush(agent, sessionId, runId, "running", pending.isEmpty() ? "llm" : "tool",
-                    current, working, pending, doneIds, traces, usage, "", lastUser);
+            state.step += 1;
+            state.next = state.pending.isEmpty() ? "llm" : "tool";
+            flush(state, "running", "");
         }
-        return current;
     }
 
-    private void flush(Agent agent, String sessionId, String runId, String status, String next, int step,
-                       List<Map<String, Object>> working, List<Map<String, Object>> pending, List<String> doneIds,
-                       List<Map<String, Object>> traces, Map<String, Object> usage, String error, String lastUser) {
-        if (sessionId == null || sessionId.isBlank()) {
+    private void flush(RunState state, String status, String error) {
+        Map<String, Object> snapshot = Jsons.ordered(
+                "run_id", state.runId,
+                "status", status,
+                "next", state.next,
+                "step", state.step,
+                "working", state.working,
+                "pending_tools", state.pending,
+                "done_tool_ids", state.doneIds,
+                "traces", state.traces,
+                "usage", state.usage,
+                "error", error,
+                "last_user", state.lastUser);
+        persistDatabaseCheckpoint(state, status, error, snapshot);
+        if (state.sessionId == null || state.sessionId.isBlank()) {
             return;
         }
-        workspaces.saveCheckpoint(agent, sessionId, Jsons.ordered(
-                "run_id", runId,
-                "status", status,
-                "next", next,
-                "step", step,
-                "working", working,
-                "pending_tools", pending,
-                "done_tool_ids", doneIds,
-                "traces", traces,
-                "usage", usage,
-                "error", error,
-                "last_user", lastUser));
+        workspaces.saveCheckpoint(state.agent, state.sessionId, snapshot);
+    }
+
+    private void persistDatabaseCheckpoint(RunState state, String status, String error, Map<String, Object> snapshot) {
+        RecoveryTrace.Binding binding = RecoveryTrace.current();
+        if (binding == null || checkpoints == null) {
+            return;
+        }
+        boolean failed = "failed".equals(status);
+        boolean pendingTools = !state.pending.isEmpty();
+        ExecutionCheckpoint.Outcome outcome = failed
+                ? ExecutionCheckpoint.Outcome.FAILED
+                : (!pendingTools && !state.doneIds.isEmpty()
+                    ? ExecutionCheckpoint.Outcome.CONFIRMED
+                    : ExecutionCheckpoint.Outcome.NOT_STARTED);
+        ExecutionCheckpoint.SideEffectSemantics semantics = pendingTools
+                ? ExecutionCheckpoint.SideEffectSemantics.UNKNOWN
+                : (state.doneIds.isEmpty()
+                    ? ExecutionCheckpoint.SideEffectSemantics.NONE
+                    : ExecutionCheckpoint.SideEffectSemantics.SIDE_EFFECTING);
+        String idempotency = state.doneIds.isEmpty() ? null : state.doneIds.get(state.doneIds.size() - 1);
+        checkpoints.append(binding.tenantId(), binding.executionId(), binding.caseId(),
+                stepKey(state), state.next, outcome, !pendingTools, semantics, idempotency, snapshot,
+                failed ? "EXECUTION_FAILED" : null, failed ? "执行失败" : null);
+    }
+
+    private static String stepKey(RunState state) {
+        if (!state.doneIds.isEmpty()) {
+            return "tool." + state.doneIds.get(state.doneIds.size() - 1);
+        }
+        return state.next == null || state.next.isBlank() ? "llm" : state.next;
+    }
+
+    private static String lastToolOutput(List<Map<String, Object>> working, String toolId) {
+        for (int i = working.size() - 1; i >= 0; i--) {
+            Map<String, Object> item = working.get(i);
+            if ("tool".equals(Jsons.text(item.get("role"))) && toolId.equals(Jsons.text(item.get("tool_call_id")))) {
+                return Jsons.text(item.get("content"));
+            }
+        }
+        return "";
+    }
+
+    private static final class RunState {
+        final Agent agent;
+        final String sessionId;
+        String lastUser;
+        String runId = WorkspaceStore.newTraceId();
+        String next = "llm";
+        int step;
+        List<Map<String, Object>> working = new ArrayList<>();
+        List<Map<String, Object>> pending = new ArrayList<>();
+        List<String> doneIds = new ArrayList<>();
+        List<Map<String, Object>> traces = new ArrayList<>();
+        Map<String, Object> usage = new LinkedHashMap<>();
+
+        private RunState(Agent agent, String sessionId, String lastUser) {
+            this.agent = agent;
+            this.sessionId = sessionId;
+            this.lastUser = lastUser;
+        }
     }
 
     private static List<Msg> toMsgs(List<Map<String, Object>> history) {

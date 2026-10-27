@@ -5,6 +5,9 @@ import com.agentforge.controlplane.access.PasswordHasher;
 import com.agentforge.controlplane.agent.AgentReleaseService;
 import com.agentforge.controlplane.agent.ToolRuntime;
 import com.agentforge.controlplane.domain.Agent;
+import com.agentforge.controlplane.domain.ExecutionCheckpoint;
+import com.agentforge.controlplane.domain.ExecutionRecord;
+import com.agentforge.controlplane.domain.FailureCase;
 import com.agentforge.controlplane.domain.McpServer;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.OpenCliEndpoint;
@@ -14,7 +17,11 @@ import com.agentforge.controlplane.domain.Skill;
 import com.agentforge.controlplane.domain.Tenant;
 import com.agentforge.controlplane.domain.User;
 import com.agentforge.controlplane.domain.Workflow;
+import com.agentforge.controlplane.recovery.ExecutionRecorder;
 import com.agentforge.controlplane.repo.AgentRepository;
+import com.agentforge.controlplane.repo.ExecutionCheckpointRepository;
+import com.agentforge.controlplane.repo.ExecutionRecordRepository;
+import com.agentforge.controlplane.repo.FailureCaseRepository;
 import com.agentforge.controlplane.repo.McpServerRepository;
 import com.agentforge.controlplane.repo.ModelConfigRepository;
 import com.agentforge.controlplane.repo.OpenCliEndpointRepository;
@@ -24,12 +31,15 @@ import com.agentforge.controlplane.repo.SkillRepository;
 import com.agentforge.controlplane.repo.TenantRepository;
 import com.agentforge.controlplane.repo.UserRepository;
 import com.agentforge.controlplane.repo.WorkflowRepository;
+import com.agentforge.controlplane.util.Jsons;
 import com.agentforge.controlplane.runtime.OpenCliRuntime;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,11 +76,21 @@ public class SeedRunner implements ApplicationRunner {
     private final WorkflowRepository workflows;
     private final OpenCliEndpointRepository opencli;
     private final AgentReleaseService releases;
+    private final ExecutionRecordRepository executions;
+    private final FailureCaseRepository failureCases;
+    private final ExecutionCheckpointRepository checkpoints;
+    private final ExecutionRecorder executionRecorder;
+
+    private static final String DEMO_CASE_KEY = "case_demo_b_ticket_resume";
+    private static final String DEMO_FAIL_EXEC_KEY = "exec_demo_b_ticket_fail";
+    private static final String DEMO_OK_EXEC_KEY = "exec_demo_b_ticket_ok";
 
     public SeedRunner(TenantRepository tenants, RoleRepository roles, UserRepository users, AgentRepository agents,
                       McpServerRepository mcps, SkillRepository skills, ModelConfigRepository models,
                       SandboxPolicyRepository sandboxes, WorkflowRepository workflows,
-                      OpenCliEndpointRepository opencli, AgentReleaseService releases) {
+                      OpenCliEndpointRepository opencli, AgentReleaseService releases,
+                      ExecutionRecordRepository executions, FailureCaseRepository failureCases,
+                      ExecutionCheckpointRepository checkpoints, ExecutionRecorder executionRecorder) {
         this.tenants = tenants;
         this.roles = roles;
         this.users = users;
@@ -82,6 +102,10 @@ public class SeedRunner implements ApplicationRunner {
         this.workflows = workflows;
         this.opencli = opencli;
         this.releases = releases;
+        this.executions = executions;
+        this.failureCases = failureCases;
+        this.checkpoints = checkpoints;
+        this.executionRecorder = executionRecorder;
     }
 
     @Override
@@ -93,6 +117,7 @@ public class SeedRunner implements ApplicationRunner {
         migrateOpencli();
         ensureExampleOrchestrations();
         releases.backfillMissing();
+        ensureDemoFailureCase();
     }
 
     private void seedIfEmpty() {
@@ -451,5 +476,143 @@ public class SeedRunner implements ApplicationRunner {
 
     private static Map<String, Object> edge(String source, String target) {
         return Map.of("source", source, "target", target);
+    }
+
+    /**
+     * 用库里已有的「b端工单」补一条可重拾的调试台失败 Case，方便对照列表、详情脱敏和重拾。
+     * 已存在同 key 则跳过，不覆盖真实失败记录。
+     */
+    private void ensureDemoFailureCase() {
+        Agent agent = agents.findByName("b端工单").orElse(null);
+        User owner = users.findByUsername("linmo").orElse(null);
+        if (agent == null || owner == null || agent.getTenantId() == null) {
+            return;
+        }
+        if (failureCases.findByCaseKeyAndTenantId(DEMO_CASE_KEY, agent.getTenantId()).isPresent()) {
+            return;
+        }
+        Instant failedAt = Instant.now().minus(8, ChronoUnit.MINUTES);
+        Instant succeededAt = failedAt.minus(6, ChronoUnit.MINUTES);
+        if (executions.findByExecutionKeyAndTenantId(DEMO_OK_EXEC_KEY, agent.getTenantId()).isEmpty()) {
+            executions.save(demoExecution(agent, owner, DEMO_OK_EXEC_KEY, "debug_demo_ok",
+                    Jsons.ordered("message", "你好", "session_id", "debug_demo_ok", "agent_id", agent.getId()),
+                    ExecutionRecord.Status.SUCCEEDED, null, null, null, succeededAt.minusSeconds(2), succeededAt));
+        }
+        Map<String, Object> request = Jsons.ordered(
+                "message", "我的帖子为什么无法发布",
+                "session_id", "debug_demo_failure",
+                "agent_id", agent.getId(),
+                "password", "secret-password");
+        ExecutionRecord failed = executions.save(demoExecution(agent, owner, DEMO_FAIL_EXEC_KEY, "debug_demo_failure",
+                request, ExecutionRecord.Status.FAILED, "UPSTREAM_UNAVAILABLE", "llm",
+                "执行失败（ConnectException）", failedAt.minusSeconds(4), failedAt));
+
+        FailureCase item = new FailureCase();
+        item.setCaseKey(DEMO_CASE_KEY);
+        item.setTenantId(agent.getTenantId());
+        item.setOwnerId(owner.getId());
+        item.setExecutionRecordId(failed.getId());
+        item.setStatus(FailureCase.Status.RESUMABLE);
+        item.setResumable(true);
+        item.setFailureCategory("UPSTREAM_UNAVAILABLE");
+        item.setFailureStep("llm");
+        item.setErrorSummary("执行失败（ConnectException）");
+        item = failureCases.save(item);
+
+        Map<String, Object> confirmed = checkpointState(failed.getTraceId(), "running", "llm", 0,
+                List.of(Map.of("role", "user", "content", "我的帖子为什么无法发布")),
+                List.of(), List.of(), "", "我的帖子为什么无法发布");
+        saveCheckpoint(agent.getTenantId(), failed.getId(), item.getId(), 1,
+                "llm", "llm", ExecutionCheckpoint.Outcome.NOT_STARTED, true,
+                ExecutionCheckpoint.SideEffectSemantics.NONE, null, confirmed, null, null);
+        Map<String, Object> failedState = checkpointState(failed.getTraceId(), "failed", "llm", 0,
+                List.of(Map.of("role", "user", "content", "我的帖子为什么无法发布")),
+                List.of(), List.of(), "模型调用失败：upstream unavailable", "我的帖子为什么无法发布");
+        ExecutionCheckpoint latest = saveCheckpoint(agent.getTenantId(), failed.getId(), item.getId(), 2,
+                "llm", "llm", ExecutionCheckpoint.Outcome.FAILED, true,
+                ExecutionCheckpoint.SideEffectSemantics.NONE, null, failedState,
+                "UPSTREAM_UNAVAILABLE", "执行失败（ConnectException）");
+        item.setLatestCheckpointId(latest.getId());
+        failureCases.save(item);
+    }
+
+    private ExecutionRecord demoExecution(Agent agent, User owner, String executionKey, String sessionId,
+                                          Map<String, Object> request, ExecutionRecord.Status status,
+                                          String category, String step, String summary,
+                                          Instant startedAt, Instant finishedAt) {
+        Map<String, Object> config = ExecutionRecorder.agentConfig(agent);
+        String requestJson = executionRecorder.canonical(request);
+        String configJson = executionRecorder.canonical(config);
+        ExecutionRecord row = new ExecutionRecord();
+        row.setExecutionKey(executionKey);
+        row.setTenantId(agent.getTenantId());
+        row.setOwnerId(owner.getId());
+        row.setExecutionKind(ExecutionRecord.Kind.ORIGINAL);
+        row.setEntryPoint(ExecutionRecord.EntryPoint.PLAYGROUND);
+        row.setAgentId(agent.getId());
+        row.setAgentName(agent.getName());
+        row.setSessionId(sessionId);
+        row.setTraceId(executionKey.replace("exec_", "trace_"));
+        row.setRequestSnapshotJson(requestJson);
+        row.setRequestHash(ExecutionRecorder.sha256(requestJson));
+        row.setConfigSnapshotJson(configJson);
+        row.setConfigHash(ExecutionRecorder.sha256(configJson));
+        row.setCredentialRefsJson(executionRecorder.canonical(ExecutionRecorder.credentialRefs(agent)));
+        row.setStatus(status);
+        row.setFailureCategory(category);
+        row.setFailureStep(step);
+        row.setErrorSummary(summary);
+        row.setStartedAt(startedAt);
+        row.setFinishedAt(finishedAt);
+        return row;
+    }
+
+    private ExecutionCheckpoint saveCheckpoint(Long tenantId, Long executionId, Long caseId, int sequence,
+                                               String step, String next, ExecutionCheckpoint.Outcome outcome,
+                                               boolean safe, ExecutionCheckpoint.SideEffectSemantics semantics,
+                                               String idempotency, Map<String, Object> state,
+                                               String errorCategory, String errorSummary) {
+        String snapshot = executionRecorder.canonical(state);
+        ExecutionCheckpoint row = new ExecutionCheckpoint();
+        row.setCheckpointKey("ckpt_demo_b_ticket_" + sequence);
+        row.setTenantId(tenantId);
+        row.setExecutionRecordId(executionId);
+        row.setFailureCaseId(caseId);
+        row.setSequenceNo(sequence);
+        row.setStepKey(step);
+        row.setNextStepKey(next);
+        row.setOutcome(outcome);
+        row.setSafeToResume(safe && semantics != ExecutionCheckpoint.SideEffectSemantics.UNKNOWN);
+        row.setSideEffectSemantics(semantics);
+        row.setIdempotencyKey(idempotency);
+        row.setStateSnapshotJson(snapshot);
+        row.setStateHash(ExecutionRecorder.sha256(snapshot));
+        row.setErrorCategory(errorCategory);
+        row.setErrorSummary(errorSummary);
+        return checkpoints.save(row);
+    }
+
+    private static Map<String, Object> checkpointState(String runId, String status, String next, int step,
+                                                       List<Map<String, Object>> working,
+                                                       List<Map<String, Object>> pending, List<String> doneIds,
+                                                       String error, String lastUser) {
+        return Jsons.ordered(
+                "run_id", runId,
+                "status", status,
+                "next", next,
+                "step", step,
+                "working", working,
+                "pending_tools", pending,
+                "done_tool_ids", doneIds,
+                "traces", List.of(Jsons.ordered(
+                        "name", "llm",
+                        "title", "调用模型",
+                        "kind", "llm",
+                        "status", "failed".equals(status) ? "error" : "ok",
+                        "duration_ms", 18,
+                        "detail", error.isBlank() ? "等待模型回复" : error)),
+                "usage", Jsons.ordered("prompt_tokens", 86, "completion_tokens", 0, "total_tokens", 86),
+                "error", error,
+                "last_user", lastUser);
     }
 }

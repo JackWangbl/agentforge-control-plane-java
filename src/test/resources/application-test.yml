@@ -1,0 +1,14 @@
+agentforge:
+  recovery:
+    sync-wait-ms: 100
+    step-timeout-ms: 5000
+    overall-timeout-ms: 15000
+    worker-threads: 2
+    poll-interval-ms: 50
+    lease-ms: 1000
+  http-retry:
+    initial-delay-ms: 1
+    maximum-delay-ms: 10
+spring:
+  jpa:
+    open-in-view: false

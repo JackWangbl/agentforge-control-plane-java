@@ -224,6 +224,7 @@ public class ResourceController {
         row.setDescription(payload.description());
         row.setStatus(payload.status());
         row.setGraph(payload.graph());
+        row.setRecoveryPolicy(validateRecoveryPolicy(payload.recovery_policy()));
         ensureWorkflowPublishable(user, row);
         access.stampOwner(row, user);
         workflows.save(row);
@@ -255,6 +256,7 @@ public class ResourceController {
         row.setToolFlows(payload.tool_flows());
         row.setSandboxId(payload.sandbox_id());
         row.setA2aCard(A2aCards.normalize(payload.a2a_card()));
+        row.setRecoveryPolicy(validateRecoveryPolicy(payload.recovery_policy()));
         applyHttpProxyMode(row);
         access.stampOwner(row, user);
         agents.save(row);
@@ -309,6 +311,7 @@ public class ResourceController {
         row.setToolFlows(new ArrayList<>(source.getToolFlows()));
         row.setSandboxId(source.getSandboxId());
         row.setA2aCard(new LinkedHashMap<>(source.getA2aCard()));
+        row.setRecoveryPolicy(new LinkedHashMap<>(source.getRecoveryPolicy()));
         row.setWorkspace("");
         row.setSuccessRate(0);
         applyHttpProxyMode(row);
@@ -694,6 +697,9 @@ public class ResourceController {
         if (payload.containsKey("a2a_card")) {
             row.setA2aCard(A2aCards.normalize(payload.get("a2a_card")));
         }
+        if (payload.containsKey("recovery_policy") && payload.get("recovery_policy") instanceof Map<?, ?> map) {
+            row.setRecoveryPolicy(validateRecoveryPolicy(stringMap(map)));
+        }
         bindings.validateBindings(user.getTenantId(),
                 payload.containsKey("skill_ids") ? row.getSkillIds() : null,
                 payload.containsKey("mcp_ids") ? row.getMcpIds() : null,
@@ -913,6 +919,36 @@ public class ResourceController {
             map.forEach((key, value) -> graph.put(String.valueOf(key), value));
             row.setGraph(graph);
         }
+        if (payload.containsKey("recovery_policy") && payload.get("recovery_policy") instanceof Map<?, ?> map) {
+            row.setRecoveryPolicy(validateRecoveryPolicy(stringMap(map)));
+        }
+    }
+
+    private static Map<String, Object> stringMap(Map<?, ?> source) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        source.forEach((key, value) -> out.put(String.valueOf(key), value));
+        return out;
+    }
+
+    private static Map<String, Object> validateRecoveryPolicy(Map<String, Object> policy) {
+        if (policy == null || policy.isEmpty()) return Map.of();
+        Map<String, long[]> bounds = Map.of(
+                "sync_wait_ms", new long[]{0, 30_000},
+                "step_timeout_ms", new long[]{1_000, 3_600_000},
+                "overall_timeout_ms", new long[]{1_000, 86_400_000},
+                "per_agent_concurrency", new long[]{1, 32},
+                "per_tenant_concurrency", new long[]{1, 128},
+                "tenant_queue_capacity", new long[]{1, 10_000});
+        Map<String, Object> out = new LinkedHashMap<>();
+        policy.forEach((key, value) -> {
+            long[] range = bounds.get(key);
+            if (range == null) return;
+            if (!(value instanceof Number number) || number.longValue() < range[0] || number.longValue() > range[1]) {
+                throw ApiException.unprocessable("恢复策略 " + key + " 超出安全范围");
+            }
+            out.put(key, number.longValue());
+        });
+        return out;
     }
 
     private static void applySandbox(SandboxPolicy row, Map<String, Object> payload) {

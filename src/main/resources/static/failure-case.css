@@ -1,0 +1,19 @@
+.failure-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.failure-metrics article{background:#fff;border:1px solid #e6eaf0;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:8px}
+.failure-metrics small{color:#667085}.failure-metrics b{font-size:28px;color:#182230}
+.failure-filters{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr)) auto;gap:10px;align-items:end;margin-bottom:16px}
+.failure-filters label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#667085}
+.failure-filters input,.failure-filters select{min-height:38px;border:1px solid #d8dee8;border-radius:8px;padding:7px;background:#fff}
+.failure-table{overflow:auto}.failure-row{cursor:pointer}.failure-row:hover{background:#f7f9fc}
+.failure-pages{display:flex;justify-content:flex-end;align-items:center;gap:12px;padding-top:14px;color:#667085}
+.failure-detail{width:min(900px,90vw);max-height:86vh;overflow:auto;padding:24px}
+.failure-detail>header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:1px solid #e6eaf0;padding-bottom:14px;position:sticky;top:-24px;background:#fff;z-index:2}
+.failure-detail-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.failure-action-hint{margin:12px 0 0;color:#b54708;background:#fff6ed;border:1px solid #f7d5b0;border-radius:8px;padding:8px 12px;font-size:13px}
+.failure-detail section{margin-top:18px}.failure-detail h3{font-size:14px;margin-bottom:8px}
+.failure-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111827;color:#e5edf8;border-radius:10px;padding:14px;max-height:320px;overflow:auto}
+.failure-detail footer{display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:#fff;padding:16px 0 0;border-top:1px solid #e6eaf0;z-index:2}
+.failure-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:16px}
+.failure-facts span{background:#f7f9fc;border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:4px}.failure-facts small{color:#667085}
+.failure-attempts{list-style:none;padding:0;display:grid;gap:8px}.failure-attempts li{border:1px solid #e6eaf0;border-radius:9px;padding:10px}.failure-attempts span{float:right;color:#667085}.failure-attempts p{margin:6px 0}
+@media(max-width:900px){.failure-metrics{grid-template-columns:1fr}.failure-filters{grid-template-columns:1fr 1fr}.failure-facts{grid-template-columns:1fr 1fr}}

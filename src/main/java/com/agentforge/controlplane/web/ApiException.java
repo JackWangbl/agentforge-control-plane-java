@@ -63,4 +63,12 @@ public class ApiException extends RuntimeException {
     public static ApiException unavailable(String message) {
         return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, message);
     }
+
+    public static ApiException tooManyRequests(String message) {
+        return new ApiException(HttpStatus.TOO_MANY_REQUESTS, message);
+    }
+
+    public static ApiException gatewayTimeout(String message) {
+        return new ApiException(HttpStatus.GATEWAY_TIMEOUT, message);
+    }
 }
