@@ -22,6 +22,7 @@ class MemoryServiceTest {
         trial.setTrialKey("browser-a");
         assertEquals("user:7", MemoryService.subjectKey(member));
         assertEquals("trial:browser-a", MemoryService.subjectKey(trial));
+        assertEquals("trial:browser-a", MemoryService.trialSubjectKey("browser-a"));
         assertFalse(MemoryService.canReadHistory(trial, null, 7L));
         assertTrue(MemoryService.canReadHistory(member, null, 7L));
         assertFalse(MemoryService.canReadHistory(member, "user:8", 7L));

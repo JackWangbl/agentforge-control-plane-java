@@ -24,6 +24,8 @@ public class CurrentUser {
     private Instant trialExpiresAt;
     /** 试用凭证。长期记忆用它把共用的 guest 账号拆开。 */
     private String trialKey;
+    private long trialTokensUsed;
+    private int trialTokenLimit;
     /** 这一轮对话的会话 id，只在生成回复期间有值，供记忆工具记下出处。 */
     private String activeSessionId;
 
@@ -49,6 +51,10 @@ public class CurrentUser {
     public void setTrialExpiresAt(Instant trialExpiresAt) { this.trialExpiresAt = trialExpiresAt; }
     public String getTrialKey() { return trialKey; }
     public void setTrialKey(String trialKey) { this.trialKey = trialKey; }
+    public long getTrialTokensUsed() { return trialTokensUsed; }
+    public void setTrialTokensUsed(long trialTokensUsed) { this.trialTokensUsed = trialTokensUsed; }
+    public int getTrialTokenLimit() { return trialTokenLimit; }
+    public void setTrialTokenLimit(int trialTokenLimit) { this.trialTokenLimit = trialTokenLimit; }
     public String getActiveSessionId() { return activeSessionId; }
     public void setActiveSessionId(String activeSessionId) { this.activeSessionId = activeSessionId; }
 

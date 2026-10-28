@@ -114,6 +114,8 @@ public class AuthController {
         data.put("is_platform_admin", user.isPlatformAdmin());
         data.put("trial", user.isTrial());
         data.put("trial_expires_at", user.getTrialExpiresAt());
+        data.put("trial_tokens_used", user.getTrialTokensUsed());
+        data.put("trial_token_limit", user.isTrial() ? user.getTrialTokenLimit() : 0);
         data.put("tenants", tenantRows);
         data.put("catalog", Permissions.CATALOG);
         return data;

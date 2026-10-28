@@ -55,14 +55,17 @@ public class MemoryService {
             return null;
         }
         if (user.isTrial()) {
-            String trial = user.getTrialKey() == null ? "" : user.getTrialKey().strip();
-            if (trial.isEmpty()) {
-                return null;
-            }
-            String key = "trial:" + trial;
-            return key.length() <= 120 ? key : key.substring(0, 120);
+            return trialSubjectKey(user.getTrialKey());
         }
         return "user:" + user.getId();
+    }
+
+    public static String trialSubjectKey(String trialKey) {
+        if (trialKey == null || trialKey.isBlank()) {
+            return null;
+        }
+        String key = "trial:" + trialKey.strip();
+        return key.length() <= 120 ? key : key.substring(0, 120);
     }
 
     /** 空的 subject_key 只对已登录的原主人开放。试用不能读共用 guest 留下的旧会话。 */

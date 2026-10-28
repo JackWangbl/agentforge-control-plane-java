@@ -19,7 +19,7 @@ function apiError(err){
   }catch(e){}
   return raw.slice(0,180);
 }
-const authState = {token: localStorage.getItem('af_token')||'', me:null, trialExpiresAt:''};
+const authState = {token: localStorage.getItem('af_token')||'', me:null, trialExpiresAt:'', trialTokensUsed:0, trialTokenLimit:10000};
 let trialTimer=0;
 const pagePerm = {dashboard:'',memories:'',sessions:'session:read','failure-cases':'trace:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',knowledge:'knowledge:read',models:'model:read',vectors:'tenant:admin',sandboxes:'sandbox:read',roles:'role:read'};
 function can(perm){
@@ -72,7 +72,11 @@ async function logout(){
 function applyMe(me){
   authState.me=me;
   if($('#userName')) $('#userName').textContent=me.display_name||me.username;
-  if($('#userRole')) $('#userRole').textContent=me.trial?'试用中，5 分钟后需要登录':((me.tenant_name||'')+' · '+(me.role_name||'成员'));
+  if(me.trial){
+    authState.trialTokensUsed=Number(me.trial_tokens_used)||0;
+    authState.trialTokenLimit=Number(me.trial_token_limit)||10000;
+  }
+  if($('#userRole')) $('#userRole').textContent=me.trial?'试用中，10 分钟内或 Token 用尽后需要登录':((me.tenant_name||'')+' · '+(me.role_name||'成员'));
   if($('#userAvatar')) $('#userAvatar').textContent=(me.display_name||me.username||'?').slice(0,1);
   if($('#logoutBtn')) $('#logoutBtn').textContent=me.trial?'登录':'退出登录';
   if($('#logoutTopBtn')) $('#logoutTopBtn').textContent=me.trial?'登录':'退出登录';
@@ -1706,6 +1710,7 @@ async function debugWorkflow(focusId){
     const body = {message, session_id:wfState.sessionId||''};
     if(focus) body.focus_node_id = focus;
     const data = await api('/api/workflows/'+wfState.id+'/debug', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    noteTrialUsage(data.usage);
     wfState.sessionId = data.session_id||wfState.sessionId;
     wfState.activeNodeId = data.node_id||'';
     wfState.messages.push({role:'assistant', content:data.reply||data.response||'', agent:data.agent||data.node_label||'', route:data.route||null, traceId:data.trace_id||'', spans:Array.isArray(data.spans)?data.spans:[], latencyMs:data.latency_ms||0});
@@ -1748,6 +1753,7 @@ async function invokeWorkflowApp(){
   await render('workflows');
   try{
     const data = await api('/api/workflows/'+wfState.id+'/invoke', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message, session_id:wfState.appSessionId||''})});
+    noteTrialUsage(data.usage);
     wfState.appSessionId = data.session_id||wfState.appSessionId;
     let trace=null;
     let traceError='';
@@ -3057,6 +3063,7 @@ async function runPlayground(){
     if($('#runExperiment')&&$('#runExperiment').value) payload.experiment_id=Number($('#runExperiment').value);
     if($('#runUserKey')&&$('#runUserKey').value.trim()){payload.user_key=$('#runUserKey').value.trim();chatState.experimentUserKey=payload.user_key}
     const r=await api('/api/playground/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    noteTrialUsage(r.usage);
     const reply=r.reply||r.output||r.response||'没有返回内容';
     chatState.sessionId=r.session_id||chatState.sessionId;
     chatState.traceId=r.trace_id||'';
@@ -3091,6 +3098,7 @@ async function resumePlayground(){
   try{
     const payload={agent_id:Number($('#runAgent').value),session_id:chatState.sessionId};
     const r=await api('/api/playground/resume',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    noteTrialUsage(r.usage);
     const reply=r.reply||r.output||r.response||'没有返回内容';
     chatState.sessionId=r.session_id||chatState.sessionId;
     chatState.traceId=r.trace_id||'';
@@ -3411,6 +3419,24 @@ function trialRemainingMs(){
   if(!Number.isFinite(ends)) return 0;
   return ends-Date.now();
 }
+function trialTokensUsed(){
+  return Math.max(0, Number(authState.trialTokensUsed)||0);
+}
+function trialTokenLimit(){
+  return Math.max(1, Number(authState.trialTokenLimit)||10000);
+}
+function trialTokensLeft(){
+  return Math.max(0, trialTokenLimit()-trialTokensUsed());
+}
+function trialStillOpen(){
+  return trialRemainingMs()>0 && trialTokensLeft()>0;
+}
+function paintTrialBanner(){
+  const label=$('#trialRemain');
+  if(label) label.textContent=formatRemain(trialRemainingMs());
+  const tokens=$('#trialTokens');
+  if(tokens) tokens.textContent=String(Math.min(trialTokensUsed(), trialTokenLimit()));
+}
 function formatRemain(ms){
   const total=Math.max(0, Math.ceil(ms/1000));
   const minutes=Math.floor(total/60);
@@ -3421,17 +3447,27 @@ function stopTrialClock(){
   clearInterval(trialTimer);
   trialTimer=0;
   authState.trialExpiresAt='';
+  authState.trialTokensUsed=0;
+  authState.trialTokenLimit=10000;
   const banner=$('#trialBanner');
   if(banner) banner.hidden=true;
 }
-function expireTrial(){
+function expireTrial(message){
   authState.token='';
   authState.me=null;
   localStorage.removeItem('af_token');
   stopTrialClock();
   if($('#userName')) $('#userName').textContent='未登录';
   if($('#userRole')) $('#userRole').textContent='试用已结束';
-  showLogin('试用已结束，请登录');
+  showLogin(message||'试用已结束，请登录');
+}
+function noteTrialUsage(usage){
+  if(!authState.me||!authState.me.trial) return;
+  const added=Number(usage&&usage.total_tokens);
+  if(!Number.isFinite(added)||added<=0) return;
+  authState.trialTokensUsed=trialTokensUsed()+added;
+  paintTrialBanner();
+  if(trialTokensLeft()<=0) expireTrial('试用 Token 已用完，请登录');
 }
 function startTrialClock(expiresAt){
   authState.trialExpiresAt=expiresAt||'';
@@ -3439,10 +3475,9 @@ function startTrialClock(expiresAt){
   if(banner) banner.hidden=false;
   clearInterval(trialTimer);
   const tick=()=>{
-    const left=trialRemainingMs();
-    const label=$('#trialRemain');
-    if(label) label.textContent=formatRemain(left);
-    if(left<=0) expireTrial();
+    paintTrialBanner();
+    if(trialRemainingMs()<=0) expireTrial('试用已结束，请登录');
+    else if(trialTokensLeft()<=0) expireTrial('试用 Token 已用完，请登录');
   };
   tick();
   trialTimer=setInterval(tick,1000);
@@ -3453,7 +3488,7 @@ function openApp(){
 }
 function onAccountButton(){
   if(authState.me&&authState.me.trial){
-    showLogin('', {allowContinue:trialRemainingMs()>0});
+    showLogin('', {allowContinue:trialStillOpen()});
     return;
   }
   logout();
@@ -3476,7 +3511,7 @@ async function enterTrial(){
 if($('#logoutBtn')) $('#logoutBtn').onclick=onAccountButton;
 if($('#logoutTopBtn')) $('#logoutTopBtn').onclick=onAccountButton;
 if($('#trialLoginBtn')) $('#trialLoginBtn').onclick=onAccountButton;
-if($('#trialContinue')) $('#trialContinue').onclick=()=>{ if(trialRemainingMs()>0) hideLogin(); };
+if($('#trialContinue')) $('#trialContinue').onclick=()=>{ if(trialStillOpen()) hideLogin(); };
 if($('#tenantSwitch')) $('#tenantSwitch').onchange=async e=>{localStorage.setItem('af_tenant_id', e.target.value); const me=await api('/api/auth/me'); applyMe(me); render('dashboard')};
 if($('#loginForm')) $('#loginForm').onsubmit=async e=>{
   e.preventDefault();

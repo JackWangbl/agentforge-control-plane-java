@@ -15,6 +15,10 @@ class TrialDecisionTest {
         assertEquals("resume", AuthService.trialDecision(now, true, now.plus(AuthService.TRIAL_TTL)));
         assertEquals("expired", AuthService.trialDecision(now, true, now));
         assertEquals("expired", AuthService.trialDecision(now, true, now.minusSeconds(1)));
-        assertEquals(5, AuthService.TRIAL_TTL.toMinutes());
+        assertEquals(10, AuthService.TRIAL_TTL.toMinutes());
+        assertEquals(10_000, AuthService.TRIAL_TOKEN_LIMIT);
+        assertEquals(false, AuthService.trialTokensExhausted(9_999));
+        assertEquals(true, AuthService.trialTokensExhausted(10_000));
+        assertEquals(true, AuthService.trialTokensExhausted(12_345));
     }
 }

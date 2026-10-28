@@ -23,4 +23,7 @@ public interface ConversationRepository
 
     @Query("select coalesce(sum(c.totalTokens), 0) from Conversation c where c.tenantId = :tenantId or c.tenantId is null")
     Long sumTokensByTenant(Long tenantId);
+
+    @Query("select coalesce(sum(c.totalTokens), 0) from Conversation c where c.subjectKey = :subjectKey")
+    Long sumTotalTokensBySubjectKey(String subjectKey);
 }
