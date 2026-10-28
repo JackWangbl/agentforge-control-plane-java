@@ -68,7 +68,7 @@ dialog#sessionModal::backdrop {
 .session-facts {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(5, minmax(100px, 1fr));
+  grid-template-columns: repeat(6, minmax(100px, 1fr));
   padding: 15px 0;
 }
 

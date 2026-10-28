@@ -35,11 +35,14 @@ public class SchemaMigrator implements ApplicationRunner {
                     stmt.execute("""
                             CREATE TABLE visitor_days (
                               id BIGINT NOT NULL AUTO_INCREMENT,
+                              tenant_id BIGINT NULL,
                               visitor_key VARCHAR(120) NOT NULL,
                               visited_on DATE NOT NULL,
+                              ip_address VARCHAR(45) NULL,
                               created_at DATETIME(6) NOT NULL,
                               PRIMARY KEY (id),
-                              KEY idx_visitor_days_day (visited_on)
+                              KEY idx_visitor_days_day (visited_on),
+                              KEY idx_visitor_days_tenant_ip_day (tenant_id, ip_address, visited_on)
                             )
                             """);
                 }
@@ -50,6 +53,39 @@ public class SchemaMigrator implements ApplicationRunner {
                     stmt.execute("ALTER TABLE visitor_days ADD INDEX idx_visitor_days_day (visited_on)");
                 }
                 log.info("visitor_days 改为按次累计，不再按人去重");
+            }
+            if (!hasColumn(conn, "visitor_days", "ip_address")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE visitor_days ADD COLUMN ip_address VARCHAR(45) NULL");
+                }
+                log.info("已为 visitor_days 表补齐 ip_address 列");
+            }
+            if (!hasColumn(conn, "visitor_days", "tenant_id")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE visitor_days ADD COLUMN tenant_id BIGINT NULL");
+                }
+                log.info("已为 visitor_days 表补齐 tenant_id 列");
+            }
+            if (!hasIndex(conn, "visitor_days", "idx_visitor_days_tenant_ip_day")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE visitor_days ADD INDEX idx_visitor_days_tenant_ip_day (tenant_id, ip_address, visited_on)");
+                }
+            }
+            if (!hasTable(conn, "ip_blacklists")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE ip_blacklists (
+                              id BIGINT NOT NULL AUTO_INCREMENT,
+                              tenant_id BIGINT NOT NULL,
+                              ip_address VARCHAR(45) NOT NULL,
+                              created_by BIGINT NOT NULL,
+                              created_at DATETIME(6) NOT NULL,
+                              PRIMARY KEY (id),
+                              UNIQUE KEY uk_ip_blacklists_tenant_ip (tenant_id, ip_address)
+                            )
+                            """);
+                }
+                log.info("已创建 ip_blacklists 表");
             }
             if (!hasTable(conn, "memory_items")) {
                 try (Statement stmt = conn.createStatement()) {
@@ -91,6 +127,17 @@ public class SchemaMigrator implements ApplicationRunner {
                     stmt.execute("ALTER TABLE conversations ADD COLUMN current_node_id VARCHAR(40) NULL");
                 }
                 log.info("已为 conversations 表补齐 current_node_id 列");
+            }
+            if (!hasColumn(conn, "conversations", "ip_address")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE conversations ADD COLUMN ip_address VARCHAR(45) NULL");
+                }
+                log.info("已为 conversations 表补齐 ip_address 列");
+            }
+            if (!hasIndex(conn, "conversations", "idx_conversations_tenant_ip")) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE conversations ADD INDEX idx_conversations_tenant_ip (tenant_id, ip_address)");
+                }
             }
             if (!hasTable(conn, "http_agents")) {
                 try (Statement stmt = conn.createStatement()) {

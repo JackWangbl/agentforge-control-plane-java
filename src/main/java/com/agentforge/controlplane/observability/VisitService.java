@@ -30,12 +30,15 @@ public class VisitService {
     public VisitCounts recordAndCount(CurrentUser user, HttpServletRequest request) {
         LocalDate today = LocalDate.now(ZONE);
         String key = visitorKey(user, request);
+        String ipAddress = ClientIpResolver.resolve(request);
         em.createNativeQuery("""
-                        INSERT INTO visitor_days (visitor_key, visited_on, created_at)
-                        VALUES (:key, :day, UTC_TIMESTAMP(6))
+                        INSERT INTO visitor_days (tenant_id, visitor_key, visited_on, ip_address, created_at)
+                        VALUES (:tenantId, :key, :day, :ip, UTC_TIMESTAMP(6))
                         """)
+                .setParameter("tenantId", user.getTenantId())
                 .setParameter("key", key)
                 .setParameter("day", java.sql.Date.valueOf(today))
+                .setParameter("ip", ipAddress)
                 .executeUpdate();
         return new VisitCounts(visits.count(), visits.countByVisitedOn(today));
     }

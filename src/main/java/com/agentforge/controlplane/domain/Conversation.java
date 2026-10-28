@@ -51,6 +51,10 @@ public class Conversation extends TenantOwnedEntity {
     @Column(name = "current_node_id", length = 40)
     private String currentNodeId;
 
+    /** 最近一次写入该会话的访问 IP。 */
+    @Column(name = "ip_address", length = 45)
+    private String ipAddress;
+
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
     public String getUserId() { return userId; }
@@ -77,4 +81,6 @@ public class Conversation extends TenantOwnedEntity {
     public void setWorkflowId(Long workflowId) { this.workflowId = workflowId; }
     public String getCurrentNodeId() { return currentNodeId; }
     public void setCurrentNodeId(String currentNodeId) { this.currentNodeId = currentNodeId; }
+    public String getIpAddress() { return ipAddress == null ? "" : ipAddress; }
+    public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress == null ? "" : ipAddress; }
 }

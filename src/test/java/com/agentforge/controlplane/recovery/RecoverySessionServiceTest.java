@@ -66,10 +66,15 @@ class RecoverySessionServiceTest {
     void createsSessionMessagesAndTraceForSessionQuery() {
         when(conversations.findBySessionId("debug_ticket")).thenReturn(Optional.empty());
         when(messages.findBySessionIdOrderByIdAsc("debug_ticket")).thenReturn(List.of());
-
-        RecoverySessionService.Persisted persisted = service.persistSuccess(
-                user(), agent(), model(), original(), reply(), Instant.now().minusSeconds(2),
-                "我的帖子为什么无法发布");
+        com.agentforge.controlplane.access.RequestAuthorization.setClientIp("203.0.113.9");
+        RecoverySessionService.Persisted persisted;
+        try {
+            persisted = service.persistSuccess(
+                    user(), agent(), model(), original(), reply(), Instant.now().minusSeconds(2),
+                    "我的帖子为什么无法发布");
+        } finally {
+            com.agentforge.controlplane.access.RequestAuthorization.clear();
+        }
 
         assertThat(persisted.sessionId()).isEqualTo("debug_ticket");
         assertThat(persisted.traceId()).isEqualTo("trace_recover");
@@ -83,6 +88,7 @@ class RecoverySessionServiceTest {
         assertThat(conversation.getStatus()).isEqualTo("completed");
         assertThat(conversation.getMessageCount()).isEqualTo(2);
         assertThat(conversation.getTitle()).contains("帖子");
+        assertThat(conversation.getIpAddress()).isEqualTo("203.0.113.9");
 
         ArgumentCaptor<ChatMessage> messageCaptor = ArgumentCaptor.forClass(ChatMessage.class);
         verify(messages, org.mockito.Mockito.times(2)).save(messageCaptor.capture());

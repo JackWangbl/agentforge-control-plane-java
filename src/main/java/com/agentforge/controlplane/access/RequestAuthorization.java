@@ -7,6 +7,7 @@ public final class RequestAuthorization {
 
     private static final ThreadLocal<String> AUTHORIZATION = new ThreadLocal<>();
     private static final ThreadLocal<String> TENANT = new ThreadLocal<>();
+    private static final ThreadLocal<String> CLIENT_IP = new ThreadLocal<>();
 
     private RequestAuthorization() {}
 
@@ -31,8 +32,21 @@ public final class RequestAuthorization {
         return TENANT.get();
     }
 
+    public static void setClientIp(String clientIp) {
+        if (clientIp == null || clientIp.isBlank()) {
+            CLIENT_IP.remove();
+        } else {
+            CLIENT_IP.set(clientIp.strip());
+        }
+    }
+
+    public static String clientIp() {
+        return CLIENT_IP.get();
+    }
+
     public static void clear() {
         AUTHORIZATION.remove();
         TENANT.remove();
+        CLIENT_IP.remove();
     }
 }

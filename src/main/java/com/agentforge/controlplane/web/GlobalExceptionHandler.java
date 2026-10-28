@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -72,10 +73,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.notFound().build();
     }
 
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethod(HttpRequestMethodNotSupportedException ex) {
+        String method = ex.getMethod() == null ? "该" : ex.getMethod();
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(Map.of("detail", "不支持 " + method + " 请求"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleOther(Exception ex) {
         String correlationId = UUID.randomUUID().toString();
-        log.error("Unhandled request failure correlationId={} type={}", correlationId, ex.getClass().getSimpleName());
+        log.error("Unhandled request failure correlationId={} type={}", correlationId, ex.getClass().getSimpleName(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("detail", "服务内部错误，请使用关联编号排查：" + correlationId));
     }

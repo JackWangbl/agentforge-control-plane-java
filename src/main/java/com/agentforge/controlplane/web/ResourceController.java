@@ -422,7 +422,7 @@ public class ResourceController {
         return dumper.dump(row, user);
     }
 
-    @DeleteMapping("/api/{resource}/{itemId}")
+    @DeleteMapping("/api/{resource}/{itemId:\\d+}")
     public Map<String, Object> delete(CurrentUser user, @PathVariable String resource, @PathVariable Long itemId) {
         if (!UPDATABLE.contains(resource)) {
             throw ApiException.notFound("Unknown resource");
@@ -446,7 +446,7 @@ public class ResourceController {
         return Map.of("id", itemId, "deleted", true);
     }
 
-    @PutMapping("/api/{resource}/{itemId}")
+    @PutMapping("/api/{resource}/{itemId:\\d+}")
     public Map<String, Object> update(CurrentUser user, @PathVariable String resource, @PathVariable Long itemId,
                                       @RequestBody Map<String, Object> payload) {
         if (!UPDATABLE.contains(resource)) {
@@ -469,7 +469,7 @@ public class ResourceController {
         return dumper.dump(row, user);
     }
 
-    @PatchMapping("/api/{resource}/{itemId}/status")
+    @PatchMapping("/api/{resource}/{itemId:\\d+}/status")
     public Map<String, Object> updateStatus(CurrentUser user, @PathVariable String resource, @PathVariable Long itemId,
                                             @Valid @RequestBody ApiDtos.ResourceStatusUpdate payload) {
         if (!STATUSABLE.contains(resource)) {

@@ -17,6 +17,7 @@ import com.agentforge.controlplane.domain.Skill;
 import com.agentforge.controlplane.domain.Trace;
 import com.agentforge.controlplane.experiment.ExperimentService;
 import com.agentforge.controlplane.memory.MemoryService;
+import com.agentforge.controlplane.observability.ClientIpResolver;
 import com.agentforge.controlplane.observability.ObservabilityService;
 import com.agentforge.controlplane.repo.ChatMessageRepository;
 import com.agentforge.controlplane.repo.ConversationRepository;
@@ -104,6 +105,7 @@ public class PlaygroundService {
                 conversation.setOwnerId(user.getId());
             }
             conversation.setUserId(user.getUsername());
+            ClientIpResolver.stamp(conversation);
             conversations.save(conversation);
         } else {
             conversation = new Conversation();
@@ -119,6 +121,7 @@ public class PlaygroundService {
             conversation.setChannel("Playground");
             memories.bindSubject(user, conversation);
             access.stampOwner(conversation, user);
+            ClientIpResolver.stamp(conversation);
             conversations.save(conversation);
         }
         String traceId = reply.traceId() == null || reply.traceId().isBlank()

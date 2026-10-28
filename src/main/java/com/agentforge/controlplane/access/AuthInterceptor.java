@@ -1,6 +1,8 @@
 package com.agentforge.controlplane.access;
 
 import com.agentforge.controlplane.web.ApiException;
+import com.agentforge.controlplane.observability.ClientIpResolver;
+import com.agentforge.controlplane.observability.IpBlacklistService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -13,9 +15,11 @@ public class AuthInterceptor implements HandlerInterceptor {
     public static final String ATTRIBUTE = "agentforge.currentUser";
 
     private final AuthService authService;
+    private final IpBlacklistService ipBlacklist;
 
-    public AuthInterceptor(AuthService authService) {
+    public AuthInterceptor(AuthService authService, IpBlacklistService ipBlacklist) {
         this.authService = authService;
+        this.ipBlacklist = ipBlacklist;
     }
 
     @Override
@@ -29,6 +33,10 @@ public class AuthInterceptor implements HandlerInterceptor {
         CurrentUser user = authService.resolve(
                 request.getHeader("Authorization"),
                 request.getHeader("X-Tenant-Id"));
+        String clientIp = ClientIpResolver.resolve(request);
+        if (ipBlacklist.isBlocked(user.getTenantId(), clientIp)) {
+            throw ApiException.forbidden("当前 IP 已被拉黑");
+        }
         RequirePermission required = method.getMethodAnnotation(RequirePermission.class);
         if (required == null) {
             required = method.getBeanType().getAnnotation(RequirePermission.class);
@@ -39,6 +47,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         request.setAttribute(ATTRIBUTE, user);
         CurrentUserHolder.set(user);
         RequestAuthorization.set(request.getHeader("Authorization"), request.getHeader("X-Tenant-Id"));
+        RequestAuthorization.setClientIp(clientIp);
         return true;
     }
 

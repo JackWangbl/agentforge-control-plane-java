@@ -10,6 +10,7 @@ import com.agentforge.controlplane.domain.MemoryItem;
 import com.agentforge.controlplane.repo.ChatMessageRepository;
 import com.agentforge.controlplane.repo.ConversationRepository;
 import com.agentforge.controlplane.repo.MemoryItemRepository;
+import com.agentforge.controlplane.observability.ClientIpResolver;
 import com.agentforge.controlplane.util.Jsons;
 import com.agentforge.controlplane.web.ApiException;
 import org.slf4j.Logger;
@@ -189,6 +190,7 @@ public class MemoryService {
         }
         conversation.setMessageCount(conversation.getMessageCount() + added);
         conversation.setUpdatedAt(Instant.now());
+        ClientIpResolver.stamp(conversation);
         conversations.save(conversation);
     }
 

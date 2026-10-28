@@ -19,20 +19,30 @@ public class VisitorDay {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "tenant_id")
+    private Long tenantId;
+
     @Column(name = "visitor_key", length = 120, nullable = false)
     private String visitorKey;
 
     @Column(name = "visited_on", nullable = false)
     private LocalDate visitedOn;
 
+    @Column(name = "ip_address", length = 45)
+    private String ipAddress;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
     public Long getId() { return id; }
+    public Long getTenantId() { return tenantId; }
+    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
     public String getVisitorKey() { return visitorKey; }
     public void setVisitorKey(String visitorKey) { this.visitorKey = visitorKey; }
     public LocalDate getVisitedOn() { return visitedOn; }
     public void setVisitedOn(LocalDate visitedOn) { this.visitedOn = visitedOn; }
+    public String getIpAddress() { return ipAddress; }
+    public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

@@ -10,6 +10,7 @@ import com.agentforge.controlplane.domain.ExecutionRecord;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.Trace;
 import com.agentforge.controlplane.memory.MemoryService;
+import com.agentforge.controlplane.observability.ClientIpResolver;
 import com.agentforge.controlplane.repo.ChatMessageRepository;
 import com.agentforge.controlplane.repo.ConversationRepository;
 import com.agentforge.controlplane.repo.TraceRepository;
@@ -121,6 +122,7 @@ public class RecoverySessionService {
             }
             if (conversation.getWorkflowId() == null) conversation.setWorkflowId(original.getWorkflowId());
         }
+        ClientIpResolver.stamp(conversation);
         conversations.save(conversation);
         String traceId = reply.traceId() == null || reply.traceId().isBlank()
                 ? WorkspaceStore.newTraceId() : reply.traceId();
