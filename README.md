@@ -1,6 +1,8 @@
 # AgentForge Control Plane（Java）
 
 面向团队试用的 Agent 控制面。用浏览器管理 Agent、模型、知识库、工具和会话，调试时由 [AgentScope Java](https://github.com/agentscope-ai/agentscope-java) 的 ReAct 运行时调用已绑定的模型和工具。
+![Uploading image.png…]()
+
 
 打开 http://127.0.0.1:8080 即可试用。未登录可以先用 10 分钟；到期或 Token 用量达到 10000 后必须登录。
 
