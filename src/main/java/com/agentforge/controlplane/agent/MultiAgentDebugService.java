@@ -9,6 +9,7 @@ import com.agentforge.controlplane.domain.Conversation;
 import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.domain.Workflow;
+import com.agentforge.controlplane.memory.ContextCompressionService;
 import com.agentforge.controlplane.memory.MemoryService;
 import com.agentforge.controlplane.memory.MemorySummarizer;
 import com.agentforge.controlplane.playground.PlaygroundService;
@@ -51,6 +52,7 @@ public class MultiAgentDebugService {
     private final HttpAgentRuntime httpAgents;
     private final MemoryService memories;
     private final MemorySummarizer summarizer;
+    private final ContextCompressionService compression;
     private final AgentReleaseService releases;
     private final A2aGateway a2a;
     private final ExecutionRecorder executionRecorder;
@@ -63,7 +65,7 @@ public class MultiAgentDebugService {
                                   ConversationRepository conversations, ModelConfigRepository models,
                                   HttpAgentRuntime httpAgents, MemoryService memories, MemorySummarizer summarizer,
                                   AgentReleaseService releases, A2aGateway a2a, ExecutionRecorder executionRecorder,
-                                  CheckpointService checkpointService) {
+                                  CheckpointService checkpointService, ContextCompressionService compression) {
         this.access = access;
         this.playground = playground;
         this.conversations = conversations;
@@ -75,6 +77,7 @@ public class MultiAgentDebugService {
         this.a2a = a2a;
         this.executionRecorder = executionRecorder;
         this.checkpointService = checkpointService;
+        this.compression = compression;
     }
 
     @Transactional
@@ -323,7 +326,7 @@ public class MultiAgentDebugService {
         ModelConfig model = resolveModel(user, agent);
         Agent speaker = agent;
         ModelConfig speakerModel = model;
-        List<Map<String, Object>> history = memories.shortTermHistory(user, null, sid);
+        List<Map<String, Object>> history = compression.assemble(user, agent, model, sid, message, null);
         history.add(Map.of("role", "user", "content", message));
         ChatReply reply = ToolOverlay.call(extras, () -> PromptOverlay.call(graph.globalPrompt(), nodePrompt,
                 () -> generatePinned(agent, model, history, sid, false, false)));
@@ -581,7 +584,7 @@ public class MultiAgentDebugService {
                                                  List<Map<String, Object>> routeSpans, Map<String, Object> route) {
         Agent agent = access.getRow(user, ResourceKind.AGENT, landed.agentId());
         ModelConfig model = resolveModel(user, agent);
-        List<Map<String, Object>> history = memories.shortTermHistory(user, null, sid);
+        List<Map<String, Object>> history = compression.assemble(user, agent, model, sid, message, null);
         history.add(Map.of("role", "user", "content", message));
         Instant started = Instant.now();
         ChatReply reply = PromptOverlay.call(graph.globalPrompt(), landed.prompt(),

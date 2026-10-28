@@ -56,6 +56,15 @@ dialog#sessionModal::backdrop {
   margin: 0;
 }
 
+.session-compress-hint {
+  background: #f3f7ff;
+  border: 1px solid #d9e4f7;
+  border-radius: 8px;
+  color: #4b5d78;
+  font-size: 12px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+}
 .session-facts {
   display: grid;
   gap: 10px;

@@ -14,6 +14,7 @@ import com.agentforge.controlplane.domain.HttpAgent;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.dto.ApiDtos;
 import com.agentforge.controlplane.experiment.ExperimentService;
+import com.agentforge.controlplane.memory.ContextCompressionService;
 import com.agentforge.controlplane.memory.MemoryService;
 import com.agentforge.controlplane.memory.MemorySummarizer;
 import com.agentforge.controlplane.playground.PlaygroundService;
@@ -55,6 +56,7 @@ public class PlaygroundController {
     private final ModelConfigRepository models;
     private final MemoryService memories;
     private final MemorySummarizer summarizer;
+    private final ContextCompressionService compression;
     private final ExecutionRecorder executionRecorder;
     private final CheckpointService checkpointService;
     private final RecoveryCoordinator recoveryCoordinator;
@@ -64,7 +66,7 @@ public class PlaygroundController {
                                 ExperimentService experiments, HttpAgentRuntime httpAgents,
                                 ModelConfigRepository models, MemoryService memories, MemorySummarizer summarizer) {
         this(access, playground, workspaces, conversations, messages, experiments, httpAgents, models, memories,
-                summarizer, null, null, null);
+                summarizer, null, null, null, null);
     }
 
     @Autowired
@@ -73,7 +75,7 @@ public class PlaygroundController {
                                 ExperimentService experiments, HttpAgentRuntime httpAgents,
                                 ModelConfigRepository models, MemoryService memories, MemorySummarizer summarizer,
                                 ExecutionRecorder executionRecorder, CheckpointService checkpointService,
-                                RecoveryCoordinator recoveryCoordinator) {
+                                RecoveryCoordinator recoveryCoordinator, ContextCompressionService compression) {
         this.access = access;
         this.playground = playground;
         this.workspaces = workspaces;
@@ -87,6 +89,7 @@ public class PlaygroundController {
         this.executionRecorder = executionRecorder;
         this.checkpointService = checkpointService;
         this.recoveryCoordinator = recoveryCoordinator;
+        this.compression = compression;
     }
 
     @RequirePermission({"session:write", "agent:write"})
@@ -147,7 +150,9 @@ public class PlaygroundController {
             throw ApiException.conflict("这个会话属于其他人");
         }
         final String sid = sessionId;
-        List<Map<String, Object>> history = memories.shortTermHistory(user, agent.getId(), sid);
+        List<Map<String, Object>> history = compression == null
+                ? memories.shortTermHistory(user, agent.getId(), sid)
+                : compression.assemble(user, agent, model, sid, payload.message());
         history.add(Map.of("role", "user", "content", payload.message()));
         Instant started = Instant.now();
         ExecutionRecord execution = beginExecution(user, agent, null, ExecutionRecord.EntryPoint.PLAYGROUND,

@@ -38,13 +38,14 @@ public class RecoveryExecutionService {
     private final RoleRepository roles;
     private final CheckpointService checkpoints;
     private final PlaygroundService playground;
+    private final RecoverySessionService sessions;
     private final WorkspaceStore workspaces;
     private final ObjectMapper mapper;
 
     public RecoveryExecutionService(ExecutionRecordRepository executions, AgentRepository agents,
                                     ModelConfigRepository models, UserRepository users, RoleRepository roles,
                                     CheckpointService checkpoints, PlaygroundService playground,
-                                    WorkspaceStore workspaces, ObjectMapper mapper) {
+                                    RecoverySessionService sessions, WorkspaceStore workspaces, ObjectMapper mapper) {
         this.executions = executions;
         this.agents = agents;
         this.models = models;
@@ -52,6 +53,7 @@ public class RecoveryExecutionService {
         this.roles = roles;
         this.checkpoints = checkpoints;
         this.playground = playground;
+        this.sessions = sessions;
         this.workspaces = workspaces;
         this.mapper = mapper;
     }
@@ -76,7 +78,8 @@ public class RecoveryExecutionService {
         workspaceCheckpoint.putIfAbsent("step", checkpoint.getSequenceNo());
         workspaces.saveCheckpoint(agent, original.getSessionId(), workspaceCheckpoint);
         List<Map<String, Object>> history = new ArrayList<>(Jsons.mapList(state.get("working")));
-        Instant deadline = Instant.now().plusMillis(attempt.getOverallTimeoutMs());
+        Instant started = Instant.now();
+        Instant deadline = started.plusMillis(attempt.getOverallTimeoutMs());
         ExecutionRecord recovery = newRecoveryExecution(original);
         try {
             ChatReply reply = RecoveryTrace.call(
@@ -85,13 +88,13 @@ public class RecoveryExecutionService {
                             () -> playground.generate(agent, model, history, original.getSessionId(), true, false)));
             if (Instant.now().isAfter(deadline)) throw new RecoveryTimeoutException("整次重拾超时");
             if ("error".equals(reply.mode())) throw new IllegalStateException("Agent 执行失败");
-            recovery.setTraceId(reply.traceId());
+            String userMessage = originalUserMessage(original, state);
+            RecoverySessionService.Persisted persisted = CurrentUserHolder.call(user,
+                    () -> sessions.persistSuccess(user, agent, model, original, reply, started, userMessage));
+            recovery.setTraceId(persisted.traceId());
             recovery.setStatus(ExecutionRecord.Status.SUCCEEDED);
             recovery.setFinishedAt(Instant.now());
             recovery = executions.saveAndFlush(recovery);
-            String lastUser = Jsons.text(state.get("last_user"));
-            workspaces.persistRun(agent, original.getSessionId(), lastUser, lastUser, reply.reply(), reply.mode(),
-                    model.getName(), reply.traceId(), reply.spans(), reply.usage(), 1, false);
             Map<String, Object> resultState = new java.util.LinkedHashMap<>(state);
             resultState.put("status", "succeeded");
             resultState.put("reply", reply.reply());
@@ -119,6 +122,22 @@ public class RecoveryExecutionService {
             executions.save(recovery);
             throw new RecoveryFailedException(recovery, failedCheckpoint, error);
         }
+    }
+
+    static String originalUserMessage(ExecutionRecord original, Map<String, Object> state) {
+        String fromState = Jsons.text(state == null ? null : state.get("last_user"));
+        if (!fromState.isBlank()) return fromState;
+        String fromHistory = "";
+        for (Map<String, Object> item : Jsons.mapList(state == null ? null : state.get("working"))) {
+            if ("user".equals(Jsons.text(item.get("role")))) {
+                fromHistory = Jsons.text(item.get("content"));
+            }
+        }
+        if (!fromHistory.isBlank()) return fromHistory;
+        Map<String, Object> request = Jsons.map(original == null ? null : original.getRequestSnapshotJson());
+        String message = Jsons.text(request.get("message"));
+        if (!message.isBlank()) return message;
+        return Jsons.text(request.get("input"));
     }
 
     private ExecutionRecord newRecoveryExecution(ExecutionRecord original) {

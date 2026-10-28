@@ -257,6 +257,7 @@ public class ResourceController {
         row.setSandboxId(payload.sandbox_id());
         row.setA2aCard(A2aCards.normalize(payload.a2a_card()));
         row.setRecoveryPolicy(validateRecoveryPolicy(payload.recovery_policy()));
+        row.setContextCompression(validateContextCompression(payload.context_compression()));
         applyHttpProxyMode(row);
         access.stampOwner(row, user);
         agents.save(row);
@@ -312,6 +313,7 @@ public class ResourceController {
         row.setSandboxId(source.getSandboxId());
         row.setA2aCard(new LinkedHashMap<>(source.getA2aCard()));
         row.setRecoveryPolicy(new LinkedHashMap<>(source.getRecoveryPolicy()));
+        row.setContextCompression(new LinkedHashMap<>(source.getContextCompression()));
         row.setWorkspace("");
         row.setSuccessRate(0);
         applyHttpProxyMode(row);
@@ -700,6 +702,9 @@ public class ResourceController {
         if (payload.containsKey("recovery_policy") && payload.get("recovery_policy") instanceof Map<?, ?> map) {
             row.setRecoveryPolicy(validateRecoveryPolicy(stringMap(map)));
         }
+        if (payload.containsKey("context_compression") && payload.get("context_compression") instanceof Map<?, ?> map) {
+            row.setContextCompression(validateContextCompression(stringMap(map)));
+        }
         bindings.validateBindings(user.getTenantId(),
                 payload.containsKey("skill_ids") ? row.getSkillIds() : null,
                 payload.containsKey("mcp_ids") ? row.getMcpIds() : null,
@@ -928,6 +933,10 @@ public class ResourceController {
         Map<String, Object> out = new LinkedHashMap<>();
         source.forEach((key, value) -> out.put(String.valueOf(key), value));
         return out;
+    }
+
+    private static Map<String, Object> validateContextCompression(Map<String, Object> policy) {
+        return com.agentforge.controlplane.memory.ContextCompressionPolicy.validateOverride(policy);
     }
 
     private static Map<String, Object> validateRecoveryPolicy(Map<String, Object> policy) {

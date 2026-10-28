@@ -6,6 +6,7 @@ import com.agentforge.controlplane.domain.ChatMessage;
 import com.agentforge.controlplane.domain.Conversation;
 import com.agentforge.controlplane.domain.Trace;
 import com.agentforge.controlplane.repo.ChatMessageRepository;
+import com.agentforge.controlplane.repo.ConversationContextSummaryRepository;
 import com.agentforge.controlplane.repo.ConversationRepository;
 import com.agentforge.controlplane.repo.TraceRepository;
 import com.agentforge.controlplane.util.Jsons;
@@ -29,13 +30,16 @@ public class SessionController {
     private final ConversationRepository conversations;
     private final ChatMessageRepository messages;
     private final TraceRepository traces;
+    private final ConversationContextSummaryRepository summaries;
     private final ResourceDumper dumper;
 
     public SessionController(ConversationRepository conversations, ChatMessageRepository messages,
-                             TraceRepository traces, ResourceDumper dumper) {
+                             TraceRepository traces, ConversationContextSummaryRepository summaries,
+                             ResourceDumper dumper) {
         this.conversations = conversations;
         this.messages = messages;
         this.traces = traces;
+        this.summaries = summaries;
         this.dumper = dumper;
     }
 
@@ -94,6 +98,11 @@ public class SessionController {
                 .map(item -> dumper.dump(item, user)).toList());
         data.put("traces", traces.findBySessionIdOrderByStartedAtDesc(sessionId).stream()
                 .map(item -> dumper.dump(item, user)).toList());
+        summaries.findFirstByTenantIdAndSessionIdOrderByUpdatedAtDesc(user.getTenantId(), sessionId)
+                .ifPresentOrElse(summary -> {
+                    data.put("context_compressed", true);
+                    data.put("context_summary_updated_at", Jsons.iso(summary.getUpdatedAt()));
+                }, () -> data.put("context_compressed", false));
         return data;
     }
 

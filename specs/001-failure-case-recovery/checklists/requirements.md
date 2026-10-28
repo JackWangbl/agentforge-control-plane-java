@@ -34,3 +34,4 @@
 - Validation iteration 1: all checklist items passed.
 - The specification uses checkpoint as a behavioral recovery contract: immutable original input, durable execution boundaries, resume from the latest safe failed step, and no replay of confirmed-success steps.
 - Existing source analysis informed the supported request-entry scope and the distinction between the current session-level resume behavior and the requested unified Failure Case module.
+- Validation iteration 2 (2026-10-27): added User Story 5 and FR-028–FR-031 so successful recovery is incomplete unless the existing Session Explorer can find the original session, messages, and trace. This closes the gap where retry success was only visible in Failure Case / workspace projection.

@@ -4,7 +4,7 @@ import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.ExecutionCheckpoint;
-import com.agentforge.controlplane.memory.MemoryService;
+import com.agentforge.controlplane.memory.ContextCompressionService;
 import com.agentforge.controlplane.domain.ModelConfig;
 import com.agentforge.controlplane.recovery.CheckpointService;
 import com.agentforge.controlplane.recovery.RecoveryTrace;
@@ -40,14 +40,14 @@ public class AgentScopeRuntime implements ChatTurnRunner {
 
     private final ToolRuntime tools;
     private final WorkspaceStore workspaces;
-    private final MemoryService memories;
+    private final ContextCompressionService compression;
     private final CheckpointService checkpoints;
 
-    public AgentScopeRuntime(ToolRuntime tools, WorkspaceStore workspaces, MemoryService memories,
+    public AgentScopeRuntime(ToolRuntime tools, WorkspaceStore workspaces, ContextCompressionService compression,
                              CheckpointService checkpoints) {
         this.tools = tools;
         this.workspaces = workspaces;
-        this.memories = memories;
+        this.compression = compression;
         this.checkpoints = checkpoints;
     }
 
@@ -56,7 +56,7 @@ public class AgentScopeRuntime implements ChatTurnRunner {
         List<Map<String, Object>> history = new ArrayList<>();
         CurrentUser caller = CurrentUserHolder.get();
         if (caller != null) {
-            history.addAll(memories.shortTermHistory(caller, agent.getId(), sessionId));
+            history.addAll(compression.assemble(caller, agent, model, sessionId, message));
         }
         history.add(Map.of("role", "user", "content", message == null ? "" : message));
         ChatReply reply = generate(agent, model, history, sessionId, false, false);

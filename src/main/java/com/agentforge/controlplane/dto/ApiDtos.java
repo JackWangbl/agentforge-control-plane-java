@@ -121,7 +121,8 @@ public final class ApiDtos {
             List<Map<String, Object>> tool_flows,
             Long sandbox_id,
             Map<String, Object> a2a_card,
-            Map<String, Object> recovery_policy) {
+            Map<String, Object> recovery_policy,
+            Map<String, Object> context_compression) {
         public AgentCreate {
             description = description == null ? "" : description;
             model_name = model_name == null ? "" : model_name;
@@ -136,6 +137,7 @@ public final class ApiDtos {
             tool_flows = tool_flows == null ? List.of() : tool_flows;
             a2a_card = a2a_card == null ? Map.of() : a2a_card;
             recovery_policy = recovery_policy == null ? Map.of() : recovery_policy;
+            context_compression = context_compression == null ? Map.of() : context_compression;
         }
     }
 

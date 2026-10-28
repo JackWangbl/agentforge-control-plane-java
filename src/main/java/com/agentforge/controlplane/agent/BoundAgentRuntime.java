@@ -4,6 +4,7 @@ import com.agentforge.controlplane.access.CurrentUser;
 import com.agentforge.controlplane.access.CurrentUserHolder;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.AgentRelease;
+import com.agentforge.controlplane.memory.ContextCompressionService;
 import com.agentforge.controlplane.memory.MemoryService;
 import com.agentforge.controlplane.memory.MemorySummarizer;
 import com.agentforge.controlplane.domain.HttpAgent;
@@ -41,6 +42,7 @@ public class BoundAgentRuntime {
     private final HttpAgentRuntime httpAgents;
     private final MemoryService memories;
     private final MemorySummarizer summarizer;
+    private final ContextCompressionService compression;
     private final AgentReleaseService releases;
     private final ExecutionRecorder executionRecorder;
     private final CheckpointService checkpointService;
@@ -48,7 +50,8 @@ public class BoundAgentRuntime {
     public BoundAgentRuntime(ModelConfigRepository models, ObjectProvider<AgentScopeRuntime> runtime,
                              BrowserRuntime browser, WorkspaceStore workspaces, HttpAgentRuntime httpAgents,
                              MemoryService memories, MemorySummarizer summarizer, AgentReleaseService releases,
-                             ExecutionRecorder executionRecorder, CheckpointService checkpointService) {
+                             ExecutionRecorder executionRecorder, CheckpointService checkpointService,
+                             ContextCompressionService compression) {
         this.models = models;
         this.runtime = runtime;
         this.browser = browser;
@@ -59,6 +62,7 @@ public class BoundAgentRuntime {
         this.releases = releases;
         this.executionRecorder = executionRecorder;
         this.checkpointService = checkpointService;
+        this.compression = compression;
     }
 
     /** 调试台 / 对外接口共用。HTTP 接入的 Agent 直接打到对方平台。 */
@@ -135,7 +139,7 @@ public class BoundAgentRuntime {
         } else if (caller == null) {
             history = historyFrom(workspaces.loadSession(target, sid));
         } else {
-            history = memories.shortTermHistory(caller, target.getId(), sid);
+            history = compression.assemble(caller, target, model, sid, message);
         }
         history.add(Map.of("role", "user", "content", message == null ? "" : message));
         ExecutionContext nested = ExecutionContext.forAgent(target, sid + "-" + WorkspaceStore.newTraceId());

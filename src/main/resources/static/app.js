@@ -148,7 +148,7 @@ function sessionTraceMarkup(item){
   const tokens=(item.input_tokens||0)+(item.output_tokens||0);
   return `<details class="session-trace"><summary><span class="mono">${escapeHtml(item.trace_id)}</span>${pill(item.status)}<span>${Number(item.duration_ms)||0} ms</span><span>${fmt(tokens)} Token</span><b>查看步骤</b></summary><div class="session-trace-steps">${traceStepsMarkup(item.spans)}</div></details>`;
 }
-function sessionDetailMarkup(data){const messages=(data.messages||[]).map(item=>`<article class="session-message ${item.role==='user'?'user':'assistant'}"><header><b>${item.role==='user'?'用户':escapeHtml(item.agent_name||data.agent_name)}</b><time>${dt(item.created_at)}</time></header><p>${escapeHtml(item.content).replace(/\n/g,'<br>')}</p></article>`).join('');const traces=(data.traces||[]).map(sessionTraceMarkup).join('');return `<section class="session-detail"><div class="session-detail-head"><div><small>SESSION DETAIL</small><h3>${escapeHtml(data.title)}</h3><p class="mono">${escapeHtml(data.session_id)}</p></div><button type="button" class="close" id="closeSessionDetail" aria-label="关闭">×</button></div><div class="session-facts"><span><small>Agent</small><b>${escapeHtml(data.agent_name)}</b></span><span><small>用户</small><b>${escapeHtml(data.user_id)}</b></span><span><small>状态</small>${pill(data.status)}</span><span><small>Token</small><b>${fmt(data.total_tokens)}</b></span><span><small>总耗时</small><b>${data.latency_ms} ms</b></span></div><h4>真实消息记录 · ${(data.messages||[]).length}</h4><div class="session-messages">${messages||'<div class="session-detail-empty">该历史会话没有保存消息正文。</div>'}</div><h4>执行链路 · ${(data.traces||[]).length}</h4><div class="session-traces">${traces||'<div class="session-detail-empty">暂无关联链路。</div>'}</div></section>`}
+function sessionDetailMarkup(data){const messages=(data.messages||[]).map(item=>`<article class="session-message ${item.role==='user'?'user':'assistant'}"><header><b>${item.role==='user'?'用户':escapeHtml(item.agent_name||data.agent_name)}</b><time>${dt(item.created_at)}</time></header><p>${escapeHtml(item.content).replace(/\n/g,'<br>')}</p></article>`).join('');const traces=(data.traces||[]).map(sessionTraceMarkup).join('');const compressHint=data.context_compressed?`<p class="session-compress-hint">较早轮次已做上下文压缩，原文仍在上方消息中。模型下一轮看到的是摘要加近期原文。</p>`:'';return `<section class="session-detail"><div class="session-detail-head"><div><small>SESSION DETAIL</small><h3>${escapeHtml(data.title)}</h3><p class="mono">${escapeHtml(data.session_id)}</p></div><button type="button" class="close" id="closeSessionDetail" aria-label="关闭">×</button></div><div class="session-facts"><span><small>Agent</small><b>${escapeHtml(data.agent_name)}</b></span><span><small>用户</small><b>${escapeHtml(data.user_id)}</b></span><span><small>状态</small>${pill(data.status)}</span><span><small>Token</small><b>${fmt(data.total_tokens)}</b></span><span><small>总耗时</small><b>${data.latency_ms} ms</b></span></div>${compressHint}<h4>真实消息记录 · ${(data.messages||[]).length}</h4><div class="session-messages">${messages||'<div class="session-detail-empty">该历史会话没有保存消息正文。</div>'}</div><h4>执行链路 · ${(data.traces||[]).length}</h4><div class="session-traces">${traces||'<div class="session-detail-empty">暂无关联链路。</div>'}</div></section>`}
 function closeSessionDetail(){
   const modal=$('#sessionModal');
   const target=$('#sessionDetail');
@@ -2206,6 +2206,7 @@ function agentFormHtml(row, models, mcpRows, skillRows, sandboxRows, httpRows, k
     </section>
     <div class="agent-local">
     <div class="field"><label>系统提示词</label><textarea name="system_prompt" class="agent-prompt" placeholder="你是一名专业的企业助手">${row?escapeHtml(row.system_prompt||''):''}</textarea></div>
+    ${contextCompressionFields(row)}
     <section class="bind-section">
       <div class="bind-head"><h3>关联 MCP 工具</h3><small id="bindMcpCount"></small></div>
       <p class="bind-hint">点开后滚动勾选，选中的工具会提供给当前 Agent。</p>
@@ -2319,6 +2320,49 @@ function bindA2aCard(form, row){
       if(note) note.textContent='这是当前线上的名片。改左边之后，这里变成保存后的效果。';
     }).catch(()=>{});
   }
+}
+function contextCompressionFields(row){
+  const p=row&&row.context_compression||{};
+  const on=p.enabled!==false;
+  const val=(key)=>p[key]===undefined||p[key]===null?'':p[key];
+  return `<section class="bind-section">
+      <div class="bind-head"><h3>上下文压缩</h3><small>超窗后滚动摘要，按 token 预算裁剪</small></div>
+      <p class="bind-hint">数字留空则用平台默认。关闭后仍按最近 20 条 / 约 6000 字裁掉旧消息。重拾续跑和内部 A2A 不会压缩。</p>
+      <label class="perm-check"><input type="checkbox" name="cc_enabled" ${on?'checked':''}><span>启用上下文压缩</span></label>
+      <div class="agent-form-grid" style="margin-top:10px">
+        <div class="field"><label>上下文窗口（token）</label><input name="cc_context_window_tokens" type="number" min="1024" max="131072" placeholder="默认 8192" value="${escapeHtml(String(val('context_window_tokens')))}"></div>
+        <div class="field"><label>预留回复（token）</label><input name="cc_reserved_output_tokens" type="number" min="128" max="8192" placeholder="默认 1024" value="${escapeHtml(String(val('reserved_output_tokens')))}"></div>
+        <div class="field"><label>预留工具（token）</label><input name="cc_reserved_tool_tokens" type="number" min="0" max="8192" placeholder="默认 1024" value="${escapeHtml(String(val('reserved_tool_tokens')))}"></div>
+        <div class="field"><label>近期最少条数</label><input name="cc_min_recent_messages" type="number" min="2" max="50" placeholder="默认 8" value="${escapeHtml(String(val('min_recent_messages')))}"></div>
+        <div class="field"><label>条数触发阈值</label><input name="cc_message_count_trigger" type="number" min="4" max="200" placeholder="默认 20" value="${escapeHtml(String(val('message_count_trigger')))}"></div>
+        <div class="field"><label>近期 token 上限</label><input name="cc_recent_token_limit" type="number" min="256" max="32000" placeholder="默认 2700" value="${escapeHtml(String(val('recent_token_limit')))}"></div>
+        <div class="field"><label>摘要 token 上限</label><input name="cc_summary_token_limit" type="number" min="128" max="4096" placeholder="默认 800" value="${escapeHtml(String(val('summary_token_limit')))}"></div>
+        <div class="field"><label>字/token 系数</label><input name="cc_chars_per_token" type="number" min="0.5" max="8" step="0.1" placeholder="默认 1.5" value="${escapeHtml(String(val('chars_per_token')))}"></div>
+      </div>
+    </section>`;
+}
+function collectContextCompression(form){
+  const num=(name)=>{
+    const el=form.querySelector(`[name="${name}"]`);
+    if(!el) return undefined;
+    const text=String(el.value||'').trim();
+    if(!text) return undefined;
+    const value=Number(text);
+    return Number.isFinite(value)?value:undefined;
+  };
+  const policy={enabled:!!(form.querySelector('[name="cc_enabled"]')&&form.querySelector('[name="cc_enabled"]').checked)};
+  const fields={
+    context_window_tokens:num('cc_context_window_tokens'),
+    reserved_output_tokens:num('cc_reserved_output_tokens'),
+    reserved_tool_tokens:num('cc_reserved_tool_tokens'),
+    min_recent_messages:num('cc_min_recent_messages'),
+    message_count_trigger:num('cc_message_count_trigger'),
+    recent_token_limit:num('cc_recent_token_limit'),
+    summary_token_limit:num('cc_summary_token_limit'),
+    chars_per_token:num('cc_chars_per_token')
+  };
+  Object.entries(fields).forEach(([key,value])=>{ if(value!==undefined) policy[key]=value; });
+  return policy;
 }
 function toolFlowsText(row){
   const flows=row&&row.tool_flows;
@@ -2576,6 +2620,16 @@ $('#modalForm').addEventListener('submit',async e=>{
         data.tool_flows=flows;
       }
     }
+    data.context_compression=collectContextCompression(form);
+    delete data.cc_enabled;
+    delete data.cc_context_window_tokens;
+    delete data.cc_reserved_output_tokens;
+    delete data.cc_reserved_tool_tokens;
+    delete data.cc_min_recent_messages;
+    delete data.cc_message_count_trigger;
+    delete data.cc_recent_token_limit;
+    delete data.cc_summary_token_limit;
+    delete data.cc_chars_per_token;
     const cardText=String(data.a2a_card||'').trim();
     if(!cardText) data.a2a_card={skills:[]};
     else{

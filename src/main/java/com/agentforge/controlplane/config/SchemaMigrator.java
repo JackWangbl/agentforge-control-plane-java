@@ -186,6 +186,45 @@ public class SchemaMigrator implements ApplicationRunner {
             }
             createKnowledgeTables(conn);
             createRecoveryTables(conn);
+            createContextCompression(conn);
+        }
+    }
+
+    private void createContextCompression(Connection conn) throws Exception {
+        if (!hasColumn(conn, "agents", "context_compression")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE agents ADD COLUMN context_compression JSON NULL");
+            }
+            log.info("已为 agents 表补齐 context_compression 列");
+        }
+        if (!hasTable(conn, "conversation_context_summaries")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("""
+                        CREATE TABLE conversation_context_summaries (
+                          id BIGINT NOT NULL AUTO_INCREMENT,
+                          tenant_id BIGINT NOT NULL,
+                          owner_id BIGINT NULL,
+                          session_id VARCHAR(160) NOT NULL,
+                          agent_id BIGINT NOT NULL,
+                          summary_text TEXT NOT NULL,
+                          covered_through_message_id BIGINT NOT NULL,
+                          source_message_count INT NOT NULL,
+                          source_char_count INT NOT NULL,
+                          estimated_tokens_before INT NOT NULL,
+                          estimated_tokens_after INT NOT NULL,
+                          history_budget INT NOT NULL,
+                          context_window_tokens INT NOT NULL,
+                          model_name VARCHAR(120) NOT NULL,
+                          content_hash CHAR(64) NOT NULL,
+                          created_at DATETIME(6) NOT NULL,
+                          updated_at DATETIME(6) NOT NULL,
+                          PRIMARY KEY (id),
+                          UNIQUE KEY uk_ctx_summary_session_agent (tenant_id, session_id, agent_id),
+                          KEY idx_ctx_summary_session (tenant_id, session_id)
+                        )
+                        """);
+            }
+            log.info("上下文压缩摘要表已就绪");
         }
     }
 

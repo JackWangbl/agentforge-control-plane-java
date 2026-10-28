@@ -81,6 +81,10 @@ public class Agent extends TenantOwnedEntity {
     @Column(name = "recovery_policy", columnDefinition = "json")
     private Map<String, Object> recoveryPolicy = new java.util.LinkedHashMap<>();
 
+    @Convert(converter = JsonConverters.MapConverter.class)
+    @Column(name = "context_compression", columnDefinition = "json")
+    private Map<String, Object> contextCompression = new java.util.LinkedHashMap<>();
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }
@@ -124,5 +128,11 @@ public class Agent extends TenantOwnedEntity {
     public Map<String, Object> getRecoveryPolicy() { return recoveryPolicy == null ? Map.of() : recoveryPolicy; }
     public void setRecoveryPolicy(Map<String, Object> value) {
         recoveryPolicy = value == null ? new java.util.LinkedHashMap<>() : new java.util.LinkedHashMap<>(value);
+    }
+    public Map<String, Object> getContextCompression() {
+        return contextCompression == null ? Map.of() : contextCompression;
+    }
+    public void setContextCompression(Map<String, Object> value) {
+        contextCompression = value == null ? new java.util.LinkedHashMap<>() : new java.util.LinkedHashMap<>(value);
     }
 }

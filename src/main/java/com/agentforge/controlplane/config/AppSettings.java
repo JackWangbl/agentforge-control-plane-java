@@ -21,6 +21,7 @@ public class AppSettings {
     private boolean evalWorker = true;
     private Recovery recovery = new Recovery();
     private HttpRetry httpRetry = new HttpRetry();
+    private ContextCompression contextCompression = new ContextCompression();
 
     public static class Recovery {
         private long syncWaitMs = 3000;
@@ -51,6 +52,43 @@ public class AppSettings {
         public void setPollIntervalMs(long value) { pollIntervalMs = bounded("poll-interval-ms", value, 50, 60_000); }
         public long getLeaseMs() { return leaseMs; }
         public void setLeaseMs(long value) { leaseMs = bounded("lease-ms", value, 1_000, 600_000); }
+    }
+
+    public static class ContextCompression {
+        private boolean enabled = true;
+        private int contextWindowTokens = 8192;
+        private int reservedOutputTokens = 1024;
+        private int reservedToolTokens = 1024;
+        private int minHistoryTokens = 512;
+        private double charsPerToken = 1.5;
+        private int messageCountTrigger = 20;
+        private int minRecentMessages = 8;
+        private int recentTokenLimit = 2700;
+        private int summaryTokenLimit = 800;
+        private int maxCompressCallsPerTurn = 1;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean value) { enabled = value; }
+        public int getContextWindowTokens() { return contextWindowTokens; }
+        public void setContextWindowTokens(int value) { contextWindowTokens = boundedInt("context-window-tokens", value, 1024, 131072); }
+        public int getReservedOutputTokens() { return reservedOutputTokens; }
+        public void setReservedOutputTokens(int value) { reservedOutputTokens = boundedInt("reserved-output-tokens", value, 128, 8192); }
+        public int getReservedToolTokens() { return reservedToolTokens; }
+        public void setReservedToolTokens(int value) { reservedToolTokens = boundedInt("reserved-tool-tokens", value, 0, 8192); }
+        public int getMinHistoryTokens() { return minHistoryTokens; }
+        public void setMinHistoryTokens(int value) { minHistoryTokens = boundedInt("min-history-tokens", value, 128, 8192); }
+        public double getCharsPerToken() { return charsPerToken; }
+        public void setCharsPerToken(double value) { charsPerToken = boundedDouble("chars-per-token", value, 0.5, 8.0); }
+        public int getMessageCountTrigger() { return messageCountTrigger; }
+        public void setMessageCountTrigger(int value) { messageCountTrigger = boundedInt("message-count-trigger", value, 4, 200); }
+        public int getMinRecentMessages() { return minRecentMessages; }
+        public void setMinRecentMessages(int value) { minRecentMessages = boundedInt("min-recent-messages", value, 2, 50); }
+        public int getRecentTokenLimit() { return recentTokenLimit; }
+        public void setRecentTokenLimit(int value) { recentTokenLimit = boundedInt("recent-token-limit", value, 256, 32000); }
+        public int getSummaryTokenLimit() { return summaryTokenLimit; }
+        public void setSummaryTokenLimit(int value) { summaryTokenLimit = boundedInt("summary-token-limit", value, 128, 4096); }
+        public int getMaxCompressCallsPerTurn() { return maxCompressCallsPerTurn; }
+        public void setMaxCompressCallsPerTurn(int value) { maxCompressCallsPerTurn = boundedInt("max-compress-calls-per-turn", value, 1, 2); }
     }
 
     public static class HttpRetry {
@@ -156,4 +194,8 @@ public class AppSettings {
     public void setRecovery(Recovery value) { recovery = value == null ? new Recovery() : value; }
     public HttpRetry getHttpRetry() { return httpRetry; }
     public void setHttpRetry(HttpRetry value) { httpRetry = value == null ? new HttpRetry() : value; }
+    public ContextCompression getContextCompression() { return contextCompression; }
+    public void setContextCompression(ContextCompression value) {
+        contextCompression = value == null ? new ContextCompression() : value;
+    }
 }

@@ -73,6 +73,18 @@ agentforge:
     worker-threads: ${RECOVERY_WORKER_THREADS:4}
     poll-interval-ms: ${RECOVERY_POLL_INTERVAL_MS:500}
     lease-ms: ${RECOVERY_LEASE_MS:30000}
+  context-compression:
+    enabled: ${CONTEXT_COMPRESSION_ENABLED:true}
+    context-window-tokens: ${CONTEXT_COMPRESSION_WINDOW_TOKENS:8192}
+    reserved-output-tokens: ${CONTEXT_COMPRESSION_RESERVED_OUTPUT_TOKENS:1024}
+    reserved-tool-tokens: ${CONTEXT_COMPRESSION_RESERVED_TOOL_TOKENS:1024}
+    min-history-tokens: ${CONTEXT_COMPRESSION_MIN_HISTORY_TOKENS:512}
+    chars-per-token: ${CONTEXT_COMPRESSION_CHARS_PER_TOKEN:1.5}
+    message-count-trigger: ${CONTEXT_COMPRESSION_MESSAGE_COUNT_TRIGGER:20}
+    min-recent-messages: ${CONTEXT_COMPRESSION_MIN_RECENT_MESSAGES:8}
+    recent-token-limit: ${CONTEXT_COMPRESSION_RECENT_TOKEN_LIMIT:2700}
+    summary-token-limit: ${CONTEXT_COMPRESSION_SUMMARY_TOKEN_LIMIT:800}
+    max-compress-calls-per-turn: ${CONTEXT_COMPRESSION_MAX_CALLS_PER_TURN:1}
   http-retry:
     total-attempts: ${HTTP_RETRY_TOTAL_ATTEMPTS:3}
     initial-delay-ms: ${HTTP_RETRY_INITIAL_DELAY_MS:200}
