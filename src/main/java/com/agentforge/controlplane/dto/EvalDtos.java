@@ -30,7 +30,10 @@ public final class EvalDtos {
             String name,
             String scorer,
             Long judge_model_id,
-            List<Long> case_ids) {
+            List<Long> case_ids,
+            Integer trials,
+            String aggregation,
+            Double pass_threshold) {
 
         public EvaluationLaunchRequest {
             name = name == null ? "" : name;
@@ -57,12 +60,14 @@ public final class EvalDtos {
             @NotBlank @Size(max = 120) String name,
             String description,
             String kind,
-            List<Long> agent_ids) {
+            List<Long> agent_ids,
+            String suite) {
 
         public DatasetCreateRequest {
             description = description == null ? "" : description;
             kind = kind == null ? "baseline" : kind;
             agent_ids = agent_ids == null ? List.of() : agent_ids;
+            suite = suite == null ? "" : suite;
         }
     }
 
@@ -71,7 +76,8 @@ public final class EvalDtos {
             @Size(min = 1, max = 120) String name,
             String description,
             String kind,
-            List<Long> agent_ids) {
+            List<Long> agent_ids,
+            String suite) {
     }
 
     public record DatasetCaseCreateRequest(
@@ -80,7 +86,9 @@ public final class EvalDtos {
             String case_key,
             List<String> tags,
             Map<String, Object> extra,
-            String solution) {
+            String solution,
+            List<Map<String, Object>> graders,
+            Boolean explicit_graders) {
 
         public DatasetCaseCreateRequest {
             expected = expected == null ? "" : expected;
@@ -88,6 +96,7 @@ public final class EvalDtos {
             tags = tags == null ? List.of() : tags;
             extra = extra == null ? Map.of() : extra;
             solution = solution == null ? "" : solution;
+            explicit_graders = explicit_graders != null && explicit_graders;
         }
     }
 
@@ -100,6 +109,8 @@ public final class EvalDtos {
             String source_name,
             String kind,
             String kind_label,
+            String suite,
+            String suite_label,
             List<Long> agent_ids,
             List<String> agent_names,
             boolean bound,
@@ -114,22 +125,24 @@ public final class EvalDtos {
             @JsonInclude(JsonInclude.Include.NON_NULL) Integer imported) {
 
         public DatasetResponse(Long id, String name, String description, String source_name, String kind,
-                              String kind_label, List<Long> agent_ids, List<String> agent_names, boolean bound,
-                              int case_count, Instant created_at, Instant updated_at) {
-            this(id, name, description, source_name, kind, kind_label, agent_ids, agent_names, bound, case_count,
-                    created_at, updated_at, null, null, null, null, null, null);
+                              String kind_label, String suite, String suite_label, List<Long> agent_ids,
+                              List<String> agent_names, boolean bound, int case_count, Instant created_at,
+                              Instant updated_at) {
+            this(id, name, description, source_name, kind, kind_label, suite, suite_label, agent_ids, agent_names,
+                    bound, case_count, created_at, updated_at, null, null, null, null, null, null);
         }
 
         public DatasetResponse withCases(List<CaseResponse> rows) {
-            return new DatasetResponse(id, name, description, source_name, kind, kind_label, agent_ids, agent_names,
-                    bound, case_count, created_at, updated_at, rows, added, updated, skipped, errors, imported);
+            return new DatasetResponse(id, name, description, source_name, kind, kind_label, suite, suite_label,
+                    agent_ids, agent_names, bound, case_count, created_at, updated_at, rows, added, updated, skipped,
+                    errors, imported);
         }
 
         public DatasetResponse withImport(int addedCount, int updatedCount, int skippedCount,
                                          List<Map<String, Object>> importErrors, int importedCount) {
-            return new DatasetResponse(id, name, description, source_name, kind, kind_label, agent_ids, agent_names,
-                    bound, case_count, created_at, updated_at, cases, addedCount, updatedCount, skippedCount,
-                    importErrors, importedCount);
+            return new DatasetResponse(id, name, description, source_name, kind, kind_label, suite, suite_label,
+                    agent_ids, agent_names, bound, case_count, created_at, updated_at, cases, addedCount, updatedCount,
+                    skippedCount, importErrors, importedCount);
         }
     }
 
@@ -142,7 +155,8 @@ public final class EvalDtos {
             List<String> tags,
             Map<String, Object> extra,
             boolean enabled,
-            Instant created_at) {
+            Instant created_at,
+            List<Map<String, Object>> graders) {
     }
 
     public record RunResponse(
@@ -208,7 +222,9 @@ public final class EvalDtos {
             String trace_id,
             String session_id,
             String error,
-            Instant created_at) {
+            Instant created_at,
+            int trial_index,
+            List<Map<String, Object>> grader_results) {
     }
 
     public record ScoringGuideResponse(List<String> scorers, List<Map<String, Object>> guides) {

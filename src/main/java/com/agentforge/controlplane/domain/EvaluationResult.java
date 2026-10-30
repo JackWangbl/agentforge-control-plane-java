@@ -1,9 +1,14 @@
 package com.agentforge.controlplane.domain;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @Entity
 @Table(name = "evaluation_results")
@@ -14,6 +19,10 @@ public class EvaluationResult extends TenantOwnedEntity {
 
     @Column(name = "case_id")
     private Long caseId;
+
+    /** 同一条用例的第几次试跑，从 1 开始。 */
+    @Column(name = "trial_index", nullable = false)
+    private int trialIndex = 1;
 
     @Column(name = "case_key", length = 80, nullable = false)
     private String caseKey = "";
@@ -41,6 +50,10 @@ public class EvaluationResult extends TenantOwnedEntity {
     @Column(name = "reason", columnDefinition = "text")
     private String reason = "";
 
+    @Convert(converter = JsonConverters.MapListConverter.class)
+    @Column(name = "grader_results", columnDefinition = "json")
+    private List<Map<String, Object>> graderResults = new ArrayList<>();
+
     @Column(name = "latency_ms", nullable = false)
     private int latencyMs = 0;
 
@@ -61,6 +74,8 @@ public class EvaluationResult extends TenantOwnedEntity {
     public void setRunId(Long runId) { this.runId = runId; }
     public Long getCaseId() { return caseId; }
     public void setCaseId(Long caseId) { this.caseId = caseId; }
+    public int getTrialIndex() { return trialIndex <= 0 ? 1 : trialIndex; }
+    public void setTrialIndex(int trialIndex) { this.trialIndex = trialIndex; }
     public String getCaseKey() { return caseKey; }
     public void setCaseKey(String caseKey) { this.caseKey = caseKey; }
     public String getStatus() { return status; }
@@ -75,6 +90,10 @@ public class EvaluationResult extends TenantOwnedEntity {
     public void setActual(String actual) { this.actual = actual; }
     public String getReason() { return reason == null ? "" : reason; }
     public void setReason(String reason) { this.reason = reason; }
+    public List<Map<String, Object>> getGraderResults() { return graderResults; }
+    public void setGraderResults(List<Map<String, Object>> graderResults) {
+        this.graderResults = graderResults == null ? new ArrayList<>() : graderResults;
+    }
     public int getLatencyMs() { return latencyMs; }
     public void setLatencyMs(int latencyMs) { this.latencyMs = latencyMs; }
     public int getTokens() { return tokens; }

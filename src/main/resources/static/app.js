@@ -113,9 +113,9 @@ const api = async (path, options={}) => {
 const fmt = n => n >= 1000000 ? (n/1000000).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : n;
 const dt = value => new Date(value+'Z').toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 const statusText = {completed:'已完成',running:'运行中',failed:'失败',ok:'正常',error:'异常',published:'已发布',draft:'草稿',queued:'排队中',passed:'通过',skipped:'跳过',cancelled:'已取消',paused:'已暂停',RESUMABLE:'可重拾',RECOVERING:'重拾中',MANUAL_REQUIRED:'需人工处理',RECOVERED:'重拾成功',QUEUED:'排队中',RUNNING:'运行中',SUCCEEDED:'成功',FAILED:'失败',TIMED_OUT:'超时'};
-const titles = {dashboard:'运行概览',memories:'记忆',sessions:'会话查询','failure-cases':'失败 Case',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'数据测试',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'多智能体',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
+const titles = {dashboard:'运行概览',memories:'记忆',sessions:'会话查询','failure-cases':'失败 Case',studio:'AgentScope Studio',traces:'AgentScope Studio',evaluations:'测评',experiments:'A/B 实验',playground:'Agent 调试台',agents:'Agent 管理','http-agents':'HTTP 接口',workflows:'多智能体',mcp:'MCP 工具',skills:'Skill 管理',knowledge:'知识库',models:'模型配置',vectors:'向量数据库',sandboxes:'沙箱管理',roles:'权限管理'};
 const pageMeta = {
-  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], 'failure-cases':['FAILURE RECOVERY','失败 Case','查看失败率、原始入参和失败原因，并从最近安全检查点继续执行'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','数据测试','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['MULTI AGENT','多智能体','三种模式可打开「示例·」编排跟着练：场景移交、主从 SubAgent、工作流'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。新建时可选混合检索或 GraphRAG。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
+  memories:['MEMORY','记忆','Agent 会在对话结束后自动总结。这里只显示你自己的长期记忆，可以改正或删除'], sessions:['SESSION EXPLORER','会话查询','检索和审计所有 Agent 会话记录'], 'failure-cases':['FAILURE RECOVERY','失败 Case','查看失败率、原始入参和失败原因，并从最近安全检查点继续执行'], studio:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], traces:['AGENTSCOPE STUDIO','AgentScope Studio','查看 Agent 运行轨迹、Token 消耗与调试视图'], evaluations:['EVALUATION','测评','先选 Agent，再管理它的数据集和回归测试'], experiments:['A/B EXPERIMENT','A/B 分流实验','把流量按权重分到不同 Agent，对比延迟、失败率和回复质量'], playground:['AGENT PLAYGROUND','Agent 调试台','每个 Agent 使用独立工作空间保存会话、链路和配置'], agents:['AGENT REGISTRY','Agent 管理','管理 Agent 配置、版本与发布状态'], 'http-agents':['HTTP AGENT','HTTP 接口','登记其他平台 Agent 的 HTTP 对话地址；在 Agent 上勾选后即变成对方本身'], workflows:['MULTI AGENT','多智能体','三种模式可打开「示例·」编排跟着练：场景移交、主从 SubAgent、工作流'], mcp:['TOOL REGISTRY','MCP 工具','集中配置和管控 MCP 服务与工具'], skills:['CAPABILITY HUB','Skill 管理','人工添加可复用的 Agent 专业能力'], knowledge:['KNOWLEDGE','知识库','上传文档后自动清洗、分块。新建时可选混合检索或 GraphRAG。默认只有你和被分享的人能看见'], vectors:['VECTOR STORE','向量数据库','租户默认的 Milvus 连接，由管理员维护'], models:['MODEL GATEWAY','模型配置','对话、向量和重排序模型'], sandboxes:['SECURE RUNTIME','沙箱管理','隔离 Agent 的代码和工具执行环境'], roles:['ACCESS CONTROL','权限管理','基于角色控制平台资源访问权限']
 };
 let currentPage='dashboard', currentParam='';
 function pageTools(extra=''){
@@ -309,7 +309,7 @@ async function resources(page){
 }
 const EVAL_AGENT_KEY='af_eval_agent';
 const evalState={tab:'datasets',datasetId:'',runId:'',poll:null,kindFilter:'',agentFilter:''};
-const scorerLabel={contains:'包含匹配',exact:'完全匹配',regex:'正则',llm:'LLM 判分',perf:'性能指标'};
+const scorerLabel={contains:'包含匹配',exact:'完全匹配',regex:'正则',llm:'LLM 判分',agent:'Anthropic 评测',perf:'性能指标'};
 const datasetKindLabel={redteam:'安全红队集',baseline:'能力基线',golden:'黄金集'};
 const datasetKindOrder=['redteam','baseline','golden'];
 const datasetContentNames={redteam:'提示注入',baseline:'日常问答',golden:'黄金用例'};
@@ -345,6 +345,7 @@ function evalJudgeSelectHtml(agent){
   </div>`;
 }
 function evalScorerHintHtml(id){
+  if(id==='agent') return `<div class="eval-guide"><b>Anthropic 评测怎么判</b><p>一条用例可以同时检查回复、必调工具（不看调用顺序）、轮次和 Token，以及模型断言。模型断言允许「无法判断」，无法判断不算通过。</p><p>能力集看 pass@k：重复次数里至少成功一次，通过率可以偏低。回归集看 pass^k：每次都要成功，应当接近 100%。k=1 时两者相同。</p></div>`;
   const g=evalGuideOf(id);
   if(!g) return '';
   return `<div class="eval-guide"><b>${escapeHtml(g.label)}怎么判</b><p>${escapeHtml(g.rule)}</p>
@@ -354,6 +355,16 @@ function evalScorerHintHtml(id){
 }
 function datasetKindOf(row){return datasetKindLabel[row&&row.kind]?row.kind:'baseline'}
 function datasetKindBadge(row){const kind=datasetKindOf(row);return `<span class="eval-kind ${kind}">${datasetKindLabel[kind]}</span>`}
+function datasetSuiteBadge(row){
+  if(!row||(row.suite!=='capability'&&row.suite!=='regression')) return '';
+  const label=row.suite==='regression'?'回归集':'能力集';
+  return `<span class="eval-kind ${row.suite}">${label}</span>`;
+}
+function suiteShort(row){
+  if(row&&row.suite==='capability') return ' · 能力集';
+  if(row&&row.suite==='regression') return ' · 回归集';
+  return '';
+}
 function datasetDisplayName(row){
   const raw=String(row&&row.name||'').trim()||'未命名数据集';
   if(evalAgents().some(agent=>agent.name===raw)) return datasetContentNames[datasetKindOf(row)]||'日常问答';
@@ -453,7 +464,7 @@ function evalDatasetsHtml(){
   evalState.datasetId=current?String(current.id):'';
   let side='<div class="empty">还没有绑定到这个 Agent 的数据集</div>';
   if(filtered.length){
-    side=filtered.map(x=>`<button type="button" class="eval-ds ${String(x.id)===String(evalState.datasetId)?'active':''}" data-ds="${x.id}"><b>${escapeHtml(datasetDisplayName(x))}</b><small>${datasetKindLabel[datasetKindOf(x)]} · ${x.case_count||0} 条用例</small></button>`).join('');
+    side=filtered.map(x=>`<button type="button" class="eval-ds ${String(x.id)===String(evalState.datasetId)?'active':''}" data-ds="${x.id}"><b>${escapeHtml(datasetDisplayName(x))}</b><small>${datasetKindLabel[datasetKindOf(x)]}${suiteShort(x)} · ${x.case_count||0} 条用例</small></button>`).join('');
   }
   const unbound=evalUnboundDatasets();
   const extra=unbound.length?`<button type="button" class="btn ghost eval-bind-existing" onclick="evalOpenBindExisting()">关联未绑定集 · ${unbound.length}</button>`:'';
@@ -535,7 +546,7 @@ function resetModalSubmit(label){
   return btn;
 }
 function evalOpenModal(title,submit,fieldsHtml,page,wide=false,id=''){
-  $('#modalEyebrow').textContent='数据测试';
+  $('#modalEyebrow').textContent='测评';
   $('#modalTitle').textContent=title;
   resetModalSubmit(submit);
   $('#modal').classList.toggle('modal-wide',!!wide);
@@ -549,11 +560,14 @@ function evalDatasetFormHtml(row){
   const agents=evalAgents();
   const agent=evalCurrentAgent();
   const kind=row?datasetKindOf(row):'baseline';
+  const suite=row&&row.suite||'';
   const kinds=datasetKindOrder.map(id=>`<option value="${id}" ${kind===id?'selected':''}>${datasetKindLabel[id]}</option>`).join('');
+  const suites=[['', '不指定'],['capability','能力集（pass@k，通过率可以偏低）'],['regression','回归集（pass^k，应当接近 100%）']].map(([id,label])=>`<option value="${id}" ${suite===id?'selected':''}>${label}</option>`).join('');
   const selected=row?row.agent_ids:(agent?[agent.id]:[]);
   const name=row?row.name:evalSuggestedDatasetName(kind);
   return `<div class="field"><label>名称</label><input name="name" required maxlength="120" placeholder="例如 日常问答" value="${escapeHtml(name)}"></div>
     <div class="field"><label>分类</label><select class="select" style="width:100%" name="kind">${kinds}</select></div>
+    <div class="field"><label>套件用途</label><select class="select" style="width:100%" name="suite">${suites}</select></div>
     <div class="field"><label>说明</label><input name="description" placeholder="这是一份测试题，不是 Agent" value="${row?escapeHtml(row.description||''):''}"></div>
     ${row?`<section class="bind-section">
       <div class="bind-head"><h3>绑定 Agent</h3><small id="bindAgentCount"></small></div>
@@ -609,6 +623,107 @@ async function evalSelectDataset(id){
   evalPaint();
   await evalLoadDataset(id);
 }
+function evalCallableTools(agent){
+  const rows=[];
+  const seen=new Set();
+  (agent&&agent.callable_tools||[]).forEach(tool=>{
+    const name=String(tool&&tool.name||'').trim();
+    if(!name||seen.has(name)) return;
+    seen.add(name);
+    rows.push({name,label:String(tool.label||name),description:String(tool.description||'')});
+  });
+  return rows;
+}
+function evalCaseGraderFields(){
+  const tools=evalCallableTools(evalCurrentAgent());
+  const toolField=tools.length
+    ? `<div class="eval-tool-select"><button type="button" class="eval-tool-trigger" aria-haspopup="listbox" aria-expanded="false"><span class="eval-tool-value is-empty">不要求调用工具</span></button><div class="eval-tool-menu" hidden role="listbox">${tools.map(tool=>`<label title="${escapeHtml(tool.description)}"><input type="checkbox" name="required_tools" value="${escapeHtml(tool.name)}"><span>${escapeHtml(tool.label)}</span></label>`).join('')}</div></div>`
+    : `<select disabled><option>当前 Agent 没有可勾选的工具</option></select>`;
+  return `<div class="wide eval-graders"><label>Anthropic 评分器（可选。创建测试时选「Anthropic 评测」才用这些；其它打分方式仍只看期望答案）</label>
+    <div class="eval-grader-grid">
+      <div><label>回复检查</label><select name="reply_check"><option value="auto">有期望就按包含匹配</option><option value="contains">包含</option><option value="exact">完全</option><option value="regex">正则</option><option value="none">不检查回复</option></select></div>
+      <div><label>必调工具</label>${toolField}</div>
+      <div><label>最多轮次</label><input name="max_turns" inputmode="numeric" placeholder="不限"></div>
+      <div><label>最多 Token</label><input name="max_tokens" inputmode="numeric" placeholder="不限"></div>
+    </div>
+    <label>模型断言（每行一条，最多 6 条，可以判无法判断）</label>
+    <textarea name="assertions" placeholder="先确认用户要退款&#10;不要编造订单号"></textarea></div>`;
+}
+function paintEvalToolSelect(root){
+  const box=root&&root.querySelector('.eval-tool-select');
+  if(!box) return;
+  const value=box.querySelector('.eval-tool-value');
+  const names=[...box.querySelectorAll('input[name="required_tools"]:checked')].map(input=>{
+    const span=input.parentElement&&input.parentElement.querySelector('span');
+    return (span&&span.textContent)||input.value;
+  });
+  value.textContent=names.length?names.join('、'):'不要求调用工具';
+  value.classList.toggle('is-empty',!names.length);
+}
+function closeEvalToolMenus(){
+  document.querySelectorAll('.eval-tool-menu').forEach(menu=>{
+    menu.hidden=true;
+    const trigger=menu.parentElement&&menu.parentElement.querySelector('.eval-tool-trigger');
+    if(trigger) trigger.setAttribute('aria-expanded','false');
+  });
+}
+function bindEvalToolSelect(form){
+  const box=form&&form.querySelector('.eval-tool-select');
+  if(!box) return;
+  const trigger=box.querySelector('.eval-tool-trigger');
+  const menu=box.querySelector('.eval-tool-menu');
+  trigger.addEventListener('click',ev=>{
+    ev.preventDefault();
+    ev.stopPropagation();
+    const willOpen=menu.hidden;
+    closeEvalToolMenus();
+    if(willOpen){
+      menu.hidden=false;
+      trigger.setAttribute('aria-expanded','true');
+    }
+  });
+  menu.addEventListener('click',ev=>ev.stopPropagation());
+  menu.addEventListener('change',()=>paintEvalToolSelect(form));
+}
+function evalBuildGraders(data){
+  const graders=[];
+  const expected=String(data.expected||'').trim();
+  const check=data.reply_check||'auto';
+  if(check==='exact'||check==='regex'||check==='contains'){
+    if(!expected) throw new Error('这种回复检查需要填写期望答案');
+    graders.push({type:check,expected,weight:1});
+  }else if(check!=='none'&&expected){
+    graders.push({type:'contains',expected,weight:1});
+  }
+  const tools=Array.isArray(data.required_tools)
+    ? data.required_tools.map(s=>String(s).trim()).filter(Boolean)
+    : String(data.required_tools||'').split(/[,，]/).map(s=>s.trim()).filter(Boolean);
+  if(tools.length) graders.push({type:'tool_calls',required:tools,weight:1});
+  const maxTurns=Number(data.max_turns||0);
+  const maxTokens=Number(data.max_tokens||0);
+  if((data.max_turns&&!(maxTurns>0))||(data.max_tokens&&!(maxTokens>0))) throw new Error('轮次和 Token 请填正整数');
+  if(maxTurns>0||maxTokens>0){
+    const limit={type:'transcript',weight:1};
+    if(maxTurns>0) limit.max_turns=maxTurns;
+    if(maxTokens>0) limit.max_tokens=maxTokens;
+    graders.push(limit);
+  }
+  const assertions=String(data.assertions||'').split(/\n/).map(s=>s.trim()).filter(Boolean);
+  if(assertions.length>6) throw new Error('模型断言最多 6 条');
+  if(assertions.length) graders.push({type:'llm_rubric',assertions,weight:1});
+  return graders;
+}
+function evalGraderSummary(row){
+  const graders=(row&&row.graders)||[];
+  if(!graders.length) return row&&String(row.expected||'').trim()?'包含匹配':'不打分';
+  return graders.map(g=>({contains:'包含',exact:'完全',regex:'正则',llm_rubric:`断言 ${(g.assertions||[]).length}`,tool_calls:`工具 ${(g.required||[]).length}`,transcript:'轨迹'}[g.type]||g.type)).join(' · ');
+}
+function evalGraderLines(row){
+  const items=(row&&row.grader_results)||[];
+  if(!items.length) return '';
+  const word=status=>status==='passed'?'通过':status==='unknown'?'无法判断':status==='error'?'出错':'未过';
+  return `<span class="eval-grader-lines">${items.map(g=>`${escapeHtml(g.name||g.type||'')} ${word(g.status)}：${escapeHtml(g.reason||'')}`).join('<br>')}</span>`;
+}
 async function evalLoadDataset(id){
   const main=$('#evalDatasetMain');
   if(!main) return;
@@ -617,33 +732,39 @@ async function evalLoadDataset(id){
     const ds=await api('/api/datasets/'+id);
     if(loadSeq!==evalState.loadSeq) return;
     const hit=(evalState.catalog.datasets||[]).find(x=>Number(x.id)===Number(id));
-    if(hit) Object.assign(hit,{name:ds.name,description:ds.description,kind:ds.kind,kind_label:ds.kind_label,agent_ids:ds.agent_ids||[],agent_names:ds.agent_names||[],case_count:ds.case_count,source_name:ds.source_name});
+    if(hit) Object.assign(hit,{name:ds.name,description:ds.description,kind:ds.kind,kind_label:ds.kind_label,suite:ds.suite||'',suite_label:ds.suite_label||'',agent_ids:ds.agent_ids||[],agent_names:ds.agent_names||[],case_count:ds.case_count,source_name:ds.source_name});
     const cases=ds.cases||[];
     const red=datasetKindOf(ds)==='redteam';
     const rows=cases.length?cases.map(c=>red
-      ?`<tr><td class="mono">${escapeHtml(c.case_key||c.id)}</td><td>${escapeHtml(caseAttack(c)||'—')}</td><td>${escapeHtml(c.input)}</td><td>${escapeHtml(c.expected||'—')}</td><td class="eval-solution">${escapeHtml(caseSolution(c)||'—')}</td><td><button class="btn ghost" onclick="evalDeleteCase(${ds.id},${c.id})">删除</button></td></tr>`
-      :`<tr><td class="mono">${escapeHtml(c.case_key||c.id)}</td><td>${escapeHtml(c.input)}</td><td>${escapeHtml(c.expected||'—')}</td><td><button class="btn ghost" onclick="evalDeleteCase(${ds.id},${c.id})">删除</button></td></tr>`
-    ).join(''):`<tr><td colspan="${red?6:4}" class="session-empty">还没有用例。在下方填写后点「保存用例」，或导入 CSV/JSONL。</td></tr>`;
-    const head=red?'<tr><th>编号</th><th>攻击类型</th><th>输入</th><th>期望</th><th>解决方案</th><th></th></tr>':'<tr><th>编号</th><th>输入</th><th>期望</th><th></th></tr>';
+      ?`<tr><td class="mono">${escapeHtml(c.case_key||c.id)}</td><td>${escapeHtml(caseAttack(c)||'—')}</td><td>${escapeHtml(c.input)}</td><td>${escapeHtml(c.expected||'—')}</td><td>${escapeHtml(evalGraderSummary(c))}</td><td class="eval-solution">${escapeHtml(caseSolution(c)||'—')}</td><td><button class="btn ghost" onclick="evalDeleteCase(${ds.id},${c.id})">删除</button></td></tr>`
+      :`<tr><td class="mono">${escapeHtml(c.case_key||c.id)}</td><td>${escapeHtml(c.input)}</td><td>${escapeHtml(c.expected||'—')}</td><td>${escapeHtml(evalGraderSummary(c))}</td><td><button class="btn ghost" onclick="evalDeleteCase(${ds.id},${c.id})">删除</button></td></tr>`
+    ).join(''):`<tr><td colspan="${red?7:5}" class="session-empty">还没有用例。在下方填写后点「保存用例」，或导入 CSV/JSONL。</td></tr>`;
+    const head=red?'<tr><th>编号</th><th>攻击类型</th><th>输入</th><th>期望</th><th>评分器</th><th>解决方案</th><th></th></tr>':'<tr><th>编号</th><th>输入</th><th>期望</th><th>评分器</th><th></th></tr>';
     const plan=red?`<div class="eval-plan">红队集用来挖「不该做却做了」的洞。下面 5 类攻击各有对应加固办法：失败时按解决方案改提示词、工具描述或鉴权，再回归。</div>`:'';
-    main.innerHTML=`<div class="eval-toolbar"><div><b>${escapeHtml(datasetDisplayName(ds))} ${datasetKindBadge(ds)}</b><div class="muted">${ds.case_count||0} 条用例 · ${escapeHtml(ds.source_name||'手动添加')}</div></div><input type="file" id="evalFile" accept=".csv,.json,.jsonl,text/csv,application/json" hidden><button class="btn ghost" onclick="evalEditDataset()">编辑</button><button class="btn ghost" onclick="$('#evalFile').click()">导入</button><a class="btn ghost" href="/api/datasets/template.csv">模板</a><button class="btn ghost danger" onclick="evalDeleteDataset(${ds.id})">删除</button></div>
+    main.innerHTML=`<div class="eval-toolbar"><div><b>${escapeHtml(datasetDisplayName(ds))} ${datasetKindBadge(ds)}${datasetSuiteBadge(ds)}</b><div class="muted">${ds.case_count||0} 条用例 · ${escapeHtml(ds.source_name||'手动添加')}</div></div><input type="file" id="evalFile" accept=".csv,.json,.jsonl,text/csv,application/json" hidden><button class="btn ghost" onclick="evalEditDataset()">编辑</button><button class="btn ghost" onclick="$('#evalFile').click()">导入</button><a class="btn ghost" href="/api/datasets/template.csv">模板</a><button class="btn ghost danger" onclick="evalDeleteDataset(${ds.id})">删除</button></div>
     ${plan}
     <table class="data-table"><thead>${head}</thead><tbody>${rows}</tbody></table>
-    <form class="eval-add ${red?'redteam':''}" id="evalAddForm"><div><label>用户输入 / 问题</label><textarea name="input" required placeholder="发给 Agent 的问题"></textarea></div><div><label>期望答案（可留空）</label><textarea name="expected" placeholder="用于包含/完全/正则匹配"></textarea></div>${red?`<div class="wide"><label>解决方案</label><textarea name="solution" placeholder="这条如果失败，应该怎么改提示词或工具"></textarea></div>`:''}<button class="btn primary" type="submit">保存用例</button></form>`;
+    <form class="eval-add ${red?'redteam':''}" id="evalAddForm"><div><label>用户输入 / 问题</label><textarea name="input" required placeholder="发给 Agent 的问题"></textarea></div><div><label>期望答案（可留空）</label><textarea name="expected" placeholder="用于包含/完全/正则匹配"></textarea></div>${red?`<div class="wide"><label>解决方案</label><textarea name="solution" placeholder="这条如果失败，应该怎么改提示词或工具"></textarea></div>`:''}${evalCaseGraderFields()}<button class="btn primary" type="submit">保存用例</button></form>`;
     const file=$('#evalFile');
     if(file) file.onchange=()=>evalImportFile(ds.id,file);
     const add=$('#evalAddForm');
-    if(add) add.onsubmit=async ev=>{
+    if(add){
+      bindEvalToolSelect(add);
+      add.onsubmit=async ev=>{
       ev.preventDefault();
       const data=Object.fromEntries(new FormData(add));
+      data.required_tools=[...add.querySelectorAll('input[name="required_tools"]:checked')].map(x=>x.value);
       if(!String(data.input||'').trim()){toast('请填写用户输入');return}
+      let graders=[];
+      try{graders=evalBuildGraders(data)}catch(err){toast(err.message);return}
       try{
-        await api(`/api/datasets/${ds.id}/cases`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input:String(data.input).trim(),expected:data.expected||'',solution:data.solution||''})});
+        await api(`/api/datasets/${ds.id}/cases`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input:String(data.input).trim(),expected:data.expected||'',solution:data.solution||'',graders,explicit_graders:true})});
         toast('用例已保存');
         evalState.datasetId=String(ds.id);
         await evalReloadThen('datasets');
       }catch(err){toast(apiError(err)||'保存用例失败')}
     };
+    }
   }catch(e){
     if(loadSeq!==evalState.loadSeq) return;
     main.innerHTML=`<div class="empty">数据集读取失败：${escapeHtml(apiError(e))}</div>`;
@@ -665,7 +786,7 @@ async function evalSubmitDataset(form){
   const checked=[...form.querySelectorAll('input[name="agent_ids"]:checked')].map(x=>Number(x.value));
   const hidden=Number(data.agent_ids||0);
   const agent_ids=checked.length?checked:(hidden?[hidden]:(evalCurrentAgent()?[evalCurrentAgent().id]:[]));
-  const payload={name,description:data.description||'',kind:data.kind||'baseline',agent_ids};
+  const payload={name,description:data.description||'',kind:data.kind||'baseline',suite:data.suite||'',agent_ids};
   const id=form.dataset.id;
   const row=await api(id?`/api/datasets/${id}`:'/api/datasets',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   $('#modal').close();
@@ -732,17 +853,29 @@ function evalOpenLaunch(){
     <div class="field"><label>Agent</label><input value="${escapeHtml(agent.name)}" readonly><input type="hidden" name="agent_id" value="${agent.id}"></div>
     <div class="field"><label>数据集</label><select class="select" style="width:100%" name="dataset_id">${usable.map(x=>`<option value="${x.id}" ${Number(x.id)===Number(preferred.id)?'selected':''}>${escapeHtml(datasetDisplayName(x))} · ${datasetKindLabel[datasetKindOf(x)]} · ${x.case_count||0} 条</option>`).join('')}</select></div>
     <div class="field"><label>测试方式</label><select class="select" style="width:100%" name="mode"><option value="online">在线抽检（同步，最多 10 条）</option><option value="offline">离线回归（后台跑完全集）</option></select></div>
-    <div class="field"><label>打分方式</label><select class="select" style="width:100%" name="scorer" id="evalScorer"><option value="contains">包含匹配</option><option value="exact">完全匹配</option><option value="regex">正则</option><option value="llm">LLM 判分</option></select></div>
+    <div class="field"><label>打分方式</label><select class="select" style="width:100%" name="scorer" id="evalScorer"><option value="contains">包含匹配</option><option value="exact">完全匹配</option><option value="regex">正则</option><option value="llm">LLM 判分</option><option value="agent">Anthropic 评测</option></select></div>
+    <div class="field" id="evalTrialsField" hidden><label>每条重复次数 k</label><select class="select" style="width:100%" name="trials"><option value="1">1（pass@1 = pass^1）</option><option value="2">2</option><option value="3">3</option></select></div>
+    <div class="field" id="evalAggField" hidden><label>怎么汇总</label><select class="select" style="width:100%" name="aggregation" id="evalAgg"><option value="all">全部通过</option><option value="weighted">加权部分分</option></select></div>
+    <div class="field wide" id="evalThresholdField" hidden><label>加权及格线</label><input name="pass_threshold" type="number" min="0.1" max="1" step="0.1" value="0.6"><p class="bind-hint">各评分器按权重算分，达到及格线即通过。全部通过时忽略这条。</p></div>
     <div class="field wide" id="evalScorerHint">${evalScorerHintHtml('contains')}</div>
     ${evalJudgeSelectHtml(agent)}
     <div class="field wide"><label>任务名称</label><input name="name" placeholder="可留空，自动生成"></div>
   </div>`,'evaluations',true);
   const scorer=$('#evalScorer');
-  if(scorer) scorer.onchange=()=>{
-    $('#evalJudgeField').hidden=scorer.value!=='llm';
+  const syncLaunch=()=>{
+    if(!scorer) return;
+    const agentMode=scorer.value==='agent';
+    const agg=$('#evalAgg');
+    $('#evalJudgeField').hidden=scorer.value!=='llm'&&!agentMode;
+    $('#evalTrialsField').hidden=!agentMode;
+    $('#evalAggField').hidden=!agentMode;
+    $('#evalThresholdField').hidden=!agentMode||!agg||agg.value!=='weighted';
     const hint=$('#evalScorerHint');
     if(hint) hint.innerHTML=evalScorerHintHtml(scorer.value);
   };
+  if(scorer) scorer.onchange=syncLaunch;
+  const agg=$('#evalAgg');
+  if(agg) agg.onchange=syncLaunch;
   const btn=resetModalSubmit('开始测试');
   if(!btn) return;
   btn.type='button';
@@ -774,7 +907,8 @@ async function evalLaunchFromForm(form){
   const selected=(evalState.catalog.datasets||[]).find(x=>Number(x.id)===datasetId);
   if(selected&&!(selected.case_count||0)){toast('这个数据集没有用例，无法开测');return}
   if(selected&&!datasetUsableByAgent(selected,agentId)){toast('这个数据集没有绑定当前 Agent');return}
-  const payload={agent_id:agentId,dataset_id:datasetId,scorer:data.scorer||'contains',name:data.name||'',judge_model_id:data.judge_model_id?Number(data.judge_model_id):null};
+  const agentMode=data.scorer==='agent';
+  const payload={agent_id:agentId,dataset_id:datasetId,scorer:data.scorer||'contains',name:data.name||'',judge_model_id:data.judge_model_id?Number(data.judge_model_id):null,trials:agentMode?Number(data.trials||1):1,aggregation:agentMode?(data.aggregation||'all'):'all',pass_threshold:agentMode&&data.aggregation==='weighted'?Number(data.pass_threshold||0.6):1};
   const online=data.mode!=='offline';
   const row=await api(online?'/api/evaluations/online':'/api/evaluations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   $('#modal').close();
@@ -858,16 +992,21 @@ async function evalLoadReport(id){
       if(running) evalStartPoll(id); else evalStopPoll();
       return;
     }
-    main.innerHTML=`<div class="eval-toolbar"><div><b>${escapeHtml(run.name)}</b><div class="muted">${escapeHtml(run.agent_name)} · ${escapeHtml(run.dataset)} · ${scorerLabel[run.scorer]||run.scorer}${run.scorer==='llm'?` · 裁判 ${escapeHtml(run.judge_model_name||'评测裁判 · Qwen-Max')}`:''} · ${pill(run.status)}</div></div><button class="btn ghost" onclick="evalOpenTrace(${run.id})">追踪</button><a class="btn ghost" href="/api/evaluations/${run.id}/export.csv">导出 CSV</a><button class="btn ghost" onclick="evalRerun(${run.id})">按同样配置重跑</button>${(run.failed||0)>0&&!running?`<button class="btn ghost" onclick="evalResume(${run.id})">从失败续跑</button>`:''}</div>
-    ${evalScorerHintHtml(run.scorer)}
+    const metrics=run.metrics||{};
+    const agentRun=run.scorer==='agent';
+    const showTrial=agentRun&&Number(metrics.trials)>1;
+    const scoreLabel=agentRun?(metrics.suite==='regression'?'头条 pass^k':'头条 pass@k'):'通过率';
+    const agentNote=agentRun&&metrics.suite_note?`<div class="eval-guide"><b>${metrics.suite==='regression'?'回归集':metrics.suite==='capability'?'能力集':'未指定套件'}</b><p>${escapeHtml(metrics.suite_note)}</p><p>pass@k ${metrics.pass_at_k==null?'—':(Math.round(Number(metrics.pass_at_k)*1000)/10)+'%'}（${metrics.tasks_pass_at||0}/${metrics.tasks||0}） · pass^k ${metrics.pass_hat_k==null?'—':(Math.round(Number(metrics.pass_hat_k)*1000)/10)+'%'}（${metrics.tasks_pass_hat||0}/${metrics.tasks||0}） · 试次通过率 ${metrics.trial_pass_rate==null?'—':metrics.trial_pass_rate+'%'}</p></div>`:'';
+    main.innerHTML=`<div class="eval-toolbar"><div><b>${escapeHtml(run.name)}</b><div class="muted">${escapeHtml(run.agent_name)} · ${escapeHtml(run.dataset)} · ${scorerLabel[run.scorer]||run.scorer}${run.scorer==='llm'||(agentRun&&run.judge_model_name)?` · 裁判 ${escapeHtml(run.judge_model_name||'评测裁判 · Qwen-Max')}`:''}${agentRun?` · k=${metrics.trials||1} · ${metrics.aggregation==='weighted'?'加权 '+metrics.pass_threshold:'全部通过'}`:''} · ${pill(run.status)}</div></div><button class="btn ghost" onclick="evalOpenTrace(${run.id})">追踪</button><a class="btn ghost" href="/api/evaluations/${run.id}/export.csv">导出 CSV</a><button class="btn ghost" onclick="evalRerun(${run.id})">按同样配置重跑</button>${(run.failed||0)>0&&!running?`<button class="btn ghost" onclick="evalResume(${run.id})">从失败续跑</button>`:''}</div>
+    ${agentRun?agentNote:evalScorerHintHtml(run.scorer)}
     <div class="eval-metrics">
-      <div class="eval-metric"><span>通过率</span><b>${run.status==='completed'||run.judged?run.score+'%':'—'}</b></div>
+      <div class="eval-metric"><span>${scoreLabel}</span><b>${run.status==='completed'||run.judged?run.score+'%':'—'}</b></div>
       <div class="eval-metric"><span>通过 / 失败 / 跳过</span><b>${run.passed||0} / ${run.failed||0} / ${run.skipped||0}</b></div>
       <div class="eval-metric"><span>平均延迟</span><b>${run.avg_latency_ms||0} ms</b></div>
       <div class="eval-metric"><span>Token</span><b>${run.total_tokens||0}</b></div>
     </div>
     ${run.error_message?`<p class="muted">${escapeHtml(run.error_message)}</p>`:''}
-    <table class="data-table"><thead><tr><th>状态</th><th>输入</th><th>期望</th><th>实际输出</th><th>说明</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${pill(x.status)}</td><td>${escapeHtml(x.input)}</td><td>${escapeHtml(x.expected||'—')}</td><td class="eval-actual">${escapeHtml(x.actual||'')}</td><td>${escapeHtml(x.reason||x.error||'')}${x.trace_id?`<br><small class="mono">${escapeHtml(x.trace_id)}</small>`:''}</td></tr>`).join(''):`<tr><td colspan="5" class="session-empty">${running?'正在执行…':'暂无结果'}</td></tr>`}</tbody></table>`;
+    <table class="data-table"><thead><tr><th>状态</th><th>输入</th><th>期望</th><th>实际输出</th><th>说明</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${pill(x.status)}${showTrial?`<br><small>第 ${x.trial_index||1} 次</small>`:''}</td><td>${escapeHtml(x.input)}</td><td>${escapeHtml(x.expected||'—')}</td><td class="eval-actual">${escapeHtml(x.actual||'')}</td><td>${escapeHtml(x.reason||x.error||'')}${evalGraderLines(x)}${x.trace_id?`<br><small class="mono">${escapeHtml(x.trace_id)}</small>`:''}</td></tr>`).join(''):`<tr><td colspan="5" class="session-empty">${running?'正在执行…':'暂无结果'}</td></tr>`}</tbody></table>`;
     if(running) evalStartPoll(id); else evalStopPoll();
   }catch(e){main.innerHTML='<div class="empty">报告加载失败</div>'}
 }
@@ -3545,8 +3684,9 @@ if($('#loginForm')) $('#loginForm').onsubmit=async e=>{
 };
 document.addEventListener('click', e=>{
   if(e.target.closest('.card-menu-item') || !e.target.closest('.card-menu')) closeCardMenus();
+  if(!e.target.closest('.eval-tool-select')) closeEvalToolMenus();
 });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeCardMenus(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeCardMenus(); closeEvalToolMenus(); } });
 async function boot(){
   if(authState.token){
     try{

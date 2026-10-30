@@ -28,6 +28,8 @@
 .eval-kind.redteam{background:#fdeeee;color:#c43d3d}
 .eval-kind.baseline{background:#eef4ff;color:#2367e8}
 .eval-kind.golden{background:#fff6e5;color:#c48412}
+.eval-kind.capability{background:#eaf8f1;color:#168a59}
+.eval-kind.regression{background:#f3eefe;color:#6b3cc2}
 .eval-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .eval-form .wide{grid-column:1/-1}
 .eval-preview{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px}
@@ -56,6 +58,20 @@
 .eval-add label{display:block;font-size:12px;color:#5b6778;margin-bottom:6px}
 .eval-add textarea{width:100%;min-height:76px;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}
 .eval-add button{height:36px}
+.eval-grader-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}
+.eval-tool-select{position:relative}
+.eval-tool-trigger{appearance:none;-webkit-appearance:none;display:flex;align-items:center;width:100%;height:36px;margin:0;padding:0 28px 0 8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:inherit;font:inherit;font-size:12px;text-align:left;cursor:pointer;position:relative}
+.eval-tool-trigger:focus{outline:none;border-color:#7ca6f4;box-shadow:0 0 0 3px #edf3ff}
+.eval-tool-trigger::after{content:"";position:absolute;right:11px;top:50%;width:6px;height:6px;border-right:1.5px solid #748093;border-bottom:1.5px solid #748093;transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.eval-tool-value{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eval-tool-value.is-empty{color:#8a94a3}
+.eval-tool-menu{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);max-height:220px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 24px rgba(22,31,50,.1);padding:4px}
+.eval-tool-menu label{display:flex;align-items:center;gap:8px;margin:0;padding:7px 8px;border-radius:6px;font-size:12px;color:#2d3746;cursor:pointer;white-space:nowrap}
+.eval-tool-menu label:hover{background:#f3f7ff}
+.eval-graders input,.eval-graders select,.eval-graders textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;background:#fff}
+.eval-graders select{height:36px}
+.eval-graders .eval-tool-menu input{width:auto;height:auto;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent;flex:0 0 auto}
+.eval-grader-lines{display:block;margin-top:4px;color:#5b6778;line-height:1.45}
 .muted{color:#8a94a3;font-size:12px}
 .pill.passed{background:#eaf8f1;color:#168a59}
 .pill.cancelled,.pill.skipped{background:#f1f2f5;color:#747f8f}
@@ -71,6 +87,6 @@
 .eval-io pre{margin:0;white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:240px;overflow:auto;font:12px/1.55 inherit}
 .eval-trace-list{margin-top:8px}
 @media (max-width:900px){
-  .eval-grid,.eval-form,.eval-metrics,.eval-metrics-6,.eval-add,.eval-agent-bar,.eval-facts,.eval-io{grid-template-columns:1fr;flex-direction:column;align-items:stretch}
+  .eval-grid,.eval-form,.eval-metrics,.eval-metrics-6,.eval-add,.eval-agent-bar,.eval-facts,.eval-io,.eval-grader-grid{grid-template-columns:1fr;flex-direction:column;align-items:stretch}
   .eval-agent-pick .select{width:100%;min-width:0}
 }

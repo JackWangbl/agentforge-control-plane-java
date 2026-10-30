@@ -76,6 +76,36 @@ public class ResourceDumper {
         this.releases = releases;
     }
 
+    /** 评测勾选必调工具时用，名字和运行时真正调用的工具名一致。 */
+    private List<Map<String, Object>> callableTools(Agent agent) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        List<String> seen = new ArrayList<>();
+        for (var spec : tools.agentTools(agent)) {
+            if (spec.name() == null || spec.name().isBlank() || seen.contains(spec.name())) {
+                continue;
+            }
+            seen.add(spec.name());
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", spec.name());
+            item.put("label", spec.name());
+            item.put("description", spec.description() == null ? "" : spec.description());
+            rows.add(item);
+        }
+        for (HttpAgent target : tools.selectedHttpAgents(agent)) {
+            String name = HttpAgentRuntime.toolName(target.getId());
+            if (seen.contains(name)) {
+                continue;
+            }
+            seen.add(name);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", name);
+            item.put("label", target.getName() == null || target.getName().isBlank() ? name : target.getName());
+            item.put("description", target.getDescription() == null ? "" : target.getDescription());
+            rows.add(item);
+        }
+        return rows;
+    }
+
     public Map<String, Object> dump(Object row) {
         return dump(row, CurrentUserHolder.get());
     }
@@ -166,6 +196,7 @@ public class ResourceDumper {
             data.put("bound_skills", boundSkills);
             data.put("bound_mcps", boundMcps);
             data.put("bound_http_agents", boundHttpAgents);
+            data.put("callable_tools", callableTools(agent));
             List<Map<String, Object>> boundKnowledge = new ArrayList<>();
             CurrentUser viewer = CurrentUserHolder.get();
             for (KnowledgeBase base : knowledgeBases.findAllById(agent.getKnowledgeIds() == null ? List.of() : agent.getKnowledgeIds())) {

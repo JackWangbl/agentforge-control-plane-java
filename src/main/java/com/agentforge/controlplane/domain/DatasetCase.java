@@ -38,6 +38,11 @@ public class DatasetCase extends TenantOwnedEntity {
     @Column(name = "extra", columnDefinition = "json")
     private Map<String, Object> extra = new LinkedHashMap<>();
 
+    /** Anthropic 评分器。空列表配合 extra.graders_explicit 表示明确不打分。 */
+    @Convert(converter = JsonConverters.MapListConverter.class)
+    @Column(name = "graders", columnDefinition = "json")
+    private List<Map<String, Object>> graders = new ArrayList<>();
+
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
 
@@ -53,6 +58,10 @@ public class DatasetCase extends TenantOwnedEntity {
     public void setTags(List<String> tags) { this.tags = tags == null ? new ArrayList<>() : tags; }
     public Map<String, Object> getExtra() { return extra; }
     public void setExtra(Map<String, Object> extra) { this.extra = extra == null ? new LinkedHashMap<>() : extra; }
+    public List<Map<String, Object>> getGraders() { return graders; }
+    public void setGraders(List<Map<String, Object>> graders) {
+        this.graders = graders == null ? new ArrayList<>() : graders;
+    }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 }

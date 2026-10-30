@@ -36,6 +36,7 @@ public final class EvalScorers {
     private static final Pattern CODE_FENCE =
             Pattern.compile("^```(?:json)?\\s*|\\s*```$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern JSON_BLOCK = Pattern.compile("\\{.*}", Pattern.DOTALL);
+    private static final Pattern JSON_ARRAY = Pattern.compile("\\[.*]", Pattern.DOTALL);
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newBuilder()
@@ -119,6 +120,28 @@ public final class EvalScorers {
         return new Judgement(passed ? "passed" : "failed", passed ? 1 : 0, reason);
     }
 
+    /**
+     * 按断言逐条判。证据不足时裁判应返回 unknown，这里保留，不算通过。
+     */
+    public static List<AgentEval.AssertionVerdict> scoreRubric(String input, String actual, List<String> assertions,
+                                                               String modelId, String baseUrl, String apiKey) {
+        StringBuilder user = new StringBuilder();
+        user.append("用户问题：").append(input == null ? "" : input)
+                .append("\n实际输出：").append(actual == null ? "" : actual)
+                .append("\n断言：\n");
+        for (int index = 0; index < assertions.size(); index++) {
+            user.append(index + 1).append(". ").append(assertions.get(index)).append('\n');
+        }
+        String raw = completeChat(modelId, baseUrl, apiKey, 0, RUBRIC_PROMPT, user.toString()).strip();
+        return parseRubric(raw, assertions.size());
+    }
+
+    public static final String RUBRIC_PROMPT = """
+            你是评测裁判。根据用户问题和实际输出，逐条判断断言是否成立。
+            每条只能是 pass、fail 或 unknown。证据不足时必须用 unknown，不要猜测。
+            只返回 JSON 数组，不要 markdown。顺序和条数必须与断言一致：
+            [{"verdict":"pass","reason":"不超过40字"}]""";
+
     /** 裁判可能裹着 ```json 代码块，也可能在解释文字里夹一段 JSON，两种都捞一下。 */
     private static JsonNode parseJudge(String raw) {
         String text = raw == null ? "" : raw.strip();
@@ -131,6 +154,47 @@ public final class EvalScorers {
         }
         Matcher matcher = JSON_BLOCK.matcher(text);
         return matcher.find() ? readObjectWithPassed(matcher.group()) : null;
+    }
+
+    static List<AgentEval.AssertionVerdict> parseRubric(String raw, int count) {
+        String text = raw == null ? "" : raw.strip();
+        if (text.startsWith("```")) {
+            text = CODE_FENCE.matcher(text).replaceAll("");
+        }
+        JsonNode array = readArray(text);
+        if (array == null) {
+            Matcher matcher = JSON_ARRAY.matcher(text);
+            array = matcher.find() ? readArray(matcher.group()) : null;
+        }
+        List<AgentEval.AssertionVerdict> verdicts = new ArrayList<>();
+        for (int index = 0; index < count; index++) {
+            if (array == null || index >= array.size() || !array.get(index).isObject()) {
+                verdicts.add(new AgentEval.AssertionVerdict("unknown",
+                        array == null ? "裁判返回无法解析" : "裁判没有返回这一条"));
+                continue;
+            }
+            JsonNode item = array.get(index);
+            String verdict = AgentEval.normalizeVerdict(item.path("verdict").asText(""));
+            String reason = item.path("reason").asText("").strip();
+            if (reason.isEmpty()) {
+                reason = switch (verdict) {
+                    case "pass" -> "断言成立";
+                    case "unknown" -> "无法判断";
+                    default -> "断言不成立";
+                };
+            }
+            verdicts.add(new AgentEval.AssertionVerdict(verdict, reason));
+        }
+        return verdicts;
+    }
+
+    private static JsonNode readArray(String text) {
+        try {
+            JsonNode node = MAPPER.readTree(text);
+            return node != null && node.isArray() ? node : null;
+        } catch (Exception exc) {
+            return null;
+        }
     }
 
     private static JsonNode readObjectWithPassed(String text) {

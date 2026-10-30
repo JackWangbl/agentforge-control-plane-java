@@ -38,9 +38,20 @@ public class EvaluationRun extends TenantOwnedEntity {
     @Column(name = "mode", length = 24, nullable = false)
     private String mode = "offline";
 
-    /** contains / exact / regex / llm */
+    /** contains / exact / regex / llm / agent / perf */
     @Column(name = "scorer", length = 24, nullable = false)
     private String scorer = "contains";
+
+    /** Anthropic 评测里每条用例重复几次，1 到 3。 */
+    @Column(name = "trials", nullable = false)
+    private int trials = 1;
+
+    /** all / weighted */
+    @Column(name = "aggregation", length = 16, nullable = false)
+    private String aggregation = "all";
+
+    @Column(name = "pass_threshold", nullable = false)
+    private double passThreshold = 1;
 
     /** queued / running / completed / failed / cancelled */
     @Column(name = "status", length = 24, nullable = false)
@@ -104,6 +115,12 @@ public class EvaluationRun extends TenantOwnedEntity {
     public void setMode(String mode) { this.mode = mode; }
     public String getScorer() { return scorer; }
     public void setScorer(String scorer) { this.scorer = scorer; }
+    public int getTrials() { return trials <= 0 ? 1 : trials; }
+    public void setTrials(int trials) { this.trials = trials; }
+    public String getAggregation() { return aggregation == null || aggregation.isBlank() ? "all" : aggregation; }
+    public void setAggregation(String aggregation) { this.aggregation = aggregation; }
+    public double getPassThreshold() { return passThreshold <= 0 ? 1 : passThreshold; }
+    public void setPassThreshold(double passThreshold) { this.passThreshold = passThreshold; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public double getScore() { return score; }

@@ -25,6 +25,10 @@ public class Dataset extends TenantOwnedEntity {
     @Column(name = "kind", length = 24, nullable = false)
     private String kind = "baseline";
 
+    /** 空 / capability / regression。能力集看 pass@k，回归集看 pass^k。 */
+    @Column(name = "suite", length = 24, nullable = false)
+    private String suite = "";
+
     @Convert(converter = JsonConverters.LongListConverter.class)
     @Column(name = "agent_ids", columnDefinition = "json")
     private List<Long> agentIds = new ArrayList<>();
@@ -40,6 +44,8 @@ public class Dataset extends TenantOwnedEntity {
     public void setSourceName(String sourceName) { this.sourceName = sourceName; }
     public String getKind() { return kind; }
     public void setKind(String kind) { this.kind = kind; }
+    public String getSuite() { return suite == null ? "" : suite; }
+    public void setSuite(String suite) { this.suite = suite == null ? "" : suite; }
     public List<Long> getAgentIds() { return agentIds; }
     public void setAgentIds(List<Long> agentIds) { this.agentIds = agentIds == null ? new ArrayList<>() : agentIds; }
     public int getCaseCount() { return caseCount; }

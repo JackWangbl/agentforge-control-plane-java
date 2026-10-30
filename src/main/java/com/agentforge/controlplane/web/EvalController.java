@@ -10,6 +10,7 @@ import com.agentforge.controlplane.domain.DatasetCase;
 import com.agentforge.controlplane.domain.EvaluationResult;
 import com.agentforge.controlplane.domain.EvaluationRun;
 import com.agentforge.controlplane.dto.EvalDtos;
+import com.agentforge.controlplane.eval.AgentEval;
 import com.agentforge.controlplane.eval.DatasetImporter;
 import com.agentforge.controlplane.eval.EvalScorers;
 import com.agentforge.controlplane.eval.EvalService;
@@ -100,6 +101,7 @@ public class EvalController {
         row.setName(evals.cleanDatasetName(user, payload.name()));
         row.setDescription(payload.description());
         row.setKind(EvalService.normalizeKind(payload.kind()));
+        row.setSuite(EvalService.normalizeSuite(payload.suite()));
         row.setAgentIds(evals.resolveAgentIds(user, payload.agent_ids()));
         access.stampOwner(row, user);
         datasets.save(row);
@@ -119,6 +121,9 @@ public class EvalController {
         }
         if (payload.kind() != null) {
             row.setKind(EvalService.normalizeKind(payload.kind()));
+        }
+        if (payload.suite() != null) {
+            row.setSuite(EvalService.normalizeSuite(payload.suite()));
         }
         if (payload.agent_ids() != null) {
             row.setAgentIds(evals.resolveAgentIds(user, payload.agent_ids()));
@@ -194,6 +199,17 @@ public class EvalController {
         if (payload.solution() != null && !payload.solution().isBlank()) {
             extra.put("solution", payload.solution().strip());
         }
+        List<Map<String, Object>> graders = List.of();
+        if (payload.graders() != null || Boolean.TRUE.equals(payload.explicit_graders())) {
+            try {
+                graders = AgentEval.normalize(payload.graders() == null ? List.of() : payload.graders());
+            } catch (IllegalArgumentException exc) {
+                throw ApiException.badRequest(exc.getMessage());
+            }
+        }
+        if (Boolean.TRUE.equals(payload.explicit_graders())) {
+            extra.put("graders_explicit", true);
+        }
         DatasetCase row = new DatasetCase();
         row.setDatasetId(datasetId);
         row.setCaseKey(payload.case_key());
@@ -201,6 +217,7 @@ public class EvalController {
         row.setExpected(payload.expected());
         row.setTags(payload.tags());
         row.setExtra(extra);
+        row.setGraders(graders);
         row.setTenantId(user.getTenantId());
         row.setOwnerId(user.getId());
         cases.save(row);
@@ -249,7 +266,8 @@ public class EvalController {
     @PostMapping("/api/evaluations")
     public EvalDtos.RunResponse createEvaluation(CurrentUser user, @Valid @RequestBody EvalDtos.EvaluationLaunchRequest payload) {
         EvaluationRun run = evals.prepareRun(user, payload.agent_id(), payload.dataset_id(), payload.name(),
-                payload.scorer(), payload.judge_model_id(), payload.case_ids(), "offline");
+                payload.scorer(), payload.judge_model_id(), payload.case_ids(), "offline",
+                payload.trials(), payload.aggregation(), payload.pass_threshold());
         return evals.dumpRun(run);
     }
 
@@ -257,7 +275,8 @@ public class EvalController {
     @PostMapping("/api/evaluations/online")
     public EvalDtos.RunResponse runOnline(CurrentUser user, @Valid @RequestBody EvalDtos.EvaluationLaunchRequest payload) {
         EvaluationRun run = evals.prepareRun(user, payload.agent_id(), payload.dataset_id(), payload.name(),
-                payload.scorer(), payload.judge_model_id(), payload.case_ids(), "online");
+                payload.scorer(), payload.judge_model_id(), payload.case_ids(), "online",
+                payload.trials(), payload.aggregation(), payload.pass_threshold());
         evals.executeRun(run.getId());
         return evals.loadRun(run.getId());
     }

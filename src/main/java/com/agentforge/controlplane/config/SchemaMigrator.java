@@ -650,6 +650,53 @@ public class SchemaMigrator implements ApplicationRunner {
                 log.info("已把重排序服务 {} 迁成模型配置", rows.getString("name"));
             }
         }
+        migrateAgentEval(conn);
+    }
+
+    /** Anthropic 评测：套件用途、评分器、重复次数和每次试跑的评分明细。 */
+    private static void migrateAgentEval(Connection conn) throws Exception {
+        if (hasTable(conn, "datasets") && !hasColumn(conn, "datasets", "suite")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE datasets ADD COLUMN suite VARCHAR(24) NOT NULL DEFAULT ''");
+            }
+            log.info("已为 datasets 表补齐 suite 列");
+        }
+        if (hasTable(conn, "dataset_cases") && !hasColumn(conn, "dataset_cases", "graders")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE dataset_cases ADD COLUMN graders JSON NULL");
+            }
+            log.info("已为 dataset_cases 表补齐 graders 列");
+        }
+        if (hasTable(conn, "evaluation_runs") && !hasColumn(conn, "evaluation_runs", "trials")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE evaluation_runs ADD COLUMN trials INT NOT NULL DEFAULT 1");
+            }
+            log.info("已为 evaluation_runs 表补齐 trials 列");
+        }
+        if (hasTable(conn, "evaluation_runs") && !hasColumn(conn, "evaluation_runs", "aggregation")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE evaluation_runs ADD COLUMN aggregation VARCHAR(16) NOT NULL DEFAULT 'all'");
+            }
+            log.info("已为 evaluation_runs 表补齐 aggregation 列");
+        }
+        if (hasTable(conn, "evaluation_runs") && !hasColumn(conn, "evaluation_runs", "pass_threshold")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE evaluation_runs ADD COLUMN pass_threshold DOUBLE NOT NULL DEFAULT 1");
+            }
+            log.info("已为 evaluation_runs 表补齐 pass_threshold 列");
+        }
+        if (hasTable(conn, "evaluation_results") && !hasColumn(conn, "evaluation_results", "trial_index")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE evaluation_results ADD COLUMN trial_index INT NOT NULL DEFAULT 1");
+            }
+            log.info("已为 evaluation_results 表补齐 trial_index 列");
+        }
+        if (hasTable(conn, "evaluation_results") && !hasColumn(conn, "evaluation_results", "grader_results")) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE evaluation_results ADD COLUMN grader_results JSON NULL");
+            }
+            log.info("已为 evaluation_results 表补齐 grader_results 列");
+        }
     }
 
     private static boolean modelNameTaken(Connection conn, String name) throws Exception {
