@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/static/session.css?v=20261028-2">
   <link rel="stylesheet" href="/static/eval.css?v=20260914-1">
   <link rel="stylesheet" href="/static/experiment.css?v=20260906-3">
-  <link rel="stylesheet" href="/static/auth.css?v=20260923-4">
+  <link rel="stylesheet" href="/static/auth.css?v=20261030-3">
   <link rel="stylesheet" href="/static/failure-case.css?v=20261027-2">
 </head>
 <body>
@@ -26,9 +26,9 @@
         <button class="nav-item" data-page="studio"><span>⌁</span>AgentScope Studio <i class="live-dot"></i></button>
         <button class="nav-item" data-page="evaluations"><span>◎</span>数据测试</button>
         <button class="nav-item" data-page="experiments"><span>⇄</span>A/B 实验</button>
-        <button class="nav-item" data-page="playground"><span>▷</span>Agent 调试台</button>
+        <button class="nav-item nav-entry" data-page="playground"><span>▷</span>Agent 调试台<i class="nav-badge">试用</i></button>
         <div class="nav-label">构建中心</div>
-        <button class="nav-item" data-page="agents"><span>◇</span>Agent 管理</button>
+        <button class="nav-item nav-entry" data-page="agents"><span>◇</span>Agent 管理<i class="nav-badge">配置</i></button>
         <button class="nav-item" data-page="workflows"><span>⧉</span>多智能体</button>
         <button class="nav-item" data-page="http-agents"><span>↗</span>HTTP 接口</button>
         <button class="nav-item" data-page="mcp"><span>⚙</span>MCP 工具</button>
@@ -47,6 +47,18 @@
     </aside>
     <main>
       <header class="topbar"><button class="mobile-menu" id="menuBtn">☰</button><div class="crumb"><span>AgentForge</span><b id="crumbTitle">/ 运行概览</b></div><div class="top-actions"><div id="trialBanner" class="trial-banner" hidden><span>试用 Token <b id="trialTokens">0</b>/10000</span><button type="button" class="btn ghost" id="trialLoginBtn">登录</button></div><select id="tenantSwitch" class="select tenant-switch" hidden></select><button type="button" class="btn ghost logout-top" id="logoutTopBtn">退出登录</button><button class="status-chip"><i></i>系统正常</button></div></header>
+      <section id="startGuide" class="start-guide" hidden>
+        <div class="start-guide-copy">
+          <small>第一次试用</small>
+          <h2>从左侧这两个入口开始</h2>
+          <p><b>Agent 调试台</b>标着「试用」：选一个已有 Agent，输入一句话发送即可。<b>Agent 管理</b>标着「配置」：查看已有 Agent，卡片菜单里的「调试运行」也会进入调试台。</p>
+        </div>
+        <div class="start-guide-actions">
+          <button type="button" class="btn primary" id="startGuidePlay">去调试台试用</button>
+          <button type="button" class="btn ghost" id="startGuideAgents">打开 Agent 管理</button>
+          <button type="button" class="btn ghost" id="startGuideDismiss">知道了</button>
+        </div>
+      </section>
       <div id="content" class="content"><div class="loading">正在加载控制台…</div></div>
     </main>
   </div>
@@ -67,6 +79,6 @@
       <div class="login-hint">未登录可以试用。Token 用量达到 10000 后需要登录。</div>
     </form>
   </div>
-  <script src="/static/app.js?v=20261030-2"></script>
+  <script src="/static/app.js?v=20261030-3"></script>
 </body>
 </html>

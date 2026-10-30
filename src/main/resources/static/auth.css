@@ -10,6 +10,71 @@
   padding: 4px 8px 4px 12px;
 }
 .trial-banner[hidden] { display: none !important; }
+.nav-badge { display: none; }
+body.show-trial-entries .nav-entry {
+  color: #fff;
+  background: #2a2114;
+  box-shadow: inset 3px 0 #e49b18;
+}
+body.show-trial-entries .nav-entry.active { background: #3a2c16; }
+body.show-trial-entries .nav-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  background: #e49b18;
+  color: #1b1406;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  padding: 3px 6px;
+  animation: nav-badge-pulse 1.8s ease-out infinite;
+}
+@keyframes nav-badge-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(228, 155, 24, .65); }
+  70% { box-shadow: 0 0 0 6px rgba(228, 155, 24, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(228, 155, 24, 0); }
+}
+.start-guide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 30px 0;
+  padding: 16px 18px;
+  background: #fff8ee;
+  border: 1px solid #f3d7a1;
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(138, 90, 18, .08);
+}
+.start-guide[hidden] { display: none !important; }
+.start-guide-copy { min-width: 0; }
+.start-guide-copy small {
+  color: #a56b12;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.start-guide-copy h2 { margin: 2px 0 6px; font-size: 18px; }
+.start-guide-copy p { margin: 0; color: #5c4a32; font-size: 13px; line-height: 1.65; }
+.start-guide-actions { display: flex; flex-wrap: wrap; gap: 8px; flex: none; }
+.entry-note {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  background: #fff8ee;
+  border: 1px solid #f3d7a1;
+  border-left: 4px solid #e49b18;
+  border-radius: 10px;
+  color: #6b4e16;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.entry-note b { color: #1b1406; }
+@media (max-width: 900px) {
+  .start-guide { margin: 12px 15px 0; flex-direction: column; align-items: stretch; }
+}
 .trial-banner b { font-variant-numeric: tabular-nums; }
 .login-gate {
   align-items: center;

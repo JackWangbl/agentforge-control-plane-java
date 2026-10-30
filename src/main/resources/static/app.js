@@ -64,6 +64,7 @@ async function logout(){
   if($('#tenantSwitch')) {$('#tenantSwitch').hidden=true;$('#tenantSwitch').innerHTML=''}
   if($('#content')) $('#content').innerHTML='';
   if($('#crumbTitle')) $('#crumbTitle').textContent='/ 请登录';
+  syncTrialEntries();
   if(typeof closeSessionDetail==='function') closeSessionDetail();
   if($('#loginPass')) $('#loginPass').value='';
   showLogin();
@@ -80,6 +81,7 @@ function applyMe(me){
   if($('#logoutBtn')) $('#logoutBtn').textContent=me.trial?'登录':'退出登录';
   if($('#logoutTopBtn')) $('#logoutTopBtn').textContent=me.trial?'登录':'退出登录';
   if(!me.trial) stopTrialClock();
+  syncTrialEntries();
   document.querySelectorAll('.nav-item').forEach(btn=>{
     const page=btn.dataset.page;
     btn.hidden=me.trial?page==='models':!can(pagePerm[page]||'');
@@ -302,7 +304,8 @@ async function resources(page){
     resourceStore.mcp=Object.fromEntries(extras[0].map(x=>[x.id,x]));
     resourceStore.skills=Object.fromEntries(extras[1].map(x=>[x.id,x]));
   }
-  return `${head(page, pageTools(`<button class="btn primary" onclick="openCreate('${page}')">＋ ${info.action}</button>`))}<div class="resource-grid">${rows.map(x=>`<article class="resource-card ${x.enabled===false?'resource-disabled':''}"><div class="resource-head"><div class="resource-logo">${info.icon}</div><div style="min-width:0"><h3>${x.name}</h3><p>${info.desc(x)||'暂无说明'}</p></div>${statusControl(page,x)}</div>${page==='agents'?agentTags(x):''}<div class="resource-meta"><span>${info.meta(x)[0]}</span><span>${info.meta(x)[1]}</span><span class="resource-ops">${resourceActions(page,x)}</span></div></article>`).join('')}</div>`;
+  const entry=page==='agents'?trialEntryNote('agents'):'';
+  return `${head(page, pageTools(`<button class="btn primary" onclick="openCreate('${page}')">＋ ${info.action}</button>`))}${entry}<div class="resource-grid">${rows.map(x=>`<article class="resource-card ${x.enabled===false?'resource-disabled':''}"><div class="resource-head"><div class="resource-logo">${info.icon}</div><div style="min-width:0"><h3>${x.name}</h3><p>${info.desc(x)||'暂无说明'}</p></div>${statusControl(page,x)}</div>${page==='agents'?agentTags(x):''}<div class="resource-meta"><span>${info.meta(x)[0]}</span><span>${info.meta(x)[1]}</span><span class="resource-ops">${resourceActions(page,x)}</span></div></article>`).join('')}</div>`;
 }
 const EVAL_AGENT_KEY='af_eval_agent';
 const evalState={tab:'datasets',datasetId:'',runId:'',poll:null,kindFilter:'',agentFilter:''};
@@ -1198,6 +1201,7 @@ async function playground(selectedAgent=''){
   const canSend=http||!!(agent&&agent.model_name);
   const peerMeta=http?agentRuntimeLabel(agent):playgroundModelLabel(agent);
   return `<div class="pg-page">${head('playground', pageTools('<button class="btn ghost" type="button" id="resumeChat" hidden>从失败处继续</button><button class="btn ghost" type="button" id="clearChat">新开会话</button>'))}
+${trialEntryNote('playground')}
 <div class="pg-controls">
   <label class="pg-field">智能体<select id="runAgent" class="select">${agents.map(x=>`<option value="${x.id}" ${String(x.id)===String(agent&&agent.id)?'selected':''}>${x.name}</option>`).join('')||'<option value="">暂无智能体</option>'}</select></label>
   <label class="pg-field">是否分流<select id="runExperiment" class="select"><option value="">不分流，使用所选智能体</option>${expOptions}</select></label>
@@ -3423,6 +3427,31 @@ function paintTrialBanner(){
   const tokens=$('#trialTokens');
   if(tokens) tokens.textContent=String(Math.min(trialTokensUsed(), trialTokenLimit()));
 }
+const START_GUIDE_KEY='af_start_guide';
+function startGuideSeen(){
+  try{return localStorage.getItem(START_GUIDE_KEY)==='1'}catch(e){return false}
+}
+function trialEntryNote(which){
+  if(!(authState.me&&authState.me.trial)) return '';
+  if(which==='playground') return '<div class="entry-note"><b>试用入口。</b>先在上方选择一个 Agent，再在下方输入消息并发送。</div>';
+  return '<div class="entry-note"><b>配置入口。</b>这里是全部 Agent。打开卡片右上角菜单，点「调试运行」就会进入调试台。</div>';
+}
+function syncTrialEntries(){
+  const trial=!!(authState.me&&authState.me.trial);
+  document.body.classList.toggle('show-trial-entries', trial);
+  const guide=$('#startGuide');
+  if(guide) guide.hidden=!(trial&&!startGuideSeen());
+}
+function dismissStartGuide(){
+  try{localStorage.setItem(START_GUIDE_KEY,'1')}catch(e){}
+  const guide=$('#startGuide');
+  if(guide) guide.hidden=true;
+}
+function openTrialEntry(page){
+  const side=document.querySelector('.sidebar');
+  if(side) side.classList.remove('open');
+  render(page);
+}
 function stopTrialClock(){
   authState.trialTokensUsed=0;
   authState.trialTokenLimit=10000;
@@ -3436,6 +3465,7 @@ function expireTrial(message){
   stopTrialClock();
   if($('#userName')) $('#userName').textContent='未登录';
   if($('#userRole')) $('#userRole').textContent='试用已结束';
+  syncTrialEntries();
   showLogin(message||'试用已结束，请登录');
 }
 function noteTrialUsage(usage){
@@ -3482,6 +3512,9 @@ if($('#logoutBtn')) $('#logoutBtn').onclick=onAccountButton;
 if($('#logoutTopBtn')) $('#logoutTopBtn').onclick=onAccountButton;
 if($('#trialLoginBtn')) $('#trialLoginBtn').onclick=onAccountButton;
 if($('#trialContinue')) $('#trialContinue').onclick=()=>{ if(trialStillOpen()) hideLogin(); };
+if($('#startGuidePlay')) $('#startGuidePlay').onclick=()=>openTrialEntry('playground');
+if($('#startGuideAgents')) $('#startGuideAgents').onclick=()=>openTrialEntry('agents');
+if($('#startGuideDismiss')) $('#startGuideDismiss').onclick=dismissStartGuide;
 if($('#tenantSwitch')) $('#tenantSwitch').onchange=async e=>{localStorage.setItem('af_tenant_id', e.target.value); const me=await api('/api/auth/me'); applyMe(me); render('dashboard')};
 if($('#loginForm')) $('#loginForm').onsubmit=async e=>{
   e.preventDefault();
