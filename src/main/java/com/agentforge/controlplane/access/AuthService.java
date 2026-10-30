@@ -27,11 +27,13 @@ public class AuthService {
 
     /** 与 Python 版 TOKEN_TTL_HOURS = 24 * 7 一致。 */
     private static final Duration TOKEN_TTL = Duration.ofHours(24 * 7);
-    /** 未登录可直接进页面的时长。同一浏览器记一次，到点后必须登录。 */
-    public static final Duration TRIAL_TTL = Duration.ofMinutes(10);
+    /**
+     * auth_tokens.expires_at 不能为空。试用不按时间失效，这只是占位。
+     * 是否还能继续用，只看累计 Token 是否达到 {@link #TRIAL_TOKEN_LIMIT}。
+     */
+    private static final Duration TRIAL_RECORD_TTL = Duration.ofDays(3650);
     /** 同一试用凭证累计消耗达到该值后必须登录。 */
     public static final int TRIAL_TOKEN_LIMIT = 10_000;
-    public static final String TRIAL_EXPIRED = "试用已结束，请登录";
     public static final String TRIAL_TOKEN_EXHAUSTED = "试用 Token 已用完，请登录";
     public static final String TRIAL_USER = "guest";
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -75,20 +77,16 @@ public class AuthService {
     }
 
     /**
-     * 这个浏览器还没有试用记录时发 10 分钟凭证；还在有效期内则沿用原到期时间；
-     * 已经到期或 Token 用尽则拒绝，避免清掉本地 token 再刷一次就重新计时。
+     * 这个浏览器还没有试用记录时发凭证；已经领过则沿用原来的凭证。
+     * 不按时间结束。累计 Token 用尽后拒绝，避免清掉本地 token 再领一份额度。
      */
     @Transactional
     public TrialGrant beginTrial(String trialKey) {
         boolean known = trialKey != null && !trialKey.isBlank();
         AuthToken existing = known ? tokens.findByTrialKey(trialKey).orElse(null) : null;
-        String decision = trialDecision(Instant.now(), existing != null, existing == null ? null : existing.getExpiresAt());
-        if ("resume".equals(decision)) {
+        if ("resume".equals(trialDecision(existing != null))) {
             rejectIfTrialTokensExhausted(existing.getTrialKey());
             return new TrialGrant(existing.getToken(), existing.getExpiresAt(), existing.getTrialKey());
-        }
-        if ("expired".equals(decision)) {
-            throw ApiException.unauthorized(TRIAL_EXPIRED);
         }
         User guest = users.findByUsername(TRIAL_USER)
                 .filter(User::isEnabled)
@@ -97,20 +95,14 @@ public class AuthService {
         token.setToken(newToken());
         token.setUserId(guest.getId());
         token.setTrialKey(newToken());
-        token.setExpiresAt(Instant.now().plus(TRIAL_TTL));
+        token.setExpiresAt(Instant.now().plus(TRIAL_RECORD_TTL));
         tokens.save(token);
         return new TrialGrant(token.getToken(), token.getExpiresAt(), token.getTrialKey());
     }
 
-    /** known 为 false 表示这个浏览器还没有试用记录。 */
-    static String trialDecision(Instant now, boolean known, Instant expiresAt) {
-        if (!known) {
-            return "new";
-        }
-        if (expiresAt != null && expiresAt.isAfter(now)) {
-            return "resume";
-        }
-        return "expired";
+    /** known 为 false 表示这个浏览器还没有试用记录。试用不因时间结束。 */
+    static String trialDecision(boolean known) {
+        return known ? "resume" : "new";
     }
 
     @Transactional
@@ -127,14 +119,12 @@ public class AuthService {
         if (!token.isBlank()) {
             AuthToken row = tokens.findByToken(token)
                     .orElseThrow(() -> ApiException.unauthorized("登录已过期，请重新登录"));
-            if (row.getExpiresAt() == null || !row.getExpiresAt().isAfter(Instant.now())) {
-                if (row.getTrialKey() != null && !row.getTrialKey().isBlank()) {
-                    throw ApiException.unauthorized(TRIAL_EXPIRED);
-                }
+            boolean trial = row.getTrialKey() != null && !row.getTrialKey().isBlank();
+            if (!trial && (row.getExpiresAt() == null || !row.getExpiresAt().isAfter(Instant.now()))) {
                 throw ApiException.unauthorized("登录已过期，请重新登录");
             }
             CurrentUser actor = loadUser(row.getUserId(), tenantOverride);
-            if (row.getTrialKey() != null && !row.getTrialKey().isBlank()) {
+            if (trial) {
                 long used = trialTokensUsed(row.getTrialKey());
                 if (trialTokensExhausted(used)) {
                     throw ApiException.unauthorized(TRIAL_TOKEN_EXHAUSTED);

@@ -19,8 +19,7 @@ function apiError(err){
   }catch(e){}
   return raw.slice(0,180);
 }
-const authState = {token: localStorage.getItem('af_token')||'', me:null, trialExpiresAt:'', trialTokensUsed:0, trialTokenLimit:10000};
-let trialTimer=0;
+const authState = {token: localStorage.getItem('af_token')||'', me:null, trialTokensUsed:0, trialTokenLimit:10000};
 const pagePerm = {dashboard:'',memories:'',sessions:'session:read','failure-cases':'trace:read',studio:'trace:read',traces:'trace:read',evaluations:'eval:read',experiments:'experiment:read',playground:'agent:write',agents:'agent:read','http-agents':'agent:read',workflows:'workflow:read',mcp:'mcp:read',skills:'skill:read',knowledge:'knowledge:read',models:'model:read',vectors:'tenant:admin',sandboxes:'sandbox:read',roles:'role:read'};
 function can(perm){
   if(!perm) return !!authState.me;
@@ -76,7 +75,7 @@ function applyMe(me){
     authState.trialTokensUsed=Number(me.trial_tokens_used)||0;
     authState.trialTokenLimit=Number(me.trial_token_limit)||10000;
   }
-  if($('#userRole')) $('#userRole').textContent=me.trial?'试用中，10 分钟内或 Token 用尽后需要登录':((me.tenant_name||'')+' · '+(me.role_name||'成员'));
+  if($('#userRole')) $('#userRole').textContent=me.trial?'试用中，Token 用尽后需要登录':((me.tenant_name||'')+' · '+(me.role_name||'成员'));
   if($('#userAvatar')) $('#userAvatar').textContent=(me.display_name||me.username||'?').slice(0,1);
   if($('#logoutBtn')) $('#logoutBtn').textContent=me.trial?'登录':'退出登录';
   if($('#logoutTopBtn')) $('#logoutTopBtn').textContent=me.trial?'登录':'退出登录';
@@ -136,7 +135,7 @@ ${metric('总访问次数',fmt(m.visitors_total||0),'累计','每次打开概览
 ${metric('今日请求',fmt(m.requests),'↗ 12.6%','较昨日','#2367e8','↗')}${metric('成功率',m.success_rate+'%','↗ 1.2%','近 24 小时','#16a56a','✓')}${metric('平均延迟',(m.avg_latency_ms/1000).toFixed(2)+'s','↘ 8.3%','响应更快','#7457e8','⌁')}${metric('Token 消耗',fmt(m.tokens),'↗ 6.8%','今日累计','#e49b18','T')}
 </div><div class="dashboard-grid"><section class="panel"><div class="panel-title"><h3>请求趋势</h3><small>近 24 小时 · 每小时</small></div><div class="chart-wrap">${d.activity.map(v=>`<i class="bar" style="height:${v/3.8}px"></i>`).join('')}</div></section><section class="panel"><div class="panel-title"><h3>Agent 健康度</h3><small>${d.agents.length} 个在线</small></div><div class="agent-list">${d.agents.map((a,i)=>`<div class="agent-row"><div class="agent-icon">${a.name[0]}</div><div><b>${a.name}</b><small>${a.model_name} · ${a.version}</small><div class="progress"><i style="width:${a.success_rate}%"></i></div></div><span class="score">${a.success_rate}%</span></div>`).join('')}</div></section></div>${sessionTable(d.recent_sessions,true)}`}
 function metric(label,value,trend,sub,color,icon,action=''){return `<div class="metric-card" style="--accent:${color}"><div class="metric-label">${label}<span class="metric-icon">${icon}</span></div><div class="metric-value">${value}</div><div class="trend">${trend}<span>${sub}</span>${action}</div></div>`}
-function visitorTime(value){return value?new Date(value).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}
+function visitorTime(value){return value?dt(value):'—'}
 function visitorRowsMarkup(rows){
   if(!rows.length) return '<tr><td colspan="5" class="session-empty">近 7 天暂无带 IP 的访问记录。</td></tr>';
   return rows.map(row=>`<tr><td class="mono">${escapeHtml(row.ip_address)}</td><td><b>${Number(row.visit_count)||0}</b> 次</td><td><b>${fmt(row.total_tokens||0)}</b></td><td>${escapeHtml(visitorTime(row.last_visited_at))}</td><td>${row.blocked?`<button type="button" class="btn ghost" onclick="setVisitorBlocked('${escapeHtml(row.ip_address)}',false)">解除拉黑</button>`:`<button type="button" class="btn ghost danger" onclick="setVisitorBlocked('${escapeHtml(row.ip_address)}',true)">拉黑</button>`}</td></tr>`).join('');
@@ -3408,17 +3407,6 @@ async function render(page,param=''){
 }
 document.querySelectorAll('.nav-item').forEach(n=>n.onclick=()=>{render(n.dataset.page);$('.sidebar').classList.remove('open')});
 $('#menuBtn').onclick=()=>$('.sidebar').classList.toggle('open');
-function trialInstant(value){
-  if(!value) return NaN;
-  const text=String(value);
-  const normalized=/[zZ]|[+-]\d{2}:?\d{2}$/.test(text)?text:text+'Z';
-  return new Date(normalized).getTime();
-}
-function trialRemainingMs(){
-  const ends=trialInstant(authState.trialExpiresAt);
-  if(!Number.isFinite(ends)) return 0;
-  return ends-Date.now();
-}
 function trialTokensUsed(){
   return Math.max(0, Number(authState.trialTokensUsed)||0);
 }
@@ -3429,24 +3417,13 @@ function trialTokensLeft(){
   return Math.max(0, trialTokenLimit()-trialTokensUsed());
 }
 function trialStillOpen(){
-  return trialRemainingMs()>0 && trialTokensLeft()>0;
+  return trialTokensLeft()>0;
 }
 function paintTrialBanner(){
-  const label=$('#trialRemain');
-  if(label) label.textContent=formatRemain(trialRemainingMs());
   const tokens=$('#trialTokens');
   if(tokens) tokens.textContent=String(Math.min(trialTokensUsed(), trialTokenLimit()));
 }
-function formatRemain(ms){
-  const total=Math.max(0, Math.ceil(ms/1000));
-  const minutes=Math.floor(total/60);
-  const seconds=total%60;
-  return minutes+':'+String(seconds).padStart(2,'0');
-}
 function stopTrialClock(){
-  clearInterval(trialTimer);
-  trialTimer=0;
-  authState.trialExpiresAt='';
   authState.trialTokensUsed=0;
   authState.trialTokenLimit=10000;
   const banner=$('#trialBanner');
@@ -3469,18 +3446,11 @@ function noteTrialUsage(usage){
   paintTrialBanner();
   if(trialTokensLeft()<=0) expireTrial('试用 Token 已用完，请登录');
 }
-function startTrialClock(expiresAt){
-  authState.trialExpiresAt=expiresAt||'';
+function startTrialClock(){
   const banner=$('#trialBanner');
   if(banner) banner.hidden=false;
-  clearInterval(trialTimer);
-  const tick=()=>{
-    paintTrialBanner();
-    if(trialRemainingMs()<=0) expireTrial('试用已结束，请登录');
-    else if(trialTokensLeft()<=0) expireTrial('试用 Token 已用完，请登录');
-  };
-  tick();
-  trialTimer=setInterval(tick,1000);
+  paintTrialBanner();
+  if(trialTokensLeft()<=0) expireTrial('试用 Token 已用完，请登录');
 }
 function openApp(){
   const first=[...document.querySelectorAll('.nav-item')].find(btn=>!btn.hidden);
@@ -3505,7 +3475,7 @@ async function enterTrial(){
   const me=await api('/api/auth/me');
   applyMe(me);
   hideLogin();
-  startTrialClock(me.trial_expires_at||data.expires_at);
+  startTrialClock();
   openApp();
 }
 if($('#logoutBtn')) $('#logoutBtn').onclick=onAccountButton;
@@ -3550,7 +3520,7 @@ async function boot(){
       const me=await api('/api/auth/me');
       applyMe(me);
       hideLogin();
-      if(me.trial) startTrialClock(me.trial_expires_at);
+      if(me.trial) startTrialClock();
       openApp();
       return;
     }catch(e){

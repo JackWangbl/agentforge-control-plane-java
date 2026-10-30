@@ -57,7 +57,7 @@
 <p>AgentForge 控制面是企业里的 Agent 管理平面，不是一个对话玩具。它要解决四件事：谁能用哪个 Agent、这个 Agent 能调哪些工具和文档、一次运行留下什么痕迹、换一个人之后还能不能把别人的数据翻出来。</p>
 <table>
   <tr><th>做</th><th>不做</th></tr>
-  <tr><td>多租户账号、角色、试用 5 分钟</td><td>不做 SSO / LDAP / 审计日志归档（当前没有）</td></tr>
+  <tr><td>多租户账号、角色、试用 Token 上限 10000</td><td>不做 SSO / LDAP / 审计日志归档（当前没有）</td></tr>
   <tr><td>Agent 绑定模型、Skill、MCP、知识库、沙箱</td><td>不做跨租户共享 Agent</td></tr>
   <tr><td>文档清洗、自动分块、Milvus 混合检索</td><td>不做 OCR、网页同步、文档级 ACL</td></tr>
   <tr><td>短期会话窗口 + 长期记忆自动总结</td><td>不做记忆向量检索、不做跨租户记忆</td></tr>
