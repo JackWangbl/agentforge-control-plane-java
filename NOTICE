@@ -1,0 +1,6 @@
+AgentForge Control Plane
+Copyright 2026 JackWangbl
+
+This product includes software developed for the AgentForge control plane.
+The runtime builds on AgentScope Java (https://github.com/agentscope-ai/agentscope-java),
+which is licensed under the Apache License, Version 2.0.

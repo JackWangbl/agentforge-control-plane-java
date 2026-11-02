@@ -1,0 +1,17 @@
+name: Feature
+description: 想加一块能力 / An idea
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你在做什么 / What are you trying to do
+      description: 场景比方案有用。例如：Java 团队要在内网把 AgentScope 配给多个租户。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你希望控制台怎么表现
+    validations:
+      required: false
