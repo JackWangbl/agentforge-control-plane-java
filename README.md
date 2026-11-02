@@ -1,66 +1,101 @@
-# AgentForge Control Plane（Java）
+<div align="center">
 
-面向团队试用的 Agent 控制面。用浏览器管理 Agent、模型、知识库、工具和会话，调试时由 [AgentScope Java](https://github.com/agentscope-ai/agentscope-java) 的 ReAct 运行时调用已绑定的模型和工具。
-<img width="2996" height="1736" alt="image" src="https://github.com/user-attachments/assets/b1fb8215-08fe-4552-bef0-e7b28f2685cc" />
+# AgentForge Control Plane
 
-<img width="1566" height="1162" alt="image" src="https://github.com/user-attachments/assets/a4a79df5-a034-4f72-bbaa-c76bfde53949" />
-<img width="1518" height="1336" alt="image" src="https://github.com/user-attachments/assets/4e526ac1-8276-4c4d-b455-a636216e337f" />
+简体中文 · [English](README_EN.md)
 
-<img width="1620" height="1534" alt="image" src="https://github.com/user-attachments/assets/aba12107-8b52-4559-90b2-484e269f39e9" />
-<img width="2690" height="1630" alt="image" src="https://github.com/user-attachments/assets/3b38b601-f2a0-4477-8303-f6f053d8b458" />
+**面向 Java 团队的 AI Agent 控制面：在一个 Web 控制台中构建、调试、评测、发布和治理 Agent。**
 
+[![CI](https://github.com/JackWangbl/agentforge-control-plane-java/actions/workflows/ci.yml/badge.svg)](https://github.com/JackWangbl/agentforge-control-plane-java/actions/workflows/ci.yml)
+[![Java 21](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot 3](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![AgentScope](https://img.shields.io/badge/AgentScope-Java-6C63FF)](https://github.com/agentscope-ai/agentscope-java)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-打开 http://127.0.0.1:8080 即可试用。未登录可以试用；Token 用量达到 10000 后必须登录。
+[快速开始](#-5-分钟快速开始) · [核心能力](#-核心能力) · [架构](#-架构) · [本地开发](#-本地开发) · [参与贡献](#-参与贡献)
 
-## 能做什么
+</div>
 
-| 模块 | 说明 |
+![AgentForge Control Plane 控制台](https://github.com/user-attachments/assets/b1fb8215-08fe-4552-bef0-e7b28f2685cc)
+
+AgentForge Control Plane 基于 Spring Boot 与 AgentScope Java，覆盖 Agent 从配置、工具接入、RAG、调试，到评测、A/B 实验、可观测与失败恢复的完整生命周期。它适合希望沿用 Java 技术栈，又不想从零搭建 Agent 管理后台的团队。
+
+> 如果这个项目对你有帮助，欢迎点一个 Star。它能让更多 Java Agent 开发者找到这个项目，也能帮助我们判断优先建设哪些能力。
+
+## ✨ 核心能力
+
+| 能力 | 你可以做什么 |
 | --- | --- |
-| 运行概览 | 请求量、成功率、延迟和最近会话 |
-| 会话查询 | 按 Session、Agent、状态检索真实对话 |
-| AgentScope Studio | 嵌入本机 Studio，查看轨迹和 Token |
-| 数据测试 | 数据集、回归测试和性能测试 |
-| A/B 实验 | 按权重把流量分到不同 Agent |
-| Agent 调试台 | 用 Agent 自己绑定的模型对话，右侧展示执行链路 |
-| Agent / HTTP 接口 | 配置系统提示词、模型、技能、MCP 和知识库；也可接入外部 HTTP Agent |
-| MCP / Skill | 登记工具服务和可复用技能 |
-| 知识库 | 上传文档，自动清洗、选择分块策略，混合检索后交给 Agent |
-| 向量数据库 | 维护租户默认的 Milvus 连接 |
-| 模型配置 | 对话、向量、重排序三类模型。试用账号看不到这一页 |
-| 沙箱 | 隔离执行代码和命令 |
-| 权限管理 | 租户、角色和成员 |
+| Agent 全生命周期 | 配置提示词、模型、技能、MCP、知识库与版本发布 |
+| 可视化调试 | 与 Agent 实时对话，同时查看模型、工具与 RAG 执行链路 |
+| 多 Agent 编排 | 通过工作流、Supervisor、A2A 与外部 HTTP Agent 组织协作 |
+| RAG 知识库 | 解析 PDF、DOCX、HTML、CSV、Markdown，自动分块并使用 Milvus 混合检索 |
+| 评测与实验 | 管理数据集，运行回归/性能测试，比较版本并执行 A/B 流量实验 |
+| 可观测性 | 查询会话、Token、延迟、成功率，接入 AgentScope Studio、OTel 与 Langfuse |
+| 可靠执行 | 检查点、失败案例、脱敏、重试与人工触发的恢复流程 |
+| 企业治理 | 多租户、RBAC、资源可见性、沙箱策略和访问审计 |
 
-调试台里的知识库检索出现在执行链路的「调用工具 search_documents」。返回给模型的是章节上下文，检索用的是更短的子块。
+## 🚀 5 分钟快速开始
 
-## 技术栈
-
-- Java 21，Spring Boot 3.5.6，Maven
-- AgentScope Java 2.0.3（ReActAgent、OpenAI 兼容接口、DashScope）
-- MySQL 8（`utf8mb4`）
-- Milvus 2.5（知识库向量检索，Java SDK 2.5.10）
-- 文档解析：PDFBox、Apache POI
-- 控制台是服务端渲染的静态页面，位于 `src/main/resources/static`
-
-服务只监听 `127.0.0.1:8080`。
-
-## 环境
-
-- JDK 21 或更高
-- Maven 3.9+
-- MySQL 8.0+
-- 要用知识库检索时，再准备 Milvus，默认地址 `http://127.0.0.1:19530`
-
-确认 Java 版本：
+最省事的体验方式是 Docker Compose。它会启动 MySQL、自动创建本地演示库并构建应用；不需要手工导入 SQL。
 
 ```bash
-java -version
+git clone https://github.com/JackWangbl/agentforge-control-plane-java.git
+cd agentforge-control-plane-java
+docker compose up --build
 ```
 
-如果系统默认还是 Java 8，先把 `JAVA_HOME` 指到 JDK 21，再把 `$JAVA_HOME/bin` 放到 `PATH` 前面。
+看到 `Started AgentForgeApplication` 后访问：
 
-## 准备数据库
+- 控制台：<http://127.0.0.1:8080>
+- 健康检查：<http://127.0.0.1:8080/api/health>
 
-1. 建库：
+第一次打开可以直接以访客身份体验。也可以使用仅供本机演示的管理员账号：
+
+```text
+用户名：linmo
+密码：admin123
+```
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+> Docker 快速开始使用 `bootstrap` 配置让 Hibernate 为全新数据库创建基础表。该配置只用于本地空库，不要对生产数据库启用。示例密码也是公开的，禁止直接用于公网部署。
+
+Milvus 是知识库向量检索的可选依赖；不使用 RAG 时无需启动。其余 Agent、工作流、评测和控制台能力可以先行体验。
+
+## 🏗 架构
+
+```mermaid
+flowchart LR
+    U[Browser / API] --> W[Spring Boot Control Plane]
+    W --> IAM[Multi-tenant RBAC]
+    W --> RT[AgentScope Runtime]
+    W --> EV[Evaluation & Experiments]
+    W --> OBS[Tracing & Recovery]
+    RT --> LLM[OpenAI-compatible / DashScope]
+    RT --> TOOLS[MCP / Skills / Sandbox / A2A]
+    RT --> RAG[RAG Pipeline]
+    RAG --> M[(Milvus)]
+    W --> DB[(MySQL)]
+    OBS --> EXT[AgentScope Studio / OTel / Langfuse]
+```
+
+技术栈：Java 21、Spring Boot 3.5、AgentScope Java 2、MySQL 8、Milvus 2.5、PDFBox 与 Apache POI。控制台为零 Node.js 构建依赖的原生 HTML/CSS/JavaScript 页面。
+
+## 🧑‍💻 本地开发
+
+### 环境要求
+
+- JDK 21+
+- Maven 3.9+
+- MySQL 8+
+- 可选：Milvus 2.5，用于知识库检索
+
+### 1. 创建数据库
 
 ```sql
 CREATE DATABASE agentforge CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -69,62 +104,35 @@ GRANT ALL PRIVILEGES ON agentforge.* TO 'agentforge_app'@'%';
 FLUSH PRIVILEGES;
 ```
 
-2. 导入基础表。本仓库启动时**不会**创建用户、Agent、模型这些核心表，只会补齐后来增加的表和列（知识库、向量库、试用凭证等）。请先导入与控制面一致的基础结构，表包括：
+### 2. 配置环境变量
 
-`tenants`、`roles`、`users`、`auth_tokens`、`agents`、`mcp_servers`、`skills`、`model_configs`、`workflows`、`sandbox_policies`、`conversations`、`chat_messages`、`traces`、`datasets`、`dataset_cases`、`evaluation_runs`、`evaluation_results`
-
-已有控制面库时，直接在那个库上启动即可，不必清空数据。启动器发现缺表或缺列会自己补上，已有行不会被覆盖。
-
-3. 在项目根目录写 `.env`。这个文件已被 git 忽略，不要提交。
-
-```properties
-APP_ENV=development
-DATABASE_URL=mysql+pymysql://agentforge_app:请换成你自己的密码@127.0.0.1:3306/agentforge?charset=utf8mb4
-SECRET_KEY=请换成一段随机字符串
-AGENTSCOPE_STUDIO_URL=
-OTEL_EXPORTER_OTLP_ENDPOINT=
-OPENAI_API_KEY=
-DASHSCOPE_API_KEY=
+```bash
+cp .env.example .env
 ```
 
-`DATABASE_URL` 使用 SQLAlchemy 风格。程序会把它改写成 JDBC，并拆出用户名和密码。没有这一行时，数据源配置是空的，服务起不来。
+编辑 `.env` 中的 `DATABASE_URL`。文件已被 Git 忽略，不要把真实凭证提交到仓库。
 
-也可以继续使用下面这些可选变量：
+### 3. 首次启动
 
-| 变量 | 作用 |
-| --- | --- |
-| `AGENTSCOPE_STUDIO_URL` | Studio 地址，例如 `http://127.0.0.1:3000`。留空则调试台里的 Studio 页提示未连接 |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry 导出地址 |
-| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | Langfuse 追踪 |
-| `AUTH_DEV_USER` | 开发期免登录，填已有用户名后，所有请求都算这个人。试用环境请留空 |
-| `WORKSPACES_DIR` | Agent 工作空间。默认是项目下的 `workspaces/` |
-| `RAG_FILES_DIR` | 上传原文。默认是项目下的 `rag-files/` |
-| `ALLOW_UNSAFE_LOCAL_SANDBOX` | 默认 `false`。没有 Docker 时不要打开 |
-| `SANDBOX_DEFAULT_IMAGE` | 默认 `python:3.11-slim` |
-| `SANDBOX_EGRESS_NETWORK` | 沙箱出网网段。未配置时联网命令会失败 |
-| `BROWSER_ALLOW_PRIVATE_NETWORK` | 默认 `false`，浏览器工具不访问内网地址 |
+对全新的本地空库，使用 `bootstrap` 配置自动创建基础表：
 
-模型密钥不要写进 `.env` 再提交。对话、向量和重排序的密钥在控制台「模型配置」里填写，保存在数据库中。
+```bash
+mvn spring-boot:run -Dspring-boot.run.profiles=bootstrap
+```
 
-## 启动
-
-在项目根目录执行：
+后续启动可以使用：
 
 ```bash
 mvn spring-boot:run
 ```
 
-看到 `Started AgentForgeApplication` 和 Hikari 的 `Start completed` 后，打开：
+如果你使用已有控制面数据库，不要启用 `bootstrap`；应用的增量迁移器只会补充新增表和列，不会清空已有数据。
 
-http://127.0.0.1:8080
-
-停掉服务直接结束这个进程。如果端口仍被占用：
+### 4. 运行测试
 
 ```bash
-lsof -nP -iTCP:8080 -sTCP:LISTEN
+mvn test
 ```
-
-结束列出的进程后再启动。
 
 打包运行：
 
@@ -133,81 +141,83 @@ mvn -DskipTests package
 java -jar target/agentforge-control-plane-1.0.0.jar
 ```
 
-运行测试：
+## 🔌 接入模型与知识库
 
-```bash
-mvn test
-```
+1. 用管理员账号进入「模型配置」，添加一个对话模型。支持 OpenAI 兼容端点，也支持 DashScope。
+2. 在 Agent 编辑页绑定模型，然后到「Agent 调试台」开始对话。
+3. 如需 RAG，在「向量数据库」添加 Milvus 并设为默认，再创建知识库并选择向量模型。
+4. 上传 `txt`、`md`、`html`、`csv`、`docx` 或 `pdf` 文件；单文件上限 16 MB。
+5. 将知识库绑定到 Agent。检索过程会作为 `search_documents` 工具调用显示在执行链路中。
 
-## 未登录试用
+对话、向量和重排序模型的密钥可以在控制台中配置。不要把真实 API Key 写入代码、截图或 Issue。
 
-第一次打开页面不必登录。服务会签发试用身份「试用访客」，右上角显示已用 Token。试用没有时间上限。
+<details>
+<summary><strong>常用配置项</strong></summary>
 
-- 刷新或关掉页面再打开，仍是同一次试用。浏览器会记住这次试用，7 天内不能靠清本地 token 再领一份 Token 额度。
-- 试用期内可以点「登录」，也可以点「继续试用」。
-- 这个试用身份累计 Token 达到 10000 后，页面被挡住，必须登录。登录失败时，表单里会出现红色提示，右下角也会弹出同样的文字。
-- 试用账号可以进入除「模型配置」以外的页面。模型列表接口会拒绝，避免未登录的人看到密钥。
-- 向量数据库、知识库、调试台、权限管理都可以看。
+| 变量 | 作用 |
+| --- | --- |
+| `AGENTSCOPE_STUDIO_URL` | AgentScope Studio 地址 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry 导出地址 |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Langfuse 追踪凭证 |
+| `AUTH_DEV_USER` | 本地开发免登录；公网环境必须留空 |
+| `WORKSPACES_DIR` | Agent 会话和执行链路目录 |
+| `RAG_FILES_DIR` | 知识库上传原文目录 |
+| `ALLOW_UNSAFE_LOCAL_SANDBOX` | 允许无 Docker 的本机命令执行，默认 `false` |
+| `SANDBOX_DEFAULT_IMAGE` | 默认沙箱镜像，默认 `python:3.11-slim` |
+| `BROWSER_ALLOW_PRIVATE_NETWORK` | 是否允许浏览器工具访问内网，默认 `false` |
 
-登录之后按账号自己的角色显示菜单，模型配置会重新出现。
+</details>
 
-## 默认账号
-
-库里还没有这些用户时，启动会自动创建。密码写在种子数据里，只适合本机试用。对外公开前请立刻改掉。
-
-| 用户名 | 初始密码 | 角色 |
-| --- | --- | --- |
-| `linmo` | `admin123` | 平台管理员，权限为 `*` |
-| `developer` | `dev123` | Agent 开发者 |
-| `auditor` | `audit123` | 审计员，只能看会话和链路 |
-| `demo` | `demo123` | 演示租户的租户管理员 |
-
-`guest` 是试用身份，密码随机，不能拿来登录。
-
-同一租户内，资源默认只给属主和被分享的人。知识库新建后是私有的；设成「租户公开」后，拥有 `knowledge:read` 的同租户成员可以检索。平台管理员能在管理界面看到别人的库，但不能仅凭管理员身份检索别人的私有文档。
-
-## 接上模型和知识库
-
-试用对话前，用管理员登录，在「模型配置」里新增模型。用途有三种：
-
-- **对话**：调试台和 Agent 绑定用。填写 OpenAI 兼容的 Base URL、模型名和密钥。DeepSeek、Kimi、GLM、Qwen 都可以。
-- **向量**：知识库建索引用。智谱上应填写 `embedding-3` 或 `embedding-2`，不要填对话模型名。
-- **重排序**：可选。智谱上模型名填写 `rerank`，地址形如 `https://open.bigmodel.cn/api/paas/v4`。没配重排序时，检索使用混合检索自己的排序。
-
-Agent 编辑页选择对话模型。调试台不再单独选模型，始终用这个 Agent 绑定的模型。
-
-知识库：
-
-1. 在「向量数据库」登记 Milvus，并设为默认。地址示例：`http://127.0.0.1:19530`，Database 填 `default`。
-2. 新建知识库时选择向量模型、可见性和可选的重排序模型，不用手填 Milvus 地址。新建时会复制当时的默认连接；之后改默认连接，不会搬走已经建好的库。
-3. 上传 `txt`、`md`、`html`、`csv`、`docx`、`pdf`，单文件上限 16MB。
-4. 程序会清洗正文，并在问答、条款、表格、标题、段落、句子几种策略里自动选一种。原文在磁盘，分块在 Milvus，MySQL 只存配置和状态。
-5. 把知识库绑到 Agent。调试时，检索范围是「Agent 绑定的库」和「当前登录人有权检索的库」的交集。
-
-Milvus 未启动时，向量库探测会失败，文档会停在失败状态。先确认 `19530` 端口可访问，再在页面上点「探测」。
-
-## 目录
+## 📁 项目结构
 
 ```text
 src/main/java/com/agentforge/controlplane
-├── access          登录、权限、试用身份
-├── agent           AgentScope 运行时和工具调用
-├── rag             清洗、分块、向量检索、重排序
-├── web             HTTP 接口
-├── config          数据源改写、启动时补表
-└── seed            默认租户、角色和账号
-src/main/resources/static    控制台页面
-workspaces/                  每个 Agent 的会话和执行链路
-rag-files/                   上传的原始文件
+├── access          # 登录、RBAC、多租户与试用身份
+├── agent           # AgentScope、A2A、多 Agent 与工具运行时
+├── eval            # 数据集与评测
+├── experiment      # A/B 实验
+├── memory          # 长短期记忆与上下文压缩
+├── rag             # 文档清洗、分块、向量检索与 GraphRAG
+├── recovery        # 检查点、失败案例与恢复执行
+├── runtime         # MCP、浏览器、HTTP 与沙箱运行时
+├── web             # HTTP API
+├── config          # 配置与数据库增量迁移
+└── seed            # 本地演示数据
+src/main/resources/static    # Web 控制台
+docs/                        # 设计与专题文档
 ```
 
-执行链路保存在对应 Agent 的 `workspaces/` 里，刷新调试台可以看到同一次会话。
+## 🗺 Roadmap
 
-## 开源试用时请注意
+- [ ] 发布稳定的数据库迁移版本与升级指南
+- [ ] 补充英文文档和模型供应商配置示例
+- [ ] 提供 Milvus 可选的完整 Compose 开发栈
+- [ ] 增加端到端测试和演示视频
+- [ ] 完善生产部署、反向代理与安全加固指南
 
-- `.env`、数据库密码、模型密钥、`SECRET_KEY` 都不要提交。
-- 种子账号密码是公开的。仓库一旦公开，请修改或关闭这些账号。
-- `AUTH_DEV_USER` 会跳过登录，公开环境必须留空。
-- 试用账号能改 Agent、知识库和向量库连接，只能用于可丢弃的试用库。
-- 本仓库目前没有 `LICENSE`。公开分发前请补上许可证，否则别人默认不能随意使用你的代码。
-# agentforge-control-plane-java-private
+欢迎在 [Issues](https://github.com/JackWangbl/agentforge-control-plane-java/issues) 中提出场景或认领任务。
+
+## 🤝 参与贡献
+
+请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。Bug 报告尽量提供最小复现步骤、Java/MySQL 版本和已脱敏日志；UI 修改请附前后截图。
+
+安全问题请不要公开发 Issue，按照 [SECURITY.md](SECURITY.md) 私下报告。
+
+## 📷 更多截图
+
+<details>
+<summary>展开查看控制台截图</summary>
+
+![Agent 配置](https://github.com/user-attachments/assets/a4a79df5-a034-4f72-bbaa-c76bfde53949)
+
+![执行链路](https://github.com/user-attachments/assets/4e526ac1-8276-4c4d-b455-a636216e337f)
+
+![知识库](https://github.com/user-attachments/assets/aba12107-8b52-4559-90b2-484e269f39e9)
+
+![评测](https://github.com/user-attachments/assets/3b38b601-f2a0-4477-8303-f6f053d8b458)
+
+</details>
+
+## ⚠️ License
+
+仓库目前还没有许可证。在维护者选择并添加 LICENSE 前，代码默认不授予复制、修改或再分发权限。若希望真正建立开源社区，建议尽快在 Apache-2.0 与 MIT 中明确选择一种。
