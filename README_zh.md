@@ -109,4 +109,4 @@ rag-files/                   上传的原始文件
 
 问题和 Pull Request 用中文或英文都可以，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-代码使用 [Apache-2.0](LICENSE)。Star 能让其他 Java 团队更快找到这个项目。
+代码使用 [Apache-2.0](LICENSE)。版本说明见 [CHANGELOG.md](CHANGELOG.md)。Star 能让其他 Java 团队更快找到这个项目。

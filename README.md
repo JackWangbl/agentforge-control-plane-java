@@ -109,4 +109,4 @@ rag-files/                   original uploads
 
 Issues and pull requests are welcome in Chinese or English. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The code is [Apache-2.0](LICENSE). A star helps other Java teams find the project.
+The code is [Apache-2.0](LICENSE). Release notes are in [CHANGELOG.md](CHANGELOG.md). A star helps other Java teams find the project.
