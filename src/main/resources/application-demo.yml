@@ -1,0 +1,10 @@
+# 空库试用。仅当环境变量 SPRING_PROFILES_ACTIVE=demo 时加载。
+# Hibernate 会按实体建表、补列。不要对已经有数据的控制面库打开这个 profile。
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        hbm2ddl:
+          halt_on_error: true

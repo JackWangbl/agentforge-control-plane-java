@@ -15,7 +15,16 @@
   <artifactId>agentforge-control-plane</artifactId>
   <version>1.0.0</version>
   <name>AgentForge Control Plane</name>
-  <description>Agent 控制面：Java + AgentScope 实现</description>
+  <description>Self-hosted Java control plane for AgentScope agents, knowledge, MCP, and evals.</description>
+  <url>https://github.com/JackWangbl/agentforge-control-plane-java</url>
+
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
 
   <properties>
     <java.version>21</java.version>

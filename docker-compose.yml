@@ -1,0 +1,28 @@
+# 只启动空的 MySQL 8，给本机试用。应用仍在宿主机用 Maven 启动。
+# 用法见 docs/getting-started.md。
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: agentforge
+      MYSQL_USER: agentforge_app
+      MYSQL_PASSWORD: agentforge
+    ports:
+      - "3306:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    volumes:
+      - agentforge-mysql:/var/lib/mysql
+
+volumes:
+  agentforge-mysql:

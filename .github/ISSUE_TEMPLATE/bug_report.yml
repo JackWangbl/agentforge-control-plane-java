@@ -1,0 +1,25 @@
+name: Bug
+description: 功能不符合预期 / Something broke
+title: "[Bug] "
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么 / What happened
+      description: 实际结果，以及你期望的结果。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎么重现 / How to reproduce
+      description: 步骤、JDK 版本、是否打开了 demo profile、Milvus 是否在跑。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 贴相关日志。密钥打码。
+    validations:
+      required: false
