@@ -210,3 +210,4 @@ rag-files/                   上传的原始文件
 - `AUTH_DEV_USER` 会跳过登录，公开环境必须留空。
 - 试用账号能改 Agent、知识库和向量库连接，只能用于可丢弃的试用库。
 - 本仓库目前没有 `LICENSE`。公开分发前请补上许可证，否则别人默认不能随意使用你的代码。
+# agentforge-control-plane-java-private
