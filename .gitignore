@@ -1,9 +1,11 @@
 .env
 .env.*
+!.env.example
 .idea/
 .m2/
 target/
 workspaces/
+.docker-secrets/
 .compile-stamp
 .DS_Store
 *.log

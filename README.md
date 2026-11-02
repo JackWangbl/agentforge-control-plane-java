@@ -42,7 +42,7 @@ AgentForge Control Plane 基于 Spring Boot 与 AgentScope Java，覆盖 Agent �
 ```bash
 git clone https://github.com/JackWangbl/agentforge-control-plane-java.git
 cd agentforge-control-plane-java
-docker compose up --build
+./scripts/docker-up.sh
 ```
 
 看到 `Started AgentForgeApplication` 后访问：
@@ -63,7 +63,9 @@ docker compose up --build
 docker compose down
 ```
 
-> Docker 快速开始使用 `bootstrap` 配置让 Hibernate 为全新数据库创建基础表。该配置只用于本地空库，不要对生产数据库启用。示例密码也是公开的，禁止直接用于公网部署。
+启动脚本会在首次运行时生成随机数据库密码，保存到 Git 忽略的 `.docker-secrets/`，并以 Docker secrets 文件挂载给 MySQL 与 Spring Boot。仓库里没有固定数据库密码，也不会使用你的真实数据库凭证。
+
+> Docker 快速开始使用 `bootstrap` 配置让 Hibernate 为全新数据库创建基础表。该配置只用于本地空库，不要对生产数据库启用。示例登录账号仍是公开的，禁止直接用于公网部署。
 
 Milvus 是知识库向量检索的可选依赖；不使用 RAG 时无需启动。其余 Agent、工作流、评测和控制台能力可以先行体验。
 

@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible problem in AgentForge Control Plane
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve AgentForge. Please remove keys, passwords, and private data from logs.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: main / commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: startup
+    attributes:
+      label: How did you run it?
+      options:
+        - Docker Compose
+        - Maven / IDE
+        - Packaged JAR
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: Tell us the smallest reliable sequence that triggers the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized logs
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS 15 / Ubuntu 24.04, Java 21, MySQL 8.4
+

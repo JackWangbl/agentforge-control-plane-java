@@ -1,0 +1,8 @@
+# Opt-in profile for a brand-new local database. Hibernate creates the base
+# tables, then SchemaMigrator applies the project's additive migrations.
+# Do not enable this profile against a production database.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+

@@ -1,0 +1,56 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: agentforge
+      MYSQL_USER: agentforge_app
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - agentforge-mysql:/var/lib/mysql
+    secrets:
+      - db_password
+      - db_root_password
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$(cat /run/secrets/db_root_password)\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  agentforge:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: bootstrap
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/agentforge?characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=DISABLED
+      SPRING_DATASOURCE_USERNAME: agentforge_app
+      SERVER_ADDRESS: 0.0.0.0
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - agentforge-workspaces:/app/workspaces
+      - agentforge-rag-files:/app/rag-files
+    secrets:
+      - source: db_password
+        target: spring.datasource.password
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  agentforge-mysql:
+  agentforge-workspaces:
+  agentforge-rag-files:
+
+secrets:
+  db_password:
+    file: ./.docker-secrets/db_password
+  db_root_password:
+    file: ./.docker-secrets/db_root_password
+
+

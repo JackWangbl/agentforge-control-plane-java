@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+.m2
+.env
+.env.*
+!.env.example
+target
+workspaces
+rag-files
+.docker-secrets
+*.log
+.DS_Store
+
