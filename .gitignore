@@ -7,3 +7,4 @@ workspaces/
 .compile-stamp
 .DS_Store
 *.log
+skills/

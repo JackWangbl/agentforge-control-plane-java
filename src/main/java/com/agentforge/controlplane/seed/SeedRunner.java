@@ -81,6 +81,19 @@ public class SeedRunner implements ApplicationRunner {
     private final ExecutionCheckpointRepository checkpoints;
     private final ExecutionRecorder executionRecorder;
 
+    /** 空库示例技能。正文存在数据库里，不再从仓库里的技能文件读取。 */
+    private static final String SAMPLE_CUSTOMER_REPLY = """
+            # 客服回复规范
+
+            你在回复用户时遵循以下规则：
+
+            1. 先用一句话确认用户诉求，不要复读整段原文。
+            2. 给出可执行的下一步：需要的材料、办理路径、预计时效。
+            3. 不确定的信息明确说「需要核对」，不要编造订单号、价格或政策。
+            4. 涉及退款、合同、发票时，提醒用户核对账号与主体名称。
+            5. 语气简洁、礼貌，默认使用简体中文。结尾询问是否还要继续处理。
+            """;
+
     private static final String DEMO_CASE_KEY = "case_demo_b_ticket_resume";
     private static final String DEMO_FAIL_EXEC_KEY = "exec_demo_b_ticket_fail";
     private static final String DEMO_OK_EXEC_KEY = "exec_demo_b_ticket_ok";
@@ -112,6 +125,7 @@ public class SeedRunner implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         seedIfEmpty();
+        ensureSampleSkillInstruction();
         ensureIam();
         seedBuiltinTools();
         migrateOpencli();
@@ -147,7 +161,8 @@ public class SeedRunner implements ApplicationRunner {
         Skill skill = new Skill();
         skill.setName("客服回复规范");
         skill.setDescription("按企业客服口径回复用户");
-        skill.setSource("skills/customer-reply/SKILL.md");
+        skill.setSource("manual");
+        skill.setInstruction(SAMPLE_CUSTOMER_REPLY.strip());
         skills.save(skill);
 
         ModelConfig qwen = new ModelConfig();
@@ -178,6 +193,20 @@ public class SeedRunner implements ApplicationRunner {
                 "nodes", List.of(Map.of("id", "start", "type", "start", "label", "开始", "x", 72, "y", 200)),
                 "edges", List.of()));
         workflows.save(wf);
+    }
+
+    /** 已有库里的示例技能如果还空着正文，补上。不覆盖已经写过的指令。 */
+    private void ensureSampleSkillInstruction() {
+        skills.findByName("客服回复规范").ifPresent(skill -> {
+            if (!skill.getInstruction().isBlank()) {
+                return;
+            }
+            skill.setInstruction(SAMPLE_CUSTOMER_REPLY.strip());
+            if (skill.getSource() != null && skill.getSource().startsWith("skills/")) {
+                skill.setSource("manual");
+            }
+            skills.save(skill);
+        });
     }
 
     private void ensureIam() {

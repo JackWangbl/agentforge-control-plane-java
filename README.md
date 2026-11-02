@@ -201,6 +201,8 @@ workspaces/                  每个 Agent 的会话和执行链路
 rag-files/                   上传的原始文件
 ```
 
+面试笔记和业务技能不在本仓库，见 [agentforge-control-plane-java-doc](https://github.com/JackWangbl/agentforge-control-plane-java-doc)。
+
 执行链路保存在对应 Agent 的 `workspaces/` 里，刷新调试台可以看到同一次会话。
 
 ## 开源试用时请注意

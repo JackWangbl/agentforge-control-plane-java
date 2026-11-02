@@ -418,11 +418,7 @@ public class ToolRuntime {
     }
 
     public String skillInstruction(Skill row) {
-        String text = row.getInstruction() == null ? "" : row.getInstruction().strip();
-        if (!text.isEmpty()) {
-            return text;
-        }
-        return readSkillFile(row.getName());
+        return row.getInstruction().strip();
     }
 
     public void persistSkillMarkdown(Skill row) {
@@ -832,28 +828,6 @@ public class ToolRuntime {
             lines.add("- " + row.getName() + " · " + row.getModelName() + " · " + (row.getDescription() == null ? "" : row.getDescription()));
         }
         return String.join("\n", lines);
-    }
-
-    private static String readSkillFile(String name) {
-        Map<String, Path> files = Map.of(
-                "客服回复规范", Path.of(System.getProperty("user.dir", ".")).resolve("skills/customer-reply/SKILL.md"),
-                "会议纪要", Path.of(System.getProperty("user.dir", ".")).resolve("skills/meeting-notes/SKILL.md"));
-        Path path = files.get(name);
-        if (path == null || !Files.exists(path)) {
-            return "";
-        }
-        try {
-            String text = Files.readString(path);
-            if (text.startsWith("---")) {
-                String[] parts = text.split("---", 3);
-                if (parts.length >= 3) {
-                    return parts[2].strip();
-                }
-            }
-            return text.strip();
-        } catch (Exception e) {
-            return "";
-        }
     }
 
     private static boolean sameTenant(Long left, Long right) {
