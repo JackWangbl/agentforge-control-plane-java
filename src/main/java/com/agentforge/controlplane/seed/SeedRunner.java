@@ -3,6 +3,7 @@ package com.agentforge.controlplane.seed;
 import com.agentforge.controlplane.access.AuthService;
 import com.agentforge.controlplane.access.PasswordHasher;
 import com.agentforge.controlplane.agent.AgentReleaseService;
+import com.agentforge.controlplane.agent.ProjectPlaybook;
 import com.agentforge.controlplane.agent.ToolRuntime;
 import com.agentforge.controlplane.domain.Agent;
 import com.agentforge.controlplane.domain.ExecutionCheckpoint;
@@ -114,6 +115,7 @@ public class SeedRunner implements ApplicationRunner {
         seedIfEmpty();
         ensureIam();
         seedBuiltinTools();
+        ensureProjectTroubleshooter();
         migrateOpencli();
         ensureExampleOrchestrations();
         releases.backfillMissing();
@@ -140,7 +142,7 @@ public class SeedRunner implements ApplicationRunner {
         builtin.setName(ToolRuntime.BUILTIN_MCP_NAME);
         builtin.setTransport("stdio");
         builtin.setEndpoint(ToolRuntime.BUILTIN_MCP_ENDPOINT);
-        builtin.setToolsCount(4);
+        builtin.setToolsCount(ToolRuntime.builtinToolSpecs().size());
         builtin.setConfig(Map.of("kind", "builtin"));
         mcps.save(builtin);
 
@@ -226,10 +228,17 @@ public class SeedRunner implements ApplicationRunner {
             builtin.setName(ToolRuntime.BUILTIN_MCP_NAME);
             builtin.setTransport("stdio");
             builtin.setEndpoint(ToolRuntime.BUILTIN_MCP_ENDPOINT);
-            builtin.setToolsCount(4);
+            builtin.setToolsCount(ToolRuntime.builtinToolSpecs().size());
             builtin.setConfig(Map.of("kind", "builtin"));
             mcps.save(builtin);
         }
+        mcps.findByName(ToolRuntime.BUILTIN_MCP_NAME).ifPresent(row -> {
+            int count = ToolRuntime.builtinToolSpecs().size();
+            if (row.getToolsCount() != count) {
+                row.setToolsCount(count);
+                mcps.save(row);
+            }
+        });
         if (mcps.findByName(ToolRuntime.BUILTIN_BROWSER_NAME).isEmpty()) {
             McpServer browser = new McpServer();
             browser.setName(ToolRuntime.BUILTIN_BROWSER_NAME);
@@ -310,6 +319,41 @@ public class SeedRunner implements ApplicationRunner {
             row.setPasswordHash(PasswordHasher.hash(password));
         }
         return users.save(row);
+    }
+
+    /** 已有同名智能体或手册时不覆盖。新库和旧库都会补上缺失的那一个。 */
+    private void ensureProjectTroubleshooter() {
+        Tenant tenant = tenants.findBySlug("default").orElse(null);
+        if (tenant == null) {
+            return;
+        }
+        Skill skill = skills.findByName("项目排查手册").orElse(null);
+        if (skill == null) {
+            skill = new Skill();
+            skill.setTenantId(tenant.getId());
+            skill.setName("项目排查手册");
+            skill.setDescription("对照本项目的启动脚本、Compose 和常见报错");
+            skill.setSource("manual");
+            skill.setInstruction(ProjectPlaybook.manual());
+            skill = skills.save(skill);
+        } else if (skill.getInstruction().isBlank()) {
+            skill.setInstruction(ProjectPlaybook.manual());
+            skill = skills.save(skill);
+        }
+        if (agents.findByName("项目排查").isPresent()) {
+            return;
+        }
+        Agent row = new Agent();
+        row.setTenantId(tenant.getId());
+        row.setName("项目排查");
+        row.setDescription("根据报错、会话和失败记录排查本项目的启动与运行问题");
+        row.setModelName(defaultModelName());
+        row.setSystemPrompt(ProjectPlaybook.agentPrompt());
+        row.setStatus("published");
+        row.setVersion("v1.0.0");
+        row.setSkillIds(List.of(skill.getId()));
+        mcps.findByName(ToolRuntime.BUILTIN_MCP_NAME).ifPresent(mcp -> row.setMcpIds(List.of(mcp.getId())));
+        agents.save(row);
     }
 
     /**
