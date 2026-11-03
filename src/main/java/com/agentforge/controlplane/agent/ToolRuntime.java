@@ -62,11 +62,12 @@ public class ToolRuntime {
     private final HttpAgentRuntime httpAgents;
     private final KnowledgeSearchService knowledge;
     private final MemoryService memories;
+    private final ProjectDiagnostics diagnostics;
 
     public ToolRuntime(SkillRepository skills, McpServerRepository mcps, AgentRepository agents,
                        BrowserRuntime browser, OpenCliRuntime opencli, SandboxRuntime sandbox,
                        McpStreamClient mcpStream, HttpAgentRuntime httpAgents, KnowledgeSearchService knowledge,
-                       MemoryService memories) {
+                       MemoryService memories, ProjectDiagnostics diagnostics) {
         this.skills = skills;
         this.mcps = mcps;
         this.agents = agents;
@@ -77,6 +78,7 @@ public class ToolRuntime {
         this.httpAgents = httpAgents;
         this.knowledge = knowledge;
         this.memories = memories;
+        this.diagnostics = diagnostics;
     }
 
     public static List<ToolSpec> builtinToolSpecs() {
@@ -92,7 +94,12 @@ public class ToolRuntime {
                         ToolSpec.objectSchema(Map.of("query", ToolSpec.stringParam("检索关键词")), "query")),
                 new ToolSpec("list_agents",
                         "列出控制面里已登记的 Agent 名称、模型与职责。",
-                        ToolSpec.emptySchema()));
+                        ToolSpec.emptySchema()),
+                new ToolSpec("inspect_project",
+                        "只读查看本项目的最近会话、失败记录和落盘日志，并对照启动报错。排查控制面或 docker-up 失败时必须调用。",
+                        ToolSpec.objectSchema(Map.of(
+                                "symptom", ToolSpec.stringParam("用户贴出的报错原文，可空"),
+                                "focus", ToolSpec.stringParam("sessions、failures、logs、setup 或 all，可空")))));
     }
 
     public static boolean isBuiltinMcp(McpServer row) {
@@ -601,6 +608,9 @@ public class ToolRuntime {
         }
         if ("list_agents".equals(name)) {
             return listAgents(tenantId);
+        }
+        if ("inspect_project".equals(name)) {
+            return diagnostics.report(tenantId, Jsons.text(args.get("focus")), Jsons.text(args.get("symptom")));
         }
         if (name != null && name.startsWith("browser_")) {
             try {

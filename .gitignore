@@ -5,6 +5,7 @@
 .m2/
 target/
 workspaces/
+logs/
 .docker-secrets/
 .compile-stamp
 .DS_Store

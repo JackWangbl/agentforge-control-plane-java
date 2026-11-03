@@ -32,6 +32,7 @@ AgentForge Control Plane 基于 Spring Boot 与 AgentScope Java，覆盖 Agent �
 | RAG 知识库 | 解析 PDF、DOCX、HTML、CSV、Markdown，自动分块并使用 Milvus 混合检索 |
 | 评测与实验 | 管理数据集，运行回归/性能测试，比较版本并执行 A/B 流量实验 |
 | 可观测性 | 查询会话、Token、延迟、成功率，接入 AgentScope Studio、OTel 与 Langfuse |
+| 项目排查 | 内置「项目排查」Agent，对照启动报错并只读查看会话、失败记录和日志 |
 | 可靠执行 | 检查点、失败案例、脱敏、重试与人工触发的恢复流程 |
 | 企业治理 | 多租户、RBAC、资源可见性、沙箱策略和访问审计 |
 

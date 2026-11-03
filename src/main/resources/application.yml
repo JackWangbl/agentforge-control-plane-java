@@ -94,6 +94,12 @@ agentforge:
     maximum-retry-after-ms: ${HTTP_RETRY_MAXIMUM_RETRY_AFTER_MS:5000}
 
 logging:
+  file:
+    name: logs/agentforge.log
+  logback:
+    rollingpolicy:
+      max-file-size: 5MB
+      max-history: 3
   level:
     root: INFO
     com.agentforge: INFO

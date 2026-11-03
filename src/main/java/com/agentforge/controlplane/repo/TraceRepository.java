@@ -10,6 +10,8 @@ import java.util.Optional;
 public interface TraceRepository extends JpaRepository<Trace, Long>, JpaSpecificationExecutor<Trace> {
     Optional<Trace> findByTraceId(String traceId);
 
+    List<Trace> findTop8ByTenantIdOrderByStartedAtDescIdDesc(Long tenantId);
+
     List<Trace> findBySessionIdOrderByStartedAtDesc(String sessionId);
 
     List<Trace> findByTraceIdIn(List<String> traceIds);
