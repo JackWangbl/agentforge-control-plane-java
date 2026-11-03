@@ -6,6 +6,7 @@ import com.agentforge.controlplane.domain.Trace;
 import com.agentforge.controlplane.repo.ConversationRepository;
 import com.agentforge.controlplane.repo.FailureCaseRepository;
 import com.agentforge.controlplane.repo.TraceRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,7 @@ public class ProjectDiagnostics {
     private final TraceRepository traces;
     private final Path logFile;
 
+    @Autowired
     public ProjectDiagnostics(ConversationRepository conversations, FailureCaseRepository failures, TraceRepository traces,
                               @Value("${logging.file.name:logs/agentforge.log}") String logFile) {
         this(conversations, failures, traces, Path.of(logFile == null || logFile.isBlank() ? "logs/agentforge.log" : logFile));
