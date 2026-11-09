@@ -1,0 +1,53 @@
+.search {
+  margin: 16rpx 24rpx 8rpx;
+  height: 68rpx;
+  padding: 0 24rpx;
+  border-radius: 34rpx;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  width: 32rpx;
+  height: 32rpx;
+  margin-right: 12rpx;
+}
+
+.placeholder {
+  color: #c0c0c0;
+  font-size: 26rpx;
+}
+
+.chips {
+  width: 100%;
+  height: 80rpx;
+  white-space: nowrap;
+}
+
+.chip-row {
+  display: inline-flex;
+  padding: 12rpx 16rpx 4rpx;
+}
+
+.chip {
+  flex: none;
+  margin-right: 16rpx;
+  padding: 10rpx 28rpx;
+  border-radius: 28rpx;
+  background: #ffffff;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.chip.on {
+  background: #4a9eed;
+  color: #ffffff;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 16rpx 20rpx 24rpx;
+}

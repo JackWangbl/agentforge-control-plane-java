@@ -1,0 +1,54 @@
+page {
+  background: #f6f6f6;
+  color: #222222;
+  font-size: 28rpx;
+  box-sizing: border-box;
+}
+
+view, text, input, button {
+  box-sizing: border-box;
+}
+
+button {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  line-height: 1.4;
+  font-size: inherit;
+}
+
+button::after {
+  border: none;
+}
+
+.price {
+  color: #ff3536;
+  font-weight: 700;
+}
+
+.muted {
+  color: #bdbdbd;
+}
+
+.panel {
+  margin: 20rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+.empty {
+  padding: 120rpx 40rpx;
+  text-align: center;
+  color: #b0b0b0;
+}
+
+.empty-title {
+  font-size: 30rpx;
+  color: #888888;
+}
+
+.empty-sub {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+}

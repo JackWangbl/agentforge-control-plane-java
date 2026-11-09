@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>手之劤产品</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { background: #e9e9e9; font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; color: #222; }
+    button, input, textarea { font-family: inherit; }
+    #device { width: 100%; height: 100vh; margin: 0 auto; position: relative; overflow: hidden; background: #f6f6f6; transform: translateZ(0); }
+    @media (min-width: 520px) {
+      body { display: flex; align-items: center; justify-content: center; }
+      #device { width: 390px; height: 844px; border-radius: 28px; box-shadow: 0 16px 48px rgba(0,0,0,.18); }
+    }
+    #screen { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; }
+    #screen.with-tab { bottom: 54px; }
+    #screen.with-bar { bottom: 64px; }
+    .home-header, .sub-header { position: fixed; top: 0; left: 0; right: 0; z-index: 5; }
+    .home-header { background: #141414; color: #fff; }
+    .status { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 12px; font-weight: 600; }
+    .nav { height: 44px; display: flex; align-items: center; padding: 0 96px 0 16px; }
+    .nav-title { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .capsule { position: absolute; right: 10px; top: 34px; width: 84px; height: 30px; border: 1px solid rgba(255,255,255,.35); border-radius: 16px; display: flex; align-items: center; justify-content: space-evenly; color: #fff; font-size: 13px; }
+    .capsule i { width: 1px; height: 14px; background: rgba(255,255,255,.35); }
+    .search { height: 33px; margin: 6px 16px 10px; border-radius: 17px; background: #fff; display: flex; align-items: center; padding: 0 12px; color: #c0c0c0; font-size: 13px; }
+    .search img { width: 16px; height: 16px; margin-right: 6px; }
+    .banner-wrap { position: relative; }
+    .banner { width: 100%; height: 166px; object-fit: cover; display: block; background: #eee; }
+    .dots { position: absolute; left: 0; right: 0; bottom: 11px; display: flex; justify-content: center; gap: 6px; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(70,70,70,.45); }
+    .dot.on { background: #fff; }
+    .grid { display: flex; flex-wrap: wrap; justify-content: space-between; padding: 8px 10px 0; }
+    .card { width: calc(50% - 4px); margin-bottom: 8px; background: #fff; border-radius: 9px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+    .card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #0c1a30; }
+    .card .name { margin: 8px 8px 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 8px 9px; }
+    .price { color: #ff3536; font-weight: 700; }
+    .card .price { font-size: 17px; }
+    .sold { color: #bdbdbd; font-size: 11px; }
+    .end { text-align: center; color: #c8c8c8; font-size: 11px; padding: 4px 0 20px; }
+    .fab { position: absolute; right: 8px; z-index: 6; width: 46px; height: 46px; border-radius: 50%; background: #121212; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,.2); }
+    .fab[hidden], .tabbar[hidden] { display: none !important; }
+    .fab img { width: 24px; height: 24px; }
+    .fab-phone { bottom: 168px; }
+    .fab-service { bottom: 112px; }
+    .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 54px; background: #fff; display: flex; border-top: 1px solid #f2f2f2; z-index: 7; }
+    .tab { flex: 1; border: 0; background: transparent; color: #c4c4c4; font-size: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+    .tab img { width: 22px; height: 22px; }
+    .tab.on { color: #4a9eed; }
+    .sub-header { height: 48px; background: #fff; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid #f2f2f2; }
+    .sub-header.dark { background: #141414; color: #fff; border: 0; }
+    .back { border: 0; background: transparent; font-size: 20px; width: 32px; color: inherit; }
+    .sub-title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; margin-right: 32px; }
+    .pad-sub { padding-top: 48px; }
+    .chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 12px 4px; }
+    .chip { flex: none; border: 0; background: #fff; color: #666; border-radius: 14px; padding: 6px 14px; font-size: 13px; }
+    .chip.on { background: #4a9eed; color: #fff; }
+    .page-search { margin: 8px 12px; height: 34px; border-radius: 17px; background: #fff; display: flex; align-items: center; padding: 0 12px; color: #c0c0c0; font-size: 13px; }
+    .page-search img { width: 16px; height: 16px; margin-right: 6px; }
+    .search-row { display: flex; align-items: center; padding: 10px 12px; background: #fff; }
+    .search-row .field { flex: 1; height: 34px; border-radius: 17px; background: #f4f4f4; display: flex; align-items: center; padding: 0 10px; }
+    .search-row input { flex: 1; border: 0; background: transparent; outline: none; font-size: 13px; }
+    .go { margin-left: 10px; border: 0; background: transparent; color: #4a9eed; font-size: 14px; }
+    .history { padding: 12px; }
+    .history-head { display: flex; justify-content: space-between; color: #666; font-size: 13px; }
+    .words { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .word { border: 0; background: #fff; border-radius: 12px; padding: 5px 10px; font-size: 12px; }
+    .empty { padding: 64px 20px; text-align: center; color: #b0b0b0; }
+    .empty b { display: block; color: #888; font-weight: 500; margin-bottom: 6px; }
+    .hero { width: 100%; height: 390px; object-fit: cover; display: block; background: #0c1a30; }
+    .panel { margin: 10px; background: #fff; border-radius: 10px; overflow: hidden; }
+    .info, .block { padding: 12px; }
+    .price-row, .between { display: flex; justify-content: space-between; align-items: center; }
+    .info .price { font-size: 24px; }
+    .pname { margin-top: 6px; font-size: 16px; font-weight: 600; }
+    .sub { margin-top: 4px; color: #888; font-size: 12px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tag { background: #f6f7f9; color: #666; border-radius: 4px; padding: 3px 8px; font-size: 11px; }
+    .section { padding: 12px 12px 4px; font-weight: 600; }
+    .spec { display: flex; padding: 8px 12px; border-top: 1px solid #f3f3f3; font-size: 13px; }
+    .spec span { width: 90px; color: #999; }
+    .copy { padding: 4px 12px 12px; color: #555; font-size: 13px; line-height: 1.6; }
+    .stepper { display: flex; align-items: center; }
+    .step { width: 28px; height: 28px; border: 0; border-radius: 4px; background: #f3f3f3; }
+    .qty { min-width: 32px; text-align: center; }
+    .dock { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; background: #fff; display: flex; align-items: center; padding: 8px 10px; z-index: 6; box-shadow: 0 -2px 8px rgba(0,0,0,.04); }
+    .mini { width: 48px; border: 0; background: transparent; color: #666; font-size: 10px; display: flex; flex-direction: column; align-items: center; }
+    .mini img { width: 20px; height: 20px; }
+    .buy, .submit, .save { border: 0; background: #ff3536; color: #fff; border-radius: 20px; height: 40px; font-size: 15px; font-weight: 600; }
+    .buy { flex: 1; margin-left: 6px; }
+    .goods { display: flex; padding: 10px; }
+    .thumb { width: 80px; height: 80px; border-radius: 6px; object-fit: cover; background: #0c1a30; }
+    .gmeta { flex: 1; margin-left: 10px; }
+    .gmeta .name { font-size: 14px; }
+    .model { color: #999; font-size: 12px; margin-top: 4px; }
+    .field { display: flex; align-items: center; min-height: 48px; padding: 0 12px; border-bottom: 1px solid #f3f3f3; }
+    .field label { width: 70px; color: #666; flex: none; }
+    .field input, .field textarea { flex: 1; border: 0; outline: none; font-size: 14px; padding: 8px 0; resize: none; }
+    .tabs { display: flex; background: #fff; position: sticky; top: 0; }
+    .tabs button { flex: 1; border: 0; background: transparent; padding: 12px 0; color: #888; }
+    .tabs button.on { color: #4a9eed; font-weight: 600; }
+    .order { padding: 10px; }
+    .oh { display: flex; justify-content: space-between; font-size: 12px; color: #999; }
+    .st-pending_ship { color: #ff8a00; }
+    .st-pending_receive { color: #4a9eed; }
+    .st-done, .st-cancelled { color: #b0b0b0; }
+    .actions { display: flex; gap: 6px; }
+    .btn { border-radius: 14px; padding: 4px 10px; font-size: 12px; background: #fff; }
+    .btn.ghost { border: 1px solid #ddd; color: #666; }
+    .btn.solid { border: 0; background: #ff3536; color: #fff; }
+    .profile { display: flex; align-items: center; gap: 12px; padding: 18px 16px 28px; background: #141414; color: #fff; }
+    .avatar { width: 54px; height: 54px; border-radius: 50%; background: #4a9eed; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; }
+    .profile small { color: rgba(255,255,255,.7); }
+    .shortcuts { display: flex; margin-top: -12px; padding: 12px 0; }
+    .shortcuts button { flex: 1; border: 0; background: transparent; }
+    .shortcuts b { display: block; font-size: 18px; }
+    .shortcuts span { color: #888; font-size: 11px; }
+    .cell { width: 100%; border: 0; background: #fff; display: flex; justify-content: space-between; padding: 15px 12px; border-bottom: 1px solid #f4f4f4; font-size: 14px; }
+    .cell em { color: #b0b0b0; font-style: normal; font-size: 12px; }
+    .toast { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); background: rgba(0,0,0,.78); color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px; z-index: 9; }
+    .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; z-index: 8; border-radius: 12px 12px 0 0; padding: 8px 0 12px; }
+    .sheet button { display: block; width: 100%; border: 0; background: #fff; padding: 14px; font-size: 15px; border-bottom: 1px solid #f3f3f3; }
+    .mask { position: absolute; inset: 0; background: rgba(0,0,0,.35); z-index: 8; }
+    .dialog { position: absolute; left: 36px; right: 36px; top: 32%; background: #fff; border-radius: 12px; z-index: 9; padding: 18px 16px 12px; }
+    .dialog h3 { margin: 0 0 8px; font-size: 16px; text-align: center; }
+    .dialog p { margin: 0; color: #555; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+    .dialog .ops { display: flex; margin-top: 12px; }
+    .dialog .ops button { flex: 1; border: 0; background: transparent; padding: 8px; color: #4a9eed; }
+  </style>
+</head>
+<body>
+  <div id="device">
+    <div id="screen"></div>
+    <button class="fab fab-phone" id="fab-phone" hidden type="button"><img src="/assets/icons/phone.png" alt="" /></button>
+    <button class="fab fab-service" id="fab-service" hidden type="button"><img src="/assets/icons/service.png" alt="" /></button>
+    <nav class="tabbar" id="tabbar"></nav>
+    <div id="overlay"></div>
+  </div>
+  <script src="/data/catalog.js"></script>
+  <script>
+    const K = window.KANO;
+    const ORDER_KEY = "kano_preview_orders";
+    const ADDRESS_KEY = "kano_preview_address";
+    const HISTORY_KEY = "kano_preview_history";
+    const STATUS = { pending_ship: "待发货", pending_receive: "待收货", done: "已完成", cancelled: "已取消" };
+    const state = { banner: 0, category: "all", keyword: "", qty: 1, orderFilter: "all", form: loadAddress() };
+    let toastTimer = null;
+    let bannerTimer = null;
+
+    function loadJson(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch (err) { return fallback; }
+    }
+    function loadAddress() {
+      return Object.assign({ contact: "", phone: "", address: "", remark: "" }, loadJson(ADDRESS_KEY, {}));
+    }
+    function orders() { return loadJson(ORDER_KEY, []); }
+    function saveOrders(list) { localStorage.setItem(ORDER_KEY, JSON.stringify(list)); }
+    function history() { return loadJson(HISTORY_KEY, []); }
+    function money(n) { return "¥" + n; }
+    function formatTime(ts) {
+      const date = new Date(ts);
+      const p = (n) => String(n).padStart(2, "0");
+      return date.getFullYear() + "-" + p(date.getMonth() + 1) + "-" + p(date.getDate()) + " " + p(date.getHours()) + ":" + p(date.getMinutes());
+    }
+    function esc(value) {
+      return String(value == null ? "" : value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+    function parseRoute() {
+      const hash = location.hash.replace(/^#/, "") || "/";
+      const [path, query] = hash.split("?");
+      const parts = path.split("/").filter(Boolean);
+      const params = new URLSearchParams(query || "");
+      return { name: parts[0] || "home", id: parts[1] || "", qty: Number(params.get("qty")) || 1 };
+    }
+    function go(path) { location.hash = path; }
+    function toast(text) {
+      const overlay = document.getElementById("overlay");
+      overlay.innerHTML = '<div class="toast">' + esc(text) + "</div>";
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { if (overlay.querySelector(".toast")) overlay.innerHTML = ""; }, 1400);
+    }
+    function cards(list) {
+      if (!list.length) return "";
+      return '<div class="grid">' + list.map((item) => (
+        '<button class="card" data-go="/detail/' + item.id + '" type="button">' +
+          '<img src="' + item.image + '" alt="" />' +
+          '<div class="name">' + esc(item.name) + "</div>" +
+          '<div class="meta"><span class="price">' + money(item.price) + '</span><span class="sold">已售' + item.sold + "</span></div>" +
+        "</button>"
+      )).join("") + "</div>";
+    }
+    function homeHeader() {
+      return '<header class="home-header">' +
+        '<div class="status"><span>9:41</span><span>5G</span></div>' +
+        '<div class="nav"><div class="nav-title">' + esc(K.store.navTitle) + "</div></div>" +
+        '<div class="capsule"><span>···</span><i></i><span>－</span><i></i><span>○</span></div>' +
+        '<button class="search" data-go="/search" type="button"><img src="/assets/icons/search.png" alt="" /><span>' + esc(K.store.searchPlaceholder) + "</span></button>" +
+      "</header>";
+    }
+    function subHeader(title, dark) {
+      return '<header class="sub-header' + (dark ? " dark" : "") + '"><button class="back" data-back type="button">‹</button><div class="sub-title">' + esc(title) + "</div></header>";
+    }
+    function renderHome() {
+      const banner = K.banners[state.banner];
+      return homeHeader() +
+        '<div style="height:121px"></div>' +
+        '<div class="banner-wrap"><img class="banner" src="' + banner.image + '" alt="" />' +
+          '<div class="dots">' + K.banners.map((item, index) => '<i class="dot' + (index === state.banner ? " on" : "") + '"></i>').join("") + "</div></div>" +
+        cards(K.products) + '<div class="end">已经到底了</div>';
+    }
+    function renderCategory() {
+      const list = K.filterProducts({ category: state.category });
+      return '<header class="sub-header"><div class="sub-title" style="margin:0">分类</div></header><div class="pad-sub">' +
+        '<button class="page-search" data-go="/search" type="button"><img src="/assets/icons/search.png" alt="" />' + esc(K.store.searchPlaceholder) + "</button>" +
+        '<div class="chips">' + K.categories.map((item) => '<button class="chip' + (item.id === state.category ? " on" : "") + '" data-cat="' + item.id + '" type="button">' + item.name + "</button>").join("") + "</div>" +
+        (list.length ? cards(list) : '<div class="empty"><b>这个分类还没有商品</b></div>') +
+      "</div>";
+    }
+    function renderSearch() {
+      const keyword = state.keyword.trim();
+      const list = keyword ? K.filterProducts({ keyword }) : [];
+      const words = history();
+      return subHeader("搜索") + '<div class="pad-sub">' +
+        '<form class="search-row" data-search-form>' +
+          '<div class="field"><img src="/assets/icons/search.png" width="16" height="16" alt="" /><input id="keyword" name="keyword" value="' + esc(state.keyword) + '" placeholder="' + esc(K.store.searchPlaceholder) + '" /></div>' +
+          '<button class="go" type="submit">搜索</button></form>' +
+        (!keyword && words.length ? '<div class="history"><div class="history-head"><span>最近搜索</span><button class="go" data-clear-history type="button">清空</button></div><div class="words">' + words.map((word) => '<button class="word" data-word="' + esc(word) + '" type="button">' + esc(word) + "</button>").join("") + "</div></div>" : "") +
+        (list.length ? cards(list) : (keyword ? '<div class="empty"><b>没有找到相关商品</b>试试「扳手」「角磨」或型号 SZR</div>' : "")) +
+      "</div>";
+    }
+    function renderDetail() {
+      const route = parseRoute();
+      const product = K.getProduct(route.id);
+      if (!product) return subHeader("商品详情") + '<div class="empty"><b>没有找到这件商品</b></div>';
+      state.qty = state.qty || 1;
+      return subHeader(product.model) +
+        '<img class="hero" src="' + product.image + '" alt="" />' +
+        '<div class="panel info"><div class="price-row"><span class="price">' + money(product.price) + '</span><span class="sold">已售' + product.sold + "</span></div>" +
+          '<div class="pname">' + esc(product.name) + '</div><div class="sub">' + esc(product.subtitle) + "</div>" +
+          '<div class="tags">' + product.highlights.map((item) => '<span class="tag">' + esc(item) + "</span>").join("") + "</div></div>" +
+        '<div class="panel"><div class="section">商品参数</div>' + product.specs.map((row) => '<div class="spec"><span>' + esc(row[0]) + "</span>" + esc(row[1]) + "</div>").join("") + "</div>" +
+        '<div class="panel"><div class="section">商品说明</div><div class="copy">' + esc(product.detail) + "</div></div>" +
+        '<div class="panel between" style="padding:12px"><span>数量</span><div class="stepper"><button class="step" data-qty="-1" type="button">－</button><span class="qty">' + state.qty + '</span><button class="step" data-qty="1" type="button">＋</button></div></div>' +
+        '<div style="height:96px"></div>' +
+        '<div class="dock"><button class="mini" data-service type="button"><img src="/assets/icons/service-dark.png" alt="" />客服</button>' +
+          '<button class="mini" data-go="/home" type="button"><img src="/assets/tab/home.png" alt="" />首页</button>' +
+          '<button class="buy" data-go="/checkout/' + product.id + "?qty=" + state.qty + '" type="button">立即购买</button></div>';
+    }
+    function renderCheckout() {
+      const route = parseRoute();
+      const product = K.getProduct(route.id);
+      if (!product) return subHeader("确认订单") + '<div class="empty"><b>商品已失效</b></div>';
+      if (!state.checkoutReady) { state.qty = route.qty; state.checkoutReady = true; }
+      const form = state.form;
+      return subHeader("确认订单") + '<div class="pad-sub"><div class="panel goods"><img class="thumb" src="' + product.image + '" alt="" /><div class="gmeta"><div class="name">' + esc(product.name) + '</div><div class="model">' + product.model + '</div><div class="price">' + money(product.price) + "</div></div></div>" +
+        '<div class="panel between" style="padding:12px"><span>数量</span><div class="stepper"><button class="step" data-qty="-1" type="button">－</button><span class="qty">' + state.qty + '</span><button class="step" data-qty="1" type="button">＋</button></div></div>' +
+        '<form class="panel" id="order-form">' +
+          field("收货人", "contact", form.contact, "姓名") +
+          field("手机号", "phone", form.phone, "11位手机号") +
+          '<div class="field"><label>地址</label><textarea name="address" placeholder="省市区和详细地址">' + esc(form.address) + "</textarea></div>" +
+          field("备注", "remark", form.remark, "选填") +
+        "</form></div>" +
+        '<div class="dock"><div>合计 <b class="price">' + money(product.price * state.qty) + '</b></div><button class="submit" id="submit-order" type="button">提交订单</button></div>';
+    }
+    function field(label, name, value, placeholder) {
+      return '<div class="field"><label>' + label + '</label><input name="' + name + '" value="' + esc(value) + '" placeholder="' + placeholder + '" /></div>';
+    }
+    function renderOrders() {
+      const list = orders().filter((item) => state.orderFilter === "all" || item.status === state.orderFilter);
+      const tabs = [["all", "全部"], ["pending_ship", "待发货"], ["pending_receive", "待收货"], ["done", "已完成"]];
+      return '<div class="tabs">' + tabs.map((tab) => '<button class="' + (state.orderFilter === tab[0] ? "on" : "") + '" data-filter="' + tab[0] + '" type="button">' + tab[1] + "</button>").join("") + "</div>" +
+        (list.length ? list.map((item) => (
+          '<div class="panel order"><div class="oh"><span>' + item.id + '</span><span class="st-' + item.status + '">' + STATUS[item.status] + "</span></div>" +
+          '<button class="goods" data-go="/detail/' + item.productId + '" type="button" style="width:100%;border:0;background:#fff;text-align:left"><img class="thumb" src="' + item.image + '" alt="" /><div class="gmeta"><div class="name">' + esc(item.name) + '</div><div class="model">' + item.model + " × " + item.qty + '</div><div class="price">' + money(item.amount) + "</div></div></button>" +
+          '<div class="oh"><span>' + formatTime(item.createdAt) + '</span><span class="actions">' +
+            (item.status === "pending_ship" ? '<button class="btn ghost" data-cancel="' + item.id + '" type="button">取消订单</button><button class="btn solid" data-ship="' + item.id + '" type="button">模拟发货</button>' : "") +
+            (item.status === "pending_receive" ? '<button class="btn solid" data-receive="' + item.id + '" type="button">确认收货</button>' : "") +
+          "</span></div></div>"
+        )).join("") : '<div class="empty"><b>还没有订单</b>在首页挑选工具后即可下单</div>');
+    }
+    function renderMine() {
+      const tally = { pending_ship: 0, pending_receive: 0, done: 0, all: orders().length };
+      orders().forEach((item) => { if (tally[item.status] !== undefined) tally[item.status] += 1; });
+      const shortcuts = [["pending_ship", "待发货"], ["pending_receive", "待收货"], ["done", "已完成"], ["all", "全部订单"]];
+      return '<div class="profile"><div class="avatar">劤</div><div><b>手之劤用户</b><br /><small>精工制造 · 品质卓越</small></div></div>' +
+        '<div class="panel shortcuts">' + shortcuts.map((item) => '<button data-orders="' + item[0] + '" type="button"><b>' + (tally[item[0]] || 0) + "</b><span>" + item[1] + "</span></button>").join("") + "</div>" +
+        '<div class="panel"><button class="cell" data-go="/address" type="button"><span>收货地址</span><em>></em></button>' +
+          '<button class="cell" data-service type="button"><span>联系客服</span><em>' + K.store.phoneDisplay + "</em></button>" +
+          '<button class="cell" data-about type="button"><span>关于手之劤</span><em>' + K.store.hours + "</em></button></div>";
+    }
+    function renderAddress() {
+      const form = state.form;
+      return subHeader("收货地址") + '<div class="pad-sub"><form class="panel" id="address-form">' +
+        field("收货人", "contact", form.contact, "姓名") +
+        field("手机号", "phone", form.phone, "11位手机号") +
+        '<div class="field"><label>地址</label><textarea name="address" placeholder="省市区和详细地址">' + esc(form.address) + "</textarea></div></form>" +
+        '<button class="save" id="save-address" type="button" style="margin:20px 12px;width:calc(100% - 24px)">保存</button></div>';
+    }
+    function render() {
+      const route = parseRoute();
+      if (route.name !== "checkout") state.checkoutReady = false;
+      if (route.name !== "detail" && route.name !== "checkout") state.qty = 1;
+      const tabs = [["home", "首页", "home"], ["category", "分类", "category"], ["order", "订单", "order"], ["mine", "我的", "mine"]];
+      const tabbed = ["home", "category", "order", "mine"].includes(route.name);
+      const views = { home: renderHome, category: renderCategory, search: renderSearch, detail: renderDetail, checkout: renderCheckout, order: renderOrders, mine: renderMine, address: renderAddress };
+      const screen = document.getElementById("screen");
+      screen.innerHTML = (views[route.name] || renderHome)();
+      screen.className = tabbed ? "with-tab" : (route.name === "detail" || route.name === "checkout" ? "with-bar" : "");
+      screen.scrollTop = route.name === "home" ? screen.scrollTop : 0;
+      document.getElementById("tabbar").hidden = !tabbed;
+      document.getElementById("tabbar").innerHTML = tabs.map((tab) => {
+        const on = route.name === tab[0];
+        return '<button class="tab' + (on ? " on" : "") + '" data-go="/' + tab[0] + '" type="button"><img src="/assets/tab/' + tab[2] + (on ? "-active" : "") + '.png" alt="" />' + tab[1] + "</button>";
+      }).join("");
+      const showFab = route.name === "home";
+      document.getElementById("fab-phone").hidden = !showFab;
+      document.getElementById("fab-service").hidden = !showFab;
+      const input = document.getElementById("keyword");
+      if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+      clearInterval(bannerTimer);
+      if (route.name === "home") {
+        bannerTimer = setInterval(() => {
+          state.banner = (state.banner + 1) % K.banners.length;
+          const img = document.querySelector(".banner");
+          if (!img) return;
+          img.src = K.banners[state.banner].image;
+          document.querySelectorAll(".dot").forEach((dot, index) => dot.classList.toggle("on", index === state.banner));
+        }, 4000);
+      }
+    }
+    function readForm(id) {
+      const form = document.getElementById(id);
+      if (!form) return {};
+      const data = {};
+      new FormData(form).forEach((value, key) => { data[key] = String(value).trim(); });
+      return data;
+    }
+    function validPhone(phone) { return /^1\d{10}$/.test(phone); }
+    function ask(title, content, onYes) {
+      document.getElementById("overlay").innerHTML =
+        '<div class="mask" data-close></div><div class="dialog"><h3>' + esc(title) + "</h3><p>" + esc(content) + '</p><div class="ops"><button data-close type="button">取消</button><button id="yes" type="button">确定</button></div></div>';
+      document.getElementById("yes").onclick = () => { document.getElementById("overlay").innerHTML = ""; onYes(); };
+    }
+    document.getElementById("device").addEventListener("click", (event) => {
+      const target = event.target.closest("[data-go],[data-back],[data-cat],[data-word],[data-clear-history],[data-qty],[data-service],[data-filter],[data-cancel],[data-ship],[data-receive],[data-orders],[data-about],[data-close]");
+      if (event.target.id === "submit-order") {
+        const route = parseRoute();
+        const product = K.getProduct(route.id);
+        const data = readForm("order-form");
+        if (!data.contact) return toast("请填写收货人");
+        if (!validPhone(data.phone || "")) return toast("请填写11位手机号");
+        if ((data.address || "").length < 5) return toast("请填写详细地址");
+        localStorage.setItem(ADDRESS_KEY, JSON.stringify({ contact: data.contact, phone: data.phone, address: data.address }));
+        state.form = Object.assign({ remark: "" }, data);
+        const list = orders();
+        list.unshift({ id: "SZ" + Date.now(), status: "pending_ship", createdAt: Date.now(), productId: product.id, name: product.name, image: product.image, model: product.model, price: product.price, qty: state.qty, amount: product.price * state.qty, contact: data.contact, phone: data.phone, address: data.address, remark: data.remark || "" });
+        saveOrders(list);
+        toast("下单成功");
+        setTimeout(() => go("/order"), 400);
+        return;
+      }
+      if (event.target.id === "save-address") {
+        const data = readForm("address-form");
+        if (!data.contact || !validPhone(data.phone || "") || (data.address || "").length < 5) return toast("请完整填写收货信息");
+        localStorage.setItem(ADDRESS_KEY, JSON.stringify(data));
+        state.form = Object.assign(state.form, data);
+        toast("已保存");
+        setTimeout(() => history.back(), 300);
+        return;
+      }
+      if (!target) return;
+      if (target.dataset.go) {
+        if (target.dataset.go === "/home") go("/");
+        else go(target.dataset.go);
+      } else if (target.dataset.back !== undefined) {
+        history.back();
+      } else if (target.dataset.cat) {
+        state.category = target.dataset.cat;
+        render();
+      } else if (target.dataset.word) {
+        state.keyword = target.dataset.word;
+        render();
+      } else if (target.dataset.clearHistory !== undefined) {
+        localStorage.setItem(HISTORY_KEY, "[]");
+        render();
+      } else if (target.dataset.qty) {
+        state.qty = Math.min(99, Math.max(1, state.qty + Number(target.dataset.qty)));
+        render();
+      } else if (target.dataset.service !== undefined) {
+        document.getElementById("overlay").innerHTML = '<div class="mask" data-close></div><div class="sheet"><button data-call type="button">拨打客服 ' + K.store.phoneDisplay + '</button><button data-copy type="button">复制客服微信</button><button data-close type="button">取消</button></div>';
+      } else if (target.dataset.filter) {
+        state.orderFilter = target.dataset.filter;
+        render();
+      } else if (target.dataset.cancel) {
+        const id = target.dataset.cancel;
+        ask("取消订单", "确定取消这张订单吗？", () => { saveOrders(orders().map((item) => item.id === id ? Object.assign({}, item, { status: "cancelled" }) : item)); render(); });
+      } else if (target.dataset.ship) {
+        const id = target.dataset.ship;
+        saveOrders(orders().map((item) => item.id === id ? Object.assign({}, item, { status: "pending_receive" }) : item));
+        toast("已标记发货");
+        render();
+      } else if (target.dataset.receive) {
+        const id = target.dataset.receive;
+        ask("确认收货", "确认已经收到商品吗？", () => { saveOrders(orders().map((item) => item.id === id ? Object.assign({}, item, { status: "done" }) : item)); render(); });
+      } else if (target.dataset.orders) {
+        state.orderFilter = target.dataset.orders;
+        go("/order");
+      } else if (target.dataset.about !== undefined) {
+        ask("关于手之劤", K.store.name + " KANO\n精工制造，品质卓越。\n108V 无刷锂电工具。\n客服 " + K.store.phoneDisplay + "\n" + K.store.hours, () => {});
+      } else if (target.dataset.call !== undefined) {
+        document.getElementById("overlay").innerHTML = "";
+        toast("拨打 " + K.store.phoneDisplay);
+      } else if (target.dataset.copy !== undefined) {
+        document.getElementById("overlay").innerHTML = "";
+        toast("已复制 " + K.store.wechat);
+      } else if (target.dataset.close !== undefined) {
+        document.getElementById("overlay").innerHTML = "";
+      }
+    });
+    document.getElementById("device").addEventListener("submit", (event) => {
+      const form = event.target.closest("[data-search-form]");
+      if (!form) return;
+      event.preventDefault();
+      state.keyword = form.keyword.value.trim();
+      if (state.keyword) {
+        const next = [state.keyword].concat(history().filter((item) => item !== state.keyword)).slice(0, 8);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      }
+      render();
+    });
+    document.getElementById("device").addEventListener("input", (event) => {
+      if (event.target.id !== "keyword") return;
+      state.keyword = event.target.value;
+      const historyBox = document.querySelector(".history");
+      if (historyBox) historyBox.hidden = state.keyword.trim().length > 0;
+      const list = document.querySelector(".grid");
+      const empty = document.querySelector(".empty");
+      if (list) list.remove();
+      if (empty) empty.remove();
+      const keyword = state.keyword.trim();
+      const html = keyword ? (cards(K.filterProducts({ keyword })) || '<div class="empty"><b>没有找到相关商品</b>试试「扳手」「角磨」或型号 SZR</div>') : "";
+      document.getElementById("screen").insertAdjacentHTML("beforeend", html);
+    });
+    document.getElementById("fab-phone").addEventListener("click", () => toast("拨打 " + K.store.phoneDisplay));
+    document.getElementById("fab-service").addEventListener("click", () => {
+      document.getElementById("overlay").innerHTML = '<div class="mask" data-close></div><div class="sheet"><button data-copy type="button">复制客服微信 ' + K.store.wechat + '</button><button data-call type="button">拨打客服 ' + K.store.phoneDisplay + '</button><button data-close type="button">取消</button></div>';
+    });
+    window.addEventListener("hashchange", render);
+    if (!location.hash) location.hash = "/";
+    render();
+  </script>
+</body>
+</html>

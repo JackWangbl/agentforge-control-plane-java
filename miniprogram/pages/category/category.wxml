@@ -1,0 +1,21 @@
+<view class="search" bindtap="goSearch">
+  <image class="search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+  <text class="placeholder">{{placeholder}}</text>
+</view>
+<scroll-view class="chips" scroll-x show-scrollbar="{{false}}">
+  <view class="chip-row">
+    <view
+      wx:for="{{categories}}"
+      wx:key="id"
+      class="chip {{current === item.id ? 'on' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="selectCategory"
+    >{{item.name}}</view>
+  </view>
+</scroll-view>
+<view class="grid" wx:if="{{products.length}}">
+  <product-card wx:for="{{products}}" wx:key="id" product="{{item}}" bind:select="openDetail" />
+</view>
+<view class="empty" wx:else>
+  <view class="empty-title">这个分类还没有商品</view>
+</view>

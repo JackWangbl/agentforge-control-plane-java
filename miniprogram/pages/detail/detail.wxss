@@ -1,0 +1,165 @@
+.missing {
+  padding: 160rpx 40rpx;
+  text-align: center;
+}
+
+.hero {
+  width: 750rpx;
+  height: 750rpx;
+  display: block;
+  background: #0c1a30;
+}
+
+.info {
+  padding: 24rpx;
+}
+
+.price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.price {
+  font-size: 48rpx;
+}
+
+.sold {
+  color: #bdbdbd;
+  font-size: 24rpx;
+}
+
+.name {
+  margin-top: 12rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.sub {
+  margin-top: 8rpx;
+  color: #888888;
+  font-size: 24rpx;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 16rpx;
+}
+
+.tag {
+  margin: 0 12rpx 12rpx 0;
+  padding: 6rpx 16rpx;
+  border-radius: 8rpx;
+  background: #f6f7f9;
+  color: #666666;
+  font-size: 22rpx;
+}
+
+.section {
+  padding: 24rpx 24rpx 8rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.spec {
+  display: flex;
+  padding: 16rpx 24rpx;
+  border-top: 1rpx solid #f3f3f3;
+  font-size: 26rpx;
+}
+
+.spec-k {
+  width: 180rpx;
+  color: #999999;
+}
+
+.spec-v {
+  flex: 1;
+  color: #333333;
+}
+
+.detail {
+  padding-bottom: 24rpx;
+}
+
+.copy {
+  padding: 8rpx 24rpx 0;
+  color: #555555;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.qty-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+}
+
+.step {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 8rpx;
+  background: #f3f3f3;
+  text-align: center;
+  line-height: 56rpx;
+  font-size: 32rpx;
+}
+
+.qty {
+  min-width: 64rpx;
+  text-align: center;
+  font-size: 30rpx;
+}
+
+.spacer {
+  height: 180rpx;
+}
+
+.bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  padding: 12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.mini {
+  width: 96rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #666666;
+  font-size: 20rpx;
+}
+
+.mini image {
+  width: 40rpx;
+  height: 40rpx;
+  margin-bottom: 4rpx;
+}
+
+.buy {
+  flex: 1;
+  height: 80rpx;
+  margin-left: 12rpx;
+  border-radius: 40rpx;
+  background: #ff3536;
+  color: #ffffff;
+  text-align: center;
+  line-height: 80rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+}
