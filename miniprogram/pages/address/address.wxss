@@ -1,0 +1,42 @@
+.form {
+  padding: 0 24rpx;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  min-height: 96rpx;
+  border-bottom: 1rpx solid #f3f3f3;
+}
+
+.field:last-child {
+  border-bottom: none;
+}
+
+.label {
+  width: 140rpx;
+  color: #666666;
+  flex: none;
+}
+
+.field input,
+.field textarea {
+  flex: 1;
+  font-size: 28rpx;
+  padding: 16rpx 0;
+}
+
+.area {
+  align-items: flex-start;
+  padding-top: 20rpx;
+}
+
+.save {
+  margin: 40rpx 24rpx;
+  height: 88rpx;
+  border-radius: 44rpx;
+  background: #ff3536;
+  color: #ffffff;
+  line-height: 88rpx;
+  font-size: 30rpx;
+}

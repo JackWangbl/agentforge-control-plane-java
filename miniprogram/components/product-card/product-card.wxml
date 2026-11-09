@@ -1,0 +1,8 @@
+<view class="card" hover-class="card-hover" hover-stay-time="80" bindtap="onTap">
+  <image class="pic" src="{{product.image}}" mode="aspectFill" />
+  <view class="name">{{product.name}}</view>
+  <view class="meta">
+    <text class="price">¥{{product.price}}</text>
+    <text class="sold">已售{{product.sold}}</text>
+  </view>
+</view>

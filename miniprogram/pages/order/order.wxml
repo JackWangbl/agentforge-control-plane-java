@@ -1,0 +1,35 @@
+<view class="tabs">
+  <view
+    wx:for="{{tabs}}"
+    wx:key="id"
+    class="tab {{filter === item.id ? 'on' : ''}}"
+    data-id="{{item.id}}"
+    bindtap="switchFilter"
+  >{{item.name}}</view>
+</view>
+<view class="empty" wx:if="{{!orders.length}}">
+  <view class="empty-title">还没有订单</view>
+  <view class="empty-sub">在首页挑选工具后即可下单</view>
+</view>
+<view class="panel order" wx:for="{{orders}}" wx:key="id">
+  <view class="head">
+    <text class="no">{{item.id}}</text>
+    <text class="status status-{{item.status}}">{{item.statusText}}</text>
+  </view>
+  <view class="goods" data-pid="{{item.productId}}" bindtap="openDetail">
+    <image class="thumb" src="{{item.image}}" mode="aspectFill" />
+    <view class="meta">
+      <view class="name">{{item.name}}</view>
+      <view class="model">{{item.model}} × {{item.qty}}</view>
+      <view class="price">¥{{item.amount}}</view>
+    </view>
+  </view>
+  <view class="foot">
+    <text class="time">{{item.timeText}}</text>
+    <view class="actions">
+      <view wx:if="{{item.status === 'pending_ship'}}" class="btn ghost" data-id="{{item.id}}" bindtap="cancel">取消订单</view>
+      <view wx:if="{{item.status === 'pending_ship'}}" class="btn solid" data-id="{{item.id}}" bindtap="ship">模拟发货</view>
+      <view wx:if="{{item.status === 'pending_receive'}}" class="btn solid" data-id="{{item.id}}" bindtap="receive">确认收货</view>
+    </view>
+  </view>
+</view>

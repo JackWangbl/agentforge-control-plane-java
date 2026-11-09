@@ -1,0 +1,48 @@
+<view class="missing" wx:if="{{!product}}">
+  <view class="empty-title">没有找到这件商品</view>
+</view>
+<block wx:else>
+  <image class="hero" src="{{product.image}}" mode="aspectFill" />
+  <view class="panel info">
+    <view class="price-row">
+      <text class="price">¥{{product.price}}</text>
+      <text class="sold">已售{{product.sold}}</text>
+    </view>
+    <view class="name">{{product.name}}</view>
+    <view class="sub">{{product.subtitle}}</view>
+    <view class="tags">
+      <text wx:for="{{product.highlights}}" wx:key="*this" class="tag">{{item}}</text>
+    </view>
+  </view>
+  <view class="panel">
+    <view class="section">商品参数</view>
+    <view class="spec" wx:for="{{product.specRows}}" wx:key="k">
+      <text class="spec-k">{{item.k}}</text>
+      <text class="spec-v">{{item.v}}</text>
+    </view>
+  </view>
+  <view class="panel detail">
+    <view class="section">商品说明</view>
+    <view class="copy">{{product.detail}}</view>
+  </view>
+  <view class="panel qty-panel">
+    <text>数量</text>
+    <view class="stepper">
+      <view class="step" data-step="-1" bindtap="changeQty">－</view>
+      <text class="qty">{{qty}}</text>
+      <view class="step" data-step="{{1}}" bindtap="changeQty">＋</view>
+    </view>
+  </view>
+  <view class="spacer"></view>
+  <view class="bar">
+    <view class="mini" bindtap="openService">
+      <image src="/assets/icons/service-dark.png" mode="aspectFit" />
+      <text>客服</text>
+    </view>
+    <view class="mini" bindtap="goHome">
+      <image src="/assets/tab/home.png" mode="aspectFit" />
+      <text>首页</text>
+    </view>
+    <view class="buy" bindtap="buy">立即购买</view>
+  </view>
+</block>

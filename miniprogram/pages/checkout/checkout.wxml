@@ -1,0 +1,44 @@
+<view class="missing" wx:if="{{!product}}">
+  <view class="empty-title">商品已失效</view>
+</view>
+<block wx:else>
+  <view class="panel goods">
+    <image class="thumb" src="{{product.image}}" mode="aspectFill" />
+    <view class="meta">
+      <view class="name">{{product.name}}</view>
+      <view class="model">{{product.model}}</view>
+      <view class="price">¥{{product.price}}</view>
+    </view>
+  </view>
+  <view class="panel row">
+    <text>数量</text>
+    <view class="stepper">
+      <view class="step" data-step="-1" bindtap="changeQty">－</view>
+      <text class="qty">{{qty}}</text>
+      <view class="step" data-step="1" bindtap="changeQty">＋</view>
+    </view>
+  </view>
+  <view class="panel form">
+    <view class="field">
+      <text class="label">收货人</text>
+      <input value="{{contact}}" placeholder="姓名" bindinput="onContact" />
+    </view>
+    <view class="field">
+      <text class="label">手机号</text>
+      <input value="{{phone}}" type="number" maxlength="11" placeholder="11位手机号" bindinput="onPhone" />
+    </view>
+    <view class="field area">
+      <text class="label">地址</text>
+      <textarea value="{{address}}" placeholder="省市区和详细地址" auto-height bindinput="onAddress" />
+    </view>
+    <view class="field">
+      <text class="label">备注</text>
+      <input value="{{remark}}" placeholder="选填" bindinput="onRemark" />
+    </view>
+  </view>
+  <view class="spacer"></view>
+  <view class="bar">
+    <view class="sum">合计 <text class="price">¥{{amount}}</text></view>
+    <view class="submit" bindtap="submit">提交订单</view>
+  </view>
+</block>

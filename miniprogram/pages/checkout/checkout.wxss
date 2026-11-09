@@ -1,0 +1,131 @@
+.missing {
+  padding: 160rpx 40rpx;
+  text-align: center;
+}
+
+.goods {
+  display: flex;
+  padding: 20rpx;
+}
+
+.thumb {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  background: #0c1a30;
+  flex: none;
+}
+
+.meta {
+  flex: 1;
+  margin-left: 20rpx;
+}
+
+.name {
+  font-size: 28rpx;
+  line-height: 1.4;
+}
+
+.model {
+  margin-top: 8rpx;
+  color: #999999;
+  font-size: 22rpx;
+}
+
+.price {
+  margin-top: 12rpx;
+  font-size: 32rpx;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+}
+
+.step {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 8rpx;
+  background: #f3f3f3;
+  text-align: center;
+  line-height: 56rpx;
+}
+
+.qty {
+  min-width: 64rpx;
+  text-align: center;
+}
+
+.form {
+  padding: 0 24rpx;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  min-height: 96rpx;
+  border-bottom: 1rpx solid #f3f3f3;
+}
+
+.field:last-child {
+  border-bottom: none;
+}
+
+.label {
+  width: 140rpx;
+  color: #666666;
+  flex: none;
+}
+
+.field input,
+.field textarea {
+  flex: 1;
+  font-size: 28rpx;
+  padding: 16rpx 0;
+}
+
+.area {
+  align-items: flex-start;
+  padding-top: 20rpx;
+}
+
+.spacer {
+  height: 140rpx;
+}
+
+.bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+}
+
+.sum {
+  color: #333333;
+  font-size: 26rpx;
+}
+
+.submit {
+  min-width: 240rpx;
+  height: 80rpx;
+  padding: 0 36rpx;
+  border-radius: 40rpx;
+  background: #ff3536;
+  color: #ffffff;
+  text-align: center;
+  line-height: 80rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+}

@@ -1,0 +1,34 @@
+<view class="bar">
+  <view class="field">
+    <image class="search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+    <input
+      class="input"
+      value="{{keyword}}"
+      placeholder="{{placeholder}}"
+      placeholder-class="ph"
+      confirm-type="search"
+      focus
+      bindinput="onInput"
+      bindconfirm="onSearch"
+    />
+  </view>
+  <text class="go" bindtap="onSearch">搜索</text>
+</view>
+
+<view class="history" wx:if="{{!keyword && history.length}}">
+  <view class="history-head">
+    <text>最近搜索</text>
+    <text class="clear" bindtap="clearHistory">清空</text>
+  </view>
+  <view class="words">
+    <text wx:for="{{history}}" wx:key="*this" class="word" data-word="{{item}}" bindtap="useHistory">{{item}}</text>
+  </view>
+</view>
+
+<view class="grid" wx:if="{{products.length}}">
+  <product-card wx:for="{{products}}" wx:key="id" product="{{item}}" bind:select="openDetail" />
+</view>
+<view class="empty" wx:elif="{{searched && keyword}}">
+  <view class="empty-title">没有找到相关商品</view>
+  <view class="empty-sub">试试「扳手」「角磨」或型号 SZR</view>
+</view>

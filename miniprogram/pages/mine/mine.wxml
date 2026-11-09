@@ -1,0 +1,33 @@
+<view class="profile">
+  <view class="avatar">劤</view>
+  <view>
+    <view class="who">手之劤用户</view>
+    <view class="slogan">精工制造 · 品质卓越</view>
+  </view>
+</view>
+<view class="panel shortcuts">
+  <view
+    class="shortcut"
+    wx:for="{{shortcuts}}"
+    wx:key="id"
+    data-id="{{item.id}}"
+    bindtap="openOrders"
+  >
+    <text class="count">{{counts[item.id] || 0}}</text>
+    <text class="label">{{item.name}}</text>
+  </view>
+</view>
+<view class="panel menu">
+  <view class="cell" bindtap="openAddress">
+    <text>收货地址</text>
+    <text class="arrow">></text>
+  </view>
+  <view class="cell" bindtap="callPhone">
+    <text>联系客服</text>
+    <text class="extra">{{phoneDisplay}}</text>
+  </view>
+  <view class="cell" bindtap="about">
+    <text>关于手之劤</text>
+    <text class="extra">{{hours}}</text>
+  </view>
+</view>

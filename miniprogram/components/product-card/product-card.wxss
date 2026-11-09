@@ -1,0 +1,47 @@
+.card {
+  width: 347rpx;
+  margin-bottom: 16rpx;
+  background: #ffffff;
+  border-radius: 18rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.card-hover {
+  opacity: 0.88;
+}
+
+.pic {
+  width: 347rpx;
+  height: 347rpx;
+  display: block;
+  background: #0c1a30;
+}
+
+.name {
+  margin: 16rpx 16rpx 0;
+  font-size: 24rpx;
+  line-height: 1.35;
+  color: #222222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8rpx 16rpx 18rpx;
+}
+
+.price {
+  color: #ff3536;
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.sold {
+  color: #bdbdbd;
+  font-size: 22rpx;
+}

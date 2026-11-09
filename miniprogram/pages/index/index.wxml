@@ -1,0 +1,33 @@
+<view class="header" style="padding-top: {{statusBarHeight}}px;">
+  <view class="nav" style="height: {{navBarHeight}}px; padding-right: {{menuWidth}}px;">
+    <text class="title">{{title}}</text>
+  </view>
+  <view class="search" bindtap="goSearch">
+    <image class="search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+    <text class="placeholder">{{placeholder}}</text>
+  </view>
+</view>
+
+<view class="body" style="padding-top: {{headerHeight}}px;">
+  <view class="banner-wrap">
+    <swiper class="banner" circular autoplay interval="4000" duration="450" bindchange="onBanner">
+      <swiper-item wx:for="{{banners}}" wx:key="id">
+        <image class="banner-img" src="{{item.image}}" mode="aspectFill" />
+      </swiper-item>
+    </swiper>
+    <view class="dots">
+      <view wx:for="{{banners}}" wx:key="id" class="dot {{bannerIndex === index ? 'on' : ''}}"></view>
+    </view>
+  </view>
+  <view class="grid">
+    <product-card wx:for="{{products}}" wx:key="id" product="{{item}}" bind:select="openDetail" />
+  </view>
+  <view class="end">已经到底了</view>
+</view>
+
+<view class="fab fab-phone" bindtap="callPhone">
+  <image src="/assets/icons/phone.png" mode="aspectFit" />
+</view>
+<view class="fab fab-service" bindtap="openService">
+  <image src="/assets/icons/service.png" mode="aspectFit" />
+</view>
