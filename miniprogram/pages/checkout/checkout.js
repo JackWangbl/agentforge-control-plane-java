@@ -31,6 +31,7 @@ Page({
   },
 
   changeQty(e) {
+    if (!this.data.product) return;
     const step = Number(e.currentTarget.dataset.step);
     const qty = Math.min(99, Math.max(1, this.data.qty + step));
     this.setData({

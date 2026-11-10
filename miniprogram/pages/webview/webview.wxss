@@ -1,0 +1,3 @@
+.empty {
+  padding: 160rpx 40rpx;
+}

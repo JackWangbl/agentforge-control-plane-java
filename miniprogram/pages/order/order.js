@@ -13,6 +13,7 @@ Page({
   },
 
   onShow() {
+    if (require("../../utils/open-h5.js").openH5("#/orders")) return;
     const preset = getApp().globalData.orderFilter;
     if (preset) {
       getApp().globalData.orderFilter = "";
