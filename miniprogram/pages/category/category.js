@@ -8,6 +8,10 @@ Page({
     placeholder: catalog.store.searchPlaceholder,
   },
 
+  onShow() {
+    if (require("../../utils/open-h5.js").openH5("#/category")) return;
+  },
+
   selectCategory(e) {
     const id = e.currentTarget.dataset.id;
     this.setData({

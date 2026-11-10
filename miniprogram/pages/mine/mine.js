@@ -15,6 +15,7 @@ Page({
   },
 
   onShow() {
+    if (require("../../utils/open-h5.js").openH5("#/mine")) return;
     this.setData({ counts: store.countByStatus() });
   },
 

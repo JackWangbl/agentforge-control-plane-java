@@ -1,7 +1,11 @@
 {
   "description": "手之劤产品微信小程序",
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      { "type": "folder", "value": "h5" },
+      { "type": "folder", "value": "preview" },
+      { "type": "folder", "value": "scripts" }
+    ],
     "include": []
   },
   "setting": {

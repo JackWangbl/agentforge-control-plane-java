@@ -13,6 +13,10 @@ Page({
     title: catalog.store.navTitle,
   },
 
+  onShow() {
+    if (require("../../utils/open-h5.js").openH5("#/")) return;
+  },
+
   onLoad() {
     const sys = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
     const statusBarHeight = sys.statusBarHeight || 20;

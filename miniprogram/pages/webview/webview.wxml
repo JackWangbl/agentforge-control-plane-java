@@ -1,0 +1,5 @@
+<web-view wx:if="{{src}}" src="{{src}}"></web-view>
+<view wx:else class="empty">
+  <view class="empty-title">还没有配置网页地址</view>
+  <view class="empty-sub">在 miniprogram/config.js 里填写 h5Url</view>
+</view>

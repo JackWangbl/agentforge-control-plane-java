@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#141414" />
+  <link rel="icon" href="data:," />
+  <title>手之劤</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar" hidden></header>
+    <main id="screen"></main>
+    <footer id="footer" hidden></footer>
+    <nav id="tabbar"></nav>
+    <div id="toast" hidden></div>
+    <div id="mask" hidden></div>
+  </div>
+  <script src="../data/catalog.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/boot.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/ui.js"></script>
+  <!-- 新增模块：在这里、app.js 之前加一行 script，并在 js/modules 里调用 KanoH5.page -->
+  <script src="js/modules/home.js"></script>
+  <script src="js/modules/category.js"></script>
+  <script src="js/modules/search.js"></script>
+  <script src="js/modules/detail.js"></script>
+  <script src="js/modules/checkout.js"></script>
+  <script src="js/modules/orders.js"></script>
+  <script src="js/modules/mine.js"></script>
+  <script src="js/modules/address.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
